@@ -1,0 +1,782 @@
+package repository
+
+import (
+	"context"
+	"database/sql"
+	"net/url"
+	"testing"
+	"time"
+
+	dbent "github.com/Wei-Shaw/socialops/ent"
+	"github.com/Wei-Shaw/socialops/ent/enttest"
+	"github.com/Wei-Shaw/socialops/internal/pkg/pagination"
+	"github.com/Wei-Shaw/socialops/internal/pkg/usagestats"
+	"github.com/Wei-Shaw/socialops/internal/service"
+	"github.com/stretchr/testify/require"
+
+	"entgo.io/ent/dialect"
+	entsql "entgo.io/ent/dialect/sql"
+	_ "modernc.org/sqlite"
+)
+
+func TestUsageLogRepositoryListsSocialTaskLogs(t *testing.T) {
+	ctx := context.Background()
+	repo, client := newUsageLogSocialOpsRepo(t)
+	user := client.User.Create().SetEmail("usage-social@example.com").SetPasswordHash("hash").SaveX(ctx)
+	otherUser := client.User.Create().SetEmail("usage-social-other@example.com").SetPasswordHash("hash").SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("usage_social").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("usage_social").
+		SetAssignedUserID(user.ID).
+		SaveX(ctx)
+	otherAccount := client.SocialAccount.Create().
+		SetName("usage_social_other").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("usage_social_other").
+		SetAssignedUserID(otherUser.ID).
+		SaveX(ctx)
+	executedAt := time.Now().UTC().Truncate(time.Second)
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(service.SocialTaskActionFollow).
+		SetStatus(service.SocialTaskLogStatusSuccess).
+		SetResultMessage("follow succeeded").
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(service.SocialTaskUnitPrice).
+		SetChargeStatus(service.SocialTaskChargeStatusCharged).
+		SetExecutedAt(executedAt).
+		SaveX(ctx)
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(otherAccount.ID).
+		SetUserID(otherUser.ID).
+		SetAction(service.SocialTaskActionLike).
+		SetStatus(service.SocialTaskLogStatusFailed).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(0).
+		SetChargeStatus(service.SocialTaskChargeStatusNotCharged).
+		SaveX(ctx)
+
+	items, result, err := repo.ListWithFilters(ctx, pagination.PaginationParams{Page: 1, PageSize: 20}, usagestats.UsageLogFilters{UserID: user.ID})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(1), result.Total)
+	require.Len(t, items, 1)
+	require.Equal(t, user.ID, items[0].UserID)
+	require.Nil(t, items[0].APIKeyID)
+	require.Nil(t, items[0].GroupID)
+	require.Equal(t, account.ID, items[0].SocialAccountID)
+	require.Equal(t, "x_twitter", items[0].Platform)
+	require.Equal(t, "usage_social", items[0].AccountName)
+	require.Equal(t, service.SocialTaskActionFollow, items[0].Operation)
+	require.Equal(t, service.SocialTaskLogStatusSuccess, items[0].Status)
+	require.Equal(t, service.SocialTaskChargeStatusCharged, items[0].ChargeStatus)
+	require.NotNil(t, items[0].ResultMessage)
+	require.Equal(t, "follow succeeded", *items[0].ResultMessage)
+	require.Equal(t, int64(1), items[0].Quantity)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, items[0].Cost, 0.000001)
+	require.NotNil(t, items[0].CompletedAt)
+
+	stats, err := repo.GetStatsWithFilters(ctx, usagestats.UsageLogFilters{})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), stats.TotalRequests)
+	require.Equal(t, int64(2), stats.TotalTokens)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, stats.TotalActualCost, 0.000001)
+}
+
+func TestUsageLogRepositoryProjectsNormalizedPlatformKey(t *testing.T) {
+	ctx := context.Background()
+	repo, client := newUsageLogSocialOpsRepo(t)
+	user := client.User.Create().SetEmail("usage-social-platform-key@example.com").SetPasswordHash("hash").SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("usage_social_platform_key").
+		SetPlatform("Twitter / X").
+		SetPlatformKey("x_twitter").
+		SetNameKey("usage_social_platform_key").
+		SetAssignedUserID(user.ID).
+		SaveX(ctx)
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(service.SocialTaskActionFollow).
+		SetStatus(service.SocialTaskLogStatusSuccess).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(service.SocialTaskUnitPrice).
+		SetChargeStatus(service.SocialTaskChargeStatusCharged).
+		SetExecutedAt(time.Now().UTC()).
+		SaveX(ctx)
+
+	items, result, err := repo.ListWithFilters(ctx, pagination.PaginationParams{Page: 1, PageSize: 20}, usagestats.UsageLogFilters{UserID: user.ID})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), result.Total)
+	require.Len(t, items, 1)
+	require.Equal(t, "x_twitter", items[0].Platform)
+
+	stats, err := repo.GetUserDashboardStats(ctx, user.ID)
+	require.NoError(t, err)
+	require.Len(t, stats.ByPlatform, 1)
+	require.Equal(t, "x_twitter", stats.ByPlatform[0].Platform)
+}
+
+func TestUsageLogRepositoryFiltersSocialTaskLogs(t *testing.T) {
+	ctx := context.Background()
+	repo, client := newUsageLogSocialOpsRepo(t)
+	user := client.User.Create().SetEmail("usage-social-filters@example.com").SetPasswordHash("hash").SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("usage_social_filters").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("usage_social_filters").
+		SetAssignedUserID(user.ID).
+		SaveX(ctx)
+	windowStart := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	matchingTime := windowStart.Add(12 * time.Hour)
+	windowEnd := windowStart.Add(24 * time.Hour)
+	target := "@target"
+
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(service.SocialTaskActionFollow).
+		SetTarget(target).
+		SetStatus(service.SocialTaskLogStatusSuccess).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(service.SocialTaskUnitPrice).
+		SetChargeStatus(service.SocialTaskChargeStatusCharged).
+		SetExecutedAt(matchingTime).
+		SetCreatedAt(matchingTime).
+		SaveX(ctx)
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(service.SocialTaskActionFollow).
+		SetTarget(target).
+		SetStatus(service.SocialTaskLogStatusFailed).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(0).
+		SetChargeStatus(service.SocialTaskChargeStatusNotCharged).
+		SetCreatedAt(matchingTime).
+		SaveX(ctx)
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(service.SocialTaskActionLike).
+		SetTarget(target).
+		SetStatus(service.SocialTaskLogStatusSuccess).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(service.SocialTaskUnitPrice).
+		SetChargeStatus(service.SocialTaskChargeStatusCharged).
+		SetCreatedAt(matchingTime).
+		SaveX(ctx)
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(service.SocialTaskActionFollow).
+		SetTarget(target).
+		SetStatus(service.SocialTaskLogStatusSuccess).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(service.SocialTaskUnitPrice).
+		SetChargeStatus(service.SocialTaskChargeStatusCharged).
+		SetCreatedAt(windowEnd.Add(time.Hour)).
+		SaveX(ctx)
+
+	filters := usagestats.UsageLogFilters{
+		UserID:    user.ID,
+		Model:     service.SocialTaskActionFollow,
+		Status:    service.SocialTaskLogStatusSuccess,
+		StartTime: &windowStart,
+		EndTime:   &windowEnd,
+	}
+	items, result, err := repo.ListWithFilters(ctx, pagination.PaginationParams{Page: 1, PageSize: 20}, filters)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(1), result.Total)
+	require.Len(t, items, 1)
+	require.Equal(t, service.SocialTaskActionFollow, items[0].Operation)
+	require.Equal(t, service.SocialTaskLogStatusSuccess, items[0].Status)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, items[0].Cost, 0.000001)
+
+	stats, err := repo.GetStatsWithFilters(ctx, filters)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), stats.TotalRequests)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, stats.TotalActualCost, 0.000001)
+}
+
+func TestUsageLogRepositoryCostsOnlyFinalSuccessfulCharges(t *testing.T) {
+	ctx := context.Background()
+	repo, client := newUsageLogSocialOpsRepo(t)
+	user := client.User.Create().SetEmail("usage-social-final-charge@example.com").SetPasswordHash("hash").SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("usage_social_final_charge").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("usage_social_final_charge").
+		SetAssignedUserID(user.ID).
+		SaveX(ctx)
+	now := time.Now().UTC().Truncate(time.Second)
+	windowStart := now.Add(-time.Hour)
+	windowEnd := now.Add(time.Hour)
+
+	success := client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(service.SocialTaskActionFollow).
+		SetStatus(service.SocialTaskLogStatusSuccess).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(service.SocialTaskUnitPrice).
+		SetChargeStatus(service.SocialTaskChargeStatusCharged).
+		SetExecutedAt(now).
+		SetCreatedAt(now).
+		SaveX(ctx)
+	failedWithStaleAmount := client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(service.SocialTaskActionLike).
+		SetStatus(service.SocialTaskLogStatusFailed).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(9.99).
+		SetChargeStatus(service.SocialTaskChargeStatusNotCharged).
+		SetExecutedAt(now).
+		SetCreatedAt(now.Add(time.Second)).
+		SaveX(ctx)
+	successWithoutCharge := client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(service.SocialTaskActionLoginCheck).
+		SetStatus(service.SocialTaskLogStatusSuccess).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(7.77).
+		SetChargeStatus(service.SocialTaskChargeStatusNotCharged).
+		SetExecutedAt(now).
+		SetCreatedAt(now.Add(2 * time.Second)).
+		SaveX(ctx)
+
+	items, result, err := repo.ListWithFilters(ctx, pagination.PaginationParams{Page: 1, PageSize: 20}, usagestats.UsageLogFilters{UserID: user.ID})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(3), result.Total)
+	costByID := map[int64]float64{}
+	for _, item := range items {
+		costByID[item.ID] = item.Cost
+	}
+	require.InEpsilon(t, service.SocialTaskUnitPrice, costByID[success.ID], 0.000001)
+	require.Zero(t, costByID[failedWithStaleAmount.ID])
+	require.Zero(t, costByID[successWithoutCharge.ID])
+
+	failedItem, err := repo.GetByID(ctx, failedWithStaleAmount.ID, user.ID)
+	require.NoError(t, err)
+	require.Zero(t, failedItem.Cost)
+
+	stats, err := repo.GetStatsWithFilters(ctx, usagestats.UsageLogFilters{UserID: user.ID})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), stats.TotalRequests)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, stats.TotalActualCost, 0.000001)
+
+	dashboard, err := repo.GetUserDashboardStats(ctx, user.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), dashboard.TotalRequests)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, dashboard.TotalActualCost, 0.000001)
+	require.Len(t, dashboard.ByPlatform, 1)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, dashboard.ByPlatform[0].TotalActualCost, 0.000001)
+
+	trend, err := repo.GetUserUsageTrendByUserID(ctx, user.ID, windowStart, windowEnd, "day")
+	require.NoError(t, err)
+	require.Len(t, trend, 1)
+	require.Equal(t, int64(3), trend[0].Requests)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, trend[0].ActualCost, 0.000001)
+
+	adminTrend, err := repo.GetUsageTrend(ctx, windowStart, windowEnd, "day", nil, nil)
+	require.NoError(t, err)
+	require.Len(t, adminTrend, 1)
+	require.Equal(t, int64(3), adminTrend[0].Requests)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, adminTrend[0].ActualCost, 0.000001)
+
+	ranking, err := repo.GetUserSpendingRanking(ctx, windowStart, windowEnd, 10)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), ranking.TotalRequests)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, ranking.TotalActualCost, 0.000001)
+	require.NotNil(t, findRankingItem(ranking.Ranking, user.ID))
+	require.InEpsilon(t, service.SocialTaskUnitPrice, findRankingItem(ranking.Ranking, user.ID).ActualCost, 0.000001)
+}
+
+func TestUsageLogRepositorySpendingRankingOmitsUsersWithoutCharges(t *testing.T) {
+	ctx := context.Background()
+	repo, client := newUsageLogSocialOpsRepo(t)
+	chargedUser := client.User.Create().SetEmail("usage-ranking-charged@example.com").SetPasswordHash("hash").SaveX(ctx)
+	failedOnlyUser := client.User.Create().SetEmail("usage-ranking-failed-only@example.com").SetPasswordHash("hash").SaveX(ctx)
+	chargedAccount := client.SocialAccount.Create().
+		SetName("usage_ranking_charged").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("usage_ranking_charged").
+		SetAssignedUserID(chargedUser.ID).
+		SaveX(ctx)
+	failedOnlyAccount := client.SocialAccount.Create().
+		SetName("usage_ranking_failed_only").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("usage_ranking_failed_only").
+		SetAssignedUserID(failedOnlyUser.ID).
+		SaveX(ctx)
+	now := time.Now().UTC().Truncate(time.Second)
+	windowStart := now.Add(-time.Hour)
+	windowEnd := now.Add(time.Hour)
+
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(chargedAccount.ID).
+		SetUserID(chargedUser.ID).
+		SetAction(service.SocialTaskActionFollow).
+		SetStatus(service.SocialTaskLogStatusSuccess).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(service.SocialTaskUnitPrice).
+		SetChargeStatus(service.SocialTaskChargeStatusCharged).
+		SetExecutedAt(now).
+		SetCreatedAt(now).
+		SaveX(ctx)
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(failedOnlyAccount.ID).
+		SetUserID(failedOnlyUser.ID).
+		SetAction(service.SocialTaskActionLike).
+		SetStatus(service.SocialTaskLogStatusFailed).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(0).
+		SetChargeStatus(service.SocialTaskChargeStatusNotCharged).
+		SetExecutedAt(now).
+		SetCreatedAt(now.Add(time.Second)).
+		SaveX(ctx)
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(failedOnlyAccount.ID).
+		SetUserID(failedOnlyUser.ID).
+		SetAction(service.SocialTaskActionPost).
+		SetStatus(service.SocialTaskLogStatusFailed).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(9.99).
+		SetChargeStatus(service.SocialTaskChargeStatusNotCharged).
+		SetExecutedAt(now).
+		SetCreatedAt(now.Add(2 * time.Second)).
+		SaveX(ctx)
+
+	ranking, err := repo.GetUserSpendingRanking(ctx, windowStart, windowEnd, 10)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(3), ranking.TotalRequests)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, ranking.TotalActualCost, 0.000001)
+	require.NotNil(t, findRankingItem(ranking.Ranking, chargedUser.ID))
+	require.Nil(t, findRankingItem(ranking.Ranking, failedOnlyUser.ID))
+}
+
+func TestUsageLogRepositoryUsesExecutionTimeForSocialTaskWindows(t *testing.T) {
+	ctx := context.Background()
+	repo, client := newUsageLogSocialOpsRepo(t)
+	user := client.User.Create().SetEmail("usage-social-executed-window@example.com").SetPasswordHash("hash").SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("usage_social_executed_window").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("usage_social_executed_window").
+		SetAssignedUserID(user.ID).
+		SaveX(ctx)
+	windowStart := time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC)
+	windowEnd := windowStart.Add(24 * time.Hour)
+
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(service.SocialTaskActionFollow).
+		SetStatus(service.SocialTaskLogStatusSuccess).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(service.SocialTaskUnitPrice).
+		SetChargeStatus(service.SocialTaskChargeStatusCharged).
+		SetCreatedAt(windowStart.Add(-2 * time.Hour)).
+		SetExecutedAt(windowStart.Add(2 * time.Hour)).
+		SaveX(ctx)
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(service.SocialTaskActionLike).
+		SetStatus(service.SocialTaskLogStatusSuccess).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(0.35).
+		SetChargeStatus(service.SocialTaskChargeStatusCharged).
+		SetCreatedAt(windowStart.Add(3 * time.Hour)).
+		SetExecutedAt(windowEnd.Add(2 * time.Hour)).
+		SaveX(ctx)
+
+	filters := usagestats.UsageLogFilters{
+		UserID:    user.ID,
+		StartTime: &windowStart,
+		EndTime:   &windowEnd,
+	}
+	items, result, err := repo.ListWithFilters(ctx, pagination.PaginationParams{Page: 1, PageSize: 20}, filters)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(1), result.Total)
+	require.Len(t, items, 1)
+	require.Equal(t, service.SocialTaskActionFollow, items[0].Operation)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, items[0].Cost, 0.000001)
+
+	stats, err := repo.GetStatsWithFilters(ctx, filters)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), stats.TotalRequests)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, stats.TotalActualCost, 0.000001)
+
+	trend, err := repo.GetUserUsageTrendByUserID(ctx, user.ID, windowStart, windowEnd, "day")
+	require.NoError(t, err)
+	require.Len(t, trend, 1)
+	require.Equal(t, "2026-06-02", trend[0].Date)
+	require.Equal(t, int64(1), trend[0].Requests)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, trend[0].ActualCost, 0.000001)
+}
+
+func TestUsageLogRepositoryUserDashboardUsesExecutionTimeForToday(t *testing.T) {
+	ctx := context.Background()
+	repo, client := newUsageLogSocialOpsRepo(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	todayStart := utcDayStart(now)
+	user := client.User.Create().SetEmail("usage-social-dashboard-window@example.com").SetPasswordHash("hash").SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("usage_social_dashboard_window").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("usage_social_dashboard_window").
+		SetAssignedUserID(user.ID).
+		SaveX(ctx)
+
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(service.SocialTaskActionFollow).
+		SetStatus(service.SocialTaskLogStatusSuccess).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(service.SocialTaskUnitPrice).
+		SetChargeStatus(service.SocialTaskChargeStatusCharged).
+		SetCreatedAt(todayStart.Add(-2 * time.Hour)).
+		SetExecutedAt(now.Add(-time.Minute)).
+		SaveX(ctx)
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(service.SocialTaskActionLike).
+		SetStatus(service.SocialTaskLogStatusSuccess).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(0.35).
+		SetChargeStatus(service.SocialTaskChargeStatusCharged).
+		SetCreatedAt(now).
+		SetExecutedAt(now.Add(24 * time.Hour)).
+		SaveX(ctx)
+
+	stats, err := repo.GetUserDashboardStats(ctx, user.ID)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(2), stats.TotalRequests)
+	require.InEpsilon(t, 0.45, stats.TotalActualCost, 0.000001)
+	require.Equal(t, int64(1), stats.TodayRequests)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, stats.TodayActualCost, 0.000001)
+	require.Len(t, stats.ByPlatform, 1)
+	require.Equal(t, int64(1), stats.ByPlatform[0].TodayRequests)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, stats.ByPlatform[0].TodayActualCost, 0.000001)
+}
+
+func TestUsageLogRepositoryAggregatesSocialOpsDashboardStats(t *testing.T) {
+	ctx := context.Background()
+	repo, client := newUsageLogSocialOpsRepo(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	yesterday := now.Add(-24 * time.Hour)
+
+	activeUser := client.User.Create().
+		SetEmail("dashboard-active@example.com").
+		SetPasswordHash("hash").
+		SetCreatedAt(now).
+		SaveX(ctx)
+	inactiveUser := client.User.Create().
+		SetEmail("dashboard-inactive@example.com").
+		SetPasswordHash("hash").
+		SetCreatedAt(yesterday).
+		SaveX(ctx)
+
+	availableAccount := client.SocialAccount.Create().
+		SetName("dashboard_available").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("dashboard_available").
+		SetAssignedUserID(activeUser.ID).
+		SetAccountStatus("available").
+		SaveX(ctx)
+	limitedAccount := client.SocialAccount.Create().
+		SetName("dashboard_limited").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("dashboard_limited").
+		SetAssignedUserID(activeUser.ID).
+		SetAccountStatus("limited").
+		SaveX(ctx)
+	invalidAccount := client.SocialAccount.Create().
+		SetName("dashboard_invalid").
+		SetPlatform("instagram").
+		SetPlatformKey("instagram").
+		SetNameKey("dashboard_invalid").
+		SetAssignedUserID(inactiveUser.ID).
+		SetAccountStatus("invalid").
+		SaveX(ctx)
+
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(availableAccount.ID).
+		SetUserID(activeUser.ID).
+		SetAction(service.SocialTaskActionFollow).
+		SetStatus(service.SocialTaskLogStatusSuccess).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(service.SocialTaskUnitPrice).
+		SetChargeStatus(service.SocialTaskChargeStatusCharged).
+		SetExecutedAt(now).
+		SetCreatedAt(now).
+		SaveX(ctx)
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(limitedAccount.ID).
+		SetUserID(activeUser.ID).
+		SetAction(service.SocialTaskActionLike).
+		SetStatus(service.SocialTaskLogStatusFailed).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(0).
+		SetChargeStatus(service.SocialTaskChargeStatusNotCharged).
+		SetCreatedAt(now).
+		SaveX(ctx)
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(invalidAccount.ID).
+		SetUserID(inactiveUser.ID).
+		SetAction(service.SocialTaskActionLoginCheck).
+		SetStatus(service.SocialTaskLogStatusSuccess).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(service.SocialTaskUnitPrice).
+		SetChargeStatus(service.SocialTaskChargeStatusCharged).
+		SetCreatedAt(yesterday).
+		SaveX(ctx)
+
+	stats, err := repo.GetDashboardStats(ctx)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(2), stats.TotalUsers)
+	require.Equal(t, int64(1), stats.TodayNewUsers)
+	require.Equal(t, int64(1), stats.ActiveUsers)
+	require.Equal(t, int64(3), stats.TotalAccounts)
+	require.Equal(t, int64(1), stats.NormalAccounts)
+	require.Equal(t, int64(1), stats.ErrorAccounts)
+	require.Equal(t, int64(1), stats.RateLimitAccounts)
+	require.Equal(t, int64(3), stats.TotalRequests)
+	require.Equal(t, int64(3), stats.TotalTokens)
+	require.InEpsilon(t, service.SocialTaskUnitPrice*2, stats.TotalCost, 0.000001)
+	require.InEpsilon(t, service.SocialTaskUnitPrice*2, stats.TotalActualCost, 0.000001)
+	require.Equal(t, int64(2), stats.TodayRequests)
+	require.Equal(t, int64(2), stats.TodayTokens)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, stats.TodayCost, 0.000001)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, stats.TodayActualCost, 0.000001)
+	require.GreaterOrEqual(t, stats.Rpm, int64(0))
+	require.GreaterOrEqual(t, stats.Tpm, int64(0))
+}
+
+func TestUsageLogRepositoryAggregatesUserDashboardAndAdminBreakdowns(t *testing.T) {
+	ctx := context.Background()
+	repo, client := newUsageLogSocialOpsRepo(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	yesterday := now.Add(-24 * time.Hour)
+
+	user := client.User.Create().SetEmail("dashboard-user@example.com").SetPasswordHash("hash").SaveX(ctx)
+	otherUser := client.User.Create().SetEmail("dashboard-other@example.com").SetPasswordHash("hash").SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("dashboard_user_account").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("dashboard_user_account").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus("available").
+		SaveX(ctx)
+	otherAccount := client.SocialAccount.Create().
+		SetName("dashboard_other_account").
+		SetPlatform("instagram").
+		SetPlatformKey("instagram").
+		SetNameKey("dashboard_other_account").
+		SetAssignedUserID(otherUser.ID).
+		SetAccountStatus("available").
+		SaveX(ctx)
+
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(service.SocialTaskActionFollow).
+		SetStatus(service.SocialTaskLogStatusSuccess).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(service.SocialTaskUnitPrice).
+		SetChargeStatus(service.SocialTaskChargeStatusCharged).
+		SetExecutedAt(now).
+		SetCreatedAt(now).
+		SaveX(ctx)
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(service.SocialTaskActionLike).
+		SetStatus(service.SocialTaskLogStatusFailed).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(0).
+		SetChargeStatus(service.SocialTaskChargeStatusNotCharged).
+		SetCreatedAt(yesterday).
+		SaveX(ctx)
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(otherAccount.ID).
+		SetUserID(otherUser.ID).
+		SetAction(service.SocialTaskActionPost).
+		SetStatus(service.SocialTaskLogStatusSuccess).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(service.SocialTaskUnitPrice).
+		SetChargeStatus(service.SocialTaskChargeStatusCharged).
+		SetCreatedAt(now).
+		SaveX(ctx)
+
+	userStats, err := repo.GetUserDashboardStats(ctx, user.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), userStats.TotalRequests)
+	require.Equal(t, int64(2), userStats.TotalTokens)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, userStats.TotalCost, 0.000001)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, userStats.TotalActualCost, 0.000001)
+	require.Equal(t, int64(1), userStats.TodayRequests)
+	require.Equal(t, int64(1), userStats.TodayTokens)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, userStats.TodayCost, 0.000001)
+	require.InEpsilon(t, service.SocialTaskUnitPrice, userStats.TodayActualCost, 0.000001)
+	require.Len(t, userStats.ByPlatform, 1)
+	require.Equal(t, "x_twitter", userStats.ByPlatform[0].Platform)
+	require.Equal(t, int64(2), userStats.ByPlatform[0].TotalRequests)
+	require.Equal(t, int64(1), userStats.ByPlatform[0].TodayRequests)
+
+	trend, err := repo.GetUsageTrend(ctx, yesterday.Add(-time.Hour), now.Add(time.Hour), "day", nil, nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, trend)
+	require.Equal(t, int64(3), sumTrendRequests(trend))
+
+	userTrend, err := repo.GetUserUsageTrend(ctx, yesterday.Add(-time.Hour), now.Add(time.Hour), "day", 10)
+	require.NoError(t, err)
+	require.NotEmpty(t, userTrend)
+	require.Equal(t, int64(3), sumUserTrendRequests(userTrend))
+
+	ranking, err := repo.GetUserSpendingRanking(ctx, yesterday.Add(-time.Hour), now.Add(time.Hour), 10)
+	require.NoError(t, err)
+	require.Len(t, ranking.Ranking, 2)
+	require.Equal(t, int64(3), ranking.TotalRequests)
+	require.Equal(t, int64(3), ranking.TotalTokens)
+	require.InEpsilon(t, service.SocialTaskUnitPrice*2, ranking.TotalActualCost, 0.000001)
+	require.NotNil(t, findRankingItem(ranking.Ranking, user.ID))
+	require.NotNil(t, findRankingItem(ranking.Ranking, otherUser.ID))
+	require.InEpsilon(t, service.SocialTaskUnitPrice, findRankingItem(ranking.Ranking, otherUser.ID).ActualCost, 0.000001)
+}
+
+func TestUsageLogRepositoryUserUsageTrendLimitKeepsCompleteTopUserSeries(t *testing.T) {
+	ctx := context.Background()
+	repo, client := newUsageLogSocialOpsRepo(t)
+	dayOne := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	dayTwo := dayOne.AddDate(0, 0, 1)
+
+	topUser := client.User.Create().SetEmail("dashboard-trend-top@example.com").SetPasswordHash("hash").SaveX(ctx)
+	otherUser := client.User.Create().SetEmail("dashboard-trend-other@example.com").SetPasswordHash("hash").SaveX(ctx)
+	topAccount := client.SocialAccount.Create().
+		SetName("dashboard_trend_top").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("dashboard_trend_top").
+		SetAssignedUserID(topUser.ID).
+		SetAccountStatus("available").
+		SaveX(ctx)
+	otherAccount := client.SocialAccount.Create().
+		SetName("dashboard_trend_other").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("dashboard_trend_other").
+		SetAssignedUserID(otherUser.ID).
+		SetAccountStatus("available").
+		SaveX(ctx)
+
+	for _, executedAt := range []time.Time{dayOne, dayTwo} {
+		client.SocialTaskLog.Create().
+			SetSocialAccountID(topAccount.ID).
+			SetUserID(topUser.ID).
+			SetAction(service.SocialTaskActionFollow).
+			SetStatus(service.SocialTaskLogStatusSuccess).
+			SetPrice(service.SocialTaskUnitPrice).
+			SetChargedAmount(0.40).
+			SetChargeStatus(service.SocialTaskChargeStatusCharged).
+			SetExecutedAt(executedAt).
+			SetCreatedAt(executedAt).
+			SaveX(ctx)
+	}
+	client.SocialTaskLog.Create().
+		SetSocialAccountID(otherAccount.ID).
+		SetUserID(otherUser.ID).
+		SetAction(service.SocialTaskActionLike).
+		SetStatus(service.SocialTaskLogStatusSuccess).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(0.70).
+		SetChargeStatus(service.SocialTaskChargeStatusCharged).
+		SetExecutedAt(dayOne).
+		SetCreatedAt(dayOne).
+		SaveX(ctx)
+
+	trend, err := repo.GetUserUsageTrend(ctx, dayOne.Add(-time.Hour), dayTwo.Add(time.Hour), "day", 1)
+
+	require.NoError(t, err)
+	require.Len(t, trend, 2)
+	require.Equal(t, "2026-06-01", trend[0].Date)
+	require.Equal(t, topUser.ID, trend[0].UserID)
+	require.Equal(t, "2026-06-02", trend[1].Date)
+	require.Equal(t, topUser.ID, trend[1].UserID)
+	require.InEpsilon(t, 0.80, sumUserTrendActualCost(trend), 0.000001)
+}
+
+func sumTrendRequests(points []usagestats.TrendDataPoint) int64 {
+	var total int64
+	for _, point := range points {
+		total += point.Requests
+	}
+	return total
+}
+
+func sumUserTrendRequests(points []usagestats.UserUsageTrendPoint) int64 {
+	var total int64
+	for _, point := range points {
+		total += point.Requests
+	}
+	return total
+}
+
+func sumUserTrendActualCost(points []usagestats.UserUsageTrendPoint) float64 {
+	var total float64
+	for _, point := range points {
+		total += point.ActualCost
+	}
+	return total
+}
+
+func findRankingItem(items []usagestats.UserSpendingRankingItem, userID int64) *usagestats.UserSpendingRankingItem {
+	for i := range items {
+		if items[i].UserID == userID {
+			return &items[i]
+		}
+	}
+	return nil
+}
+
+func newUsageLogSocialOpsRepo(t *testing.T) (*usageLogRepository, *dbent.Client) {
+	t.Helper()
+
+	db, err := sql.Open("sqlite", "file:"+url.QueryEscape(t.Name())+"?mode=memory&cache=shared&_fk=1")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	require.NoError(t, err)
+
+	drv := entsql.OpenDB(dialect.SQLite, db)
+	client := enttest.NewClient(t, enttest.WithOptions(dbent.Driver(drv)))
+	t.Cleanup(func() { _ = client.Close() })
+
+	repo, ok := NewUsageLogRepository(client, db).(*usageLogRepository)
+	require.True(t, ok)
+	return repo, client
+}

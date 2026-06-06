@@ -1,0 +1,15 @@
+{
+  "name": "socialops-main",
+  "version": "1.0.0",
+  "description": "> Developer note: this repository is being migrated from an AI gateway codebase into a website account-pool based social operations platform. Read [PROJECT_GUIDE.md](PROJECT_GUIDE.md) before changing code.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

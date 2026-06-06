@@ -1,0 +1,7 @@
+services:
+  socialops:
+    image: socialops:local-production
+  postgres:
+    image: postgres:18-alpine
+  redis:
+    image: redis:8-alpine

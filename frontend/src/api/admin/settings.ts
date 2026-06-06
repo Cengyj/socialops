@@ -1,0 +1,963 @@
+/**
+ * Admin Settings API endpoints
+ * Handles system settings management for administrators
+ */
+
+import { apiClient } from "../client";
+import type {
+  CustomEndpoint,
+  CustomMenuItem,
+  LoginAgreementDocument,
+  NotifyEmailEntry,
+} from "@/types";
+
+export interface DefaultSubscriptionSetting {
+  plan_id?: number | null;
+  group_id?: number | null;
+  validity_days: number;
+}
+
+export type AuthSourceType =
+  | "email"
+  | "linuxdo"
+  | "oidc"
+  | "wechat"
+  | "github"
+  | "google"
+  | "dingtalk";
+
+export interface AuthSourceDefaultsValue {
+  balance: number;
+  concurrency: number;
+  subscriptions: DefaultSubscriptionSetting[];
+  grant_on_signup: boolean;
+  grant_on_first_bind: boolean;
+}
+
+export type AuthSourceDefaultsState = Record<
+  AuthSourceType,
+  AuthSourceDefaultsValue
+>;
+export type PaymentVisibleMethod = "alipay" | "wxpay";
+export type PaymentVisibleMethodSource =
+  | ""
+  | "official_alipay"
+  | "easypay_alipay"
+  | "official_wxpay"
+  | "easypay_wxpay";
+export type WeChatConnectMode = "open" | "mp" | "mobile";
+
+export interface PaymentVisibleMethodSourceOption {
+  value: PaymentVisibleMethodSource;
+  labelZh: string;
+  labelEn: string;
+}
+
+export interface WeChatConnectModeOption {
+  value: WeChatConnectMode;
+  labelZh: string;
+  labelEn: string;
+}
+
+const AUTH_SOURCE_TYPES: AuthSourceType[] = [
+  "email",
+  "linuxdo",
+  "oidc",
+  "wechat",
+  "github",
+  "google",
+  "dingtalk",
+];
+const AUTH_SOURCE_DEFAULT_BALANCE = 0;
+const AUTH_SOURCE_DEFAULT_CONCURRENCY = 5;
+const PAYMENT_VISIBLE_METHOD_SOURCE_OPTIONS: Record<
+  PaymentVisibleMethod,
+  PaymentVisibleMethodSourceOption[]
+> = {
+  alipay: [
+    { value: "", labelZh: "未配置", labelEn: "Not configured" },
+    {
+      value: "official_alipay",
+      labelZh: "支付宝官方",
+      labelEn: "Official Alipay",
+    },
+    {
+      value: "easypay_alipay",
+      labelZh: "易支付支付宝",
+      labelEn: "EasyPay Alipay",
+    },
+  ],
+  wxpay: [
+    { value: "", labelZh: "未配置", labelEn: "Not configured" },
+    {
+      value: "official_wxpay",
+      labelZh: "微信官方",
+      labelEn: "Official WeChat Pay",
+    },
+    {
+      value: "easypay_wxpay",
+      labelZh: "易支付微信",
+      labelEn: "EasyPay WeChat Pay",
+    },
+  ],
+};
+const PAYMENT_VISIBLE_METHOD_SOURCE_ALIASES: Record<
+  PaymentVisibleMethod,
+  Record<string, PaymentVisibleMethodSource>
+> = {
+  alipay: {
+    official_alipay: "official_alipay",
+    alipay: "official_alipay",
+    alipay_direct: "official_alipay",
+    official: "official_alipay",
+    easypay_alipay: "easypay_alipay",
+    easypay: "easypay_alipay",
+  },
+  wxpay: {
+    official_wxpay: "official_wxpay",
+    wxpay: "official_wxpay",
+    wxpay_direct: "official_wxpay",
+    wechat: "official_wxpay",
+    official: "official_wxpay",
+    easypay_wxpay: "easypay_wxpay",
+    easypay: "easypay_wxpay",
+  },
+};
+const WECHAT_CONNECT_MODE_OPTIONS: WeChatConnectModeOption[] = [
+  { value: "open", labelZh: "PC 应用", labelEn: "PC App" },
+  {
+    value: "mp",
+    labelZh: "公众号",
+    labelEn: "Official Account",
+  },
+  {
+    value: "mobile",
+    labelZh: "移动应用",
+    labelEn: "Mobile App",
+  },
+];
+const WECHAT_CONNECT_MODE_ALIASES: Record<string, WeChatConnectMode> = {
+  open: "open",
+  open_platform: "open",
+  official: "open",
+  wx_open: "open",
+  mp: "mp",
+  official_account: "mp",
+  wechat_mp: "mp",
+  mini_program: "mp",
+  mobile: "mobile",
+  mobile_app: "mobile",
+  native_app: "mobile",
+};
+
+export function normalizeDefaultSubscriptionSettings(
+  subscriptions: DefaultSubscriptionSetting[] | null | undefined,
+): DefaultSubscriptionSetting[] {
+  if (!Array.isArray(subscriptions)) return [];
+
+  return subscriptions
+    .filter((item) => Number(item.plan_id || item.group_id || 0) > 0 && item.validity_days > 0)
+    .map((item) => {
+      const planID =
+        item.plan_id != null && Number(item.plan_id) > 0
+          ? Math.floor(Number(item.plan_id))
+          : undefined;
+      const groupID =
+        planID == null && item.group_id != null && Number(item.group_id) > 0
+          ? Math.floor(Number(item.group_id))
+          : undefined;
+      const normalized: DefaultSubscriptionSetting = {
+        plan_id: planID,
+        validity_days: Math.min(
+          36500,
+          Math.max(1, Math.floor(item.validity_days)),
+        ),
+      };
+      if (groupID != null) normalized.group_id = groupID;
+      return normalized;
+    })
+    .filter((item) => item.plan_id != null || item.group_id != null);
+}
+
+export function buildAuthSourceDefaultsState(
+  settings: Partial<SystemSettings>,
+): AuthSourceDefaultsState {
+  const raw = settings as Record<string, unknown>;
+
+  return AUTH_SOURCE_TYPES.reduce((acc, source) => {
+    const subscriptions = raw[`auth_source_default_${source}_subscriptions`];
+    acc[source] = {
+      balance: Number(
+        raw[`auth_source_default_${source}_balance`] ??
+          AUTH_SOURCE_DEFAULT_BALANCE,
+      ),
+      concurrency: Math.max(
+        1,
+        Number(
+          raw[`auth_source_default_${source}_concurrency`] ??
+            AUTH_SOURCE_DEFAULT_CONCURRENCY,
+        ),
+      ),
+      subscriptions: normalizeDefaultSubscriptionSettings(
+        Array.isArray(subscriptions)
+          ? (subscriptions as DefaultSubscriptionSetting[])
+          : [],
+      ),
+      grant_on_signup:
+        raw[`auth_source_default_${source}_grant_on_signup`] === true,
+      grant_on_first_bind:
+        raw[`auth_source_default_${source}_grant_on_first_bind`] === true,
+    };
+    return acc;
+  }, {} as AuthSourceDefaultsState);
+}
+
+export function appendAuthSourceDefaultsToUpdateRequest(
+  payload: UpdateSettingsRequest,
+  authSourceDefaults: AuthSourceDefaultsState,
+): UpdateSettingsRequest {
+  const target = payload as Record<string, unknown>;
+
+  for (const source of AUTH_SOURCE_TYPES) {
+    const current = authSourceDefaults[source] ?? {
+      balance: AUTH_SOURCE_DEFAULT_BALANCE,
+      concurrency: AUTH_SOURCE_DEFAULT_CONCURRENCY,
+      subscriptions: [],
+      grant_on_signup: false,
+      grant_on_first_bind: false,
+    };
+    target[`auth_source_default_${source}_balance`] =
+      Number(current.balance) || 0;
+    target[`auth_source_default_${source}_concurrency`] = Math.max(
+      1,
+      Math.floor(
+        Number(current.concurrency) || AUTH_SOURCE_DEFAULT_CONCURRENCY,
+      ),
+    );
+    target[`auth_source_default_${source}_subscriptions`] =
+      normalizeDefaultSubscriptionSettings(current.subscriptions);
+    target[`auth_source_default_${source}_grant_on_signup`] =
+      current.grant_on_signup;
+    target[`auth_source_default_${source}_grant_on_first_bind`] =
+      current.grant_on_first_bind;
+  }
+
+  return payload;
+}
+
+export function getPaymentVisibleMethodSourceOptions(
+  method: PaymentVisibleMethod,
+): PaymentVisibleMethodSourceOption[] {
+  return PAYMENT_VISIBLE_METHOD_SOURCE_OPTIONS[method];
+}
+
+export function normalizePaymentVisibleMethodSource(
+  method: PaymentVisibleMethod,
+  source: unknown,
+): PaymentVisibleMethodSource {
+  if (typeof source !== "string") return "";
+
+  const normalized = source.trim().toLowerCase();
+  if (!normalized) return "";
+
+  return PAYMENT_VISIBLE_METHOD_SOURCE_ALIASES[method][normalized] ?? "";
+}
+
+export function getWeChatConnectModeOptions(): WeChatConnectModeOption[] {
+  return WECHAT_CONNECT_MODE_OPTIONS;
+}
+
+export function normalizeWeChatConnectMode(source: unknown): WeChatConnectMode {
+  if (typeof source !== "string") return "open";
+
+  const normalized = source.trim().toLowerCase();
+  if (!normalized) return "open";
+
+  return WECHAT_CONNECT_MODE_ALIASES[normalized] ?? "open";
+}
+
+export function defaultWeChatConnectScopesForMode(mode: unknown): string {
+  switch (normalizeWeChatConnectMode(mode)) {
+    case "mp":
+      return "snsapi_userinfo";
+    case "mobile":
+      return "";
+    default:
+      return "snsapi_login";
+  }
+}
+
+export function resolveWeChatConnectModeCapabilities(
+  openEnabled: unknown,
+  mpEnabled: unknown,
+  mobileEnabled: unknown,
+  legacyMode: unknown,
+): { openEnabled: boolean; mpEnabled: boolean; mobileEnabled: boolean } {
+  if (
+    typeof openEnabled === "boolean" ||
+    typeof mpEnabled === "boolean" ||
+    typeof mobileEnabled === "boolean"
+  ) {
+    return {
+      openEnabled: openEnabled === true,
+      mpEnabled: mpEnabled === true,
+      mobileEnabled: mobileEnabled === true,
+    };
+  }
+
+  switch (normalizeWeChatConnectMode(legacyMode)) {
+    case "mp":
+      return { openEnabled: false, mpEnabled: true, mobileEnabled: false };
+    case "mobile":
+      return { openEnabled: false, mpEnabled: false, mobileEnabled: true };
+    default:
+      return { openEnabled: true, mpEnabled: false, mobileEnabled: false };
+  }
+}
+
+export function deriveWeChatConnectStoredMode(
+  openEnabled: boolean,
+  mpEnabled: boolean,
+  mobileEnabled: boolean,
+  legacyMode: unknown,
+): WeChatConnectMode {
+  if (mpEnabled) return "mp";
+  if (mobileEnabled) return "mobile";
+  if (openEnabled) return "open";
+  return normalizeWeChatConnectMode(legacyMode);
+}
+
+/**
+ * System settings interface
+ */
+export interface SystemSettings {
+  // Registration settings
+  registration_enabled: boolean;
+  email_verify_enabled: boolean;
+  registration_email_suffix_whitelist: string[];
+  promo_code_enabled: boolean;
+  password_reset_enabled: boolean;
+  frontend_url: string;
+  invitation_code_enabled: boolean;
+  totp_enabled: boolean; // TOTP 双因素认证
+  totp_encryption_key_configured: boolean; // TOTP 加密密钥是否已配置
+  login_agreement_enabled: boolean;
+  login_agreement_mode: "modal" | "checkbox" | string;
+  login_agreement_updated_at: string;
+  login_agreement_documents: LoginAgreementDocument[];
+  // Default settings
+  default_balance: number;
+  affiliate_rebate_rate: number;
+  affiliate_rebate_freeze_hours: number;
+  affiliate_rebate_duration_days: number;
+  affiliate_rebate_per_invitee_cap: number;
+  default_concurrency: number;
+  default_user_rpm_limit: number;
+  default_subscriptions: DefaultSubscriptionSetting[];
+  auth_source_default_email_balance?: number;
+  auth_source_default_email_concurrency?: number;
+  auth_source_default_email_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_email_grant_on_signup?: boolean;
+  auth_source_default_email_grant_on_first_bind?: boolean;
+  auth_source_default_linuxdo_balance?: number;
+  auth_source_default_linuxdo_concurrency?: number;
+  auth_source_default_linuxdo_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_linuxdo_grant_on_signup?: boolean;
+  auth_source_default_linuxdo_grant_on_first_bind?: boolean;
+  auth_source_default_oidc_balance?: number;
+  auth_source_default_oidc_concurrency?: number;
+  auth_source_default_oidc_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_oidc_grant_on_signup?: boolean;
+  auth_source_default_oidc_grant_on_first_bind?: boolean;
+  auth_source_default_wechat_balance?: number;
+  auth_source_default_wechat_concurrency?: number;
+  auth_source_default_wechat_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_wechat_grant_on_signup?: boolean;
+  auth_source_default_wechat_grant_on_first_bind?: boolean;
+  auth_source_default_dingtalk_balance?: number;
+  auth_source_default_dingtalk_concurrency?: number;
+  auth_source_default_dingtalk_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_dingtalk_grant_on_signup?: boolean;
+  auth_source_default_dingtalk_grant_on_first_bind?: boolean;
+  auth_source_default_github_balance?: number;
+  auth_source_default_github_concurrency?: number;
+  auth_source_default_github_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_github_grant_on_signup?: boolean;
+  auth_source_default_github_grant_on_first_bind?: boolean;
+  auth_source_default_google_balance?: number;
+  auth_source_default_google_concurrency?: number;
+  auth_source_default_google_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_google_grant_on_signup?: boolean;
+  auth_source_default_google_grant_on_first_bind?: boolean;
+  force_email_on_third_party_signup?: boolean;
+  // OEM settings
+  site_name: string;
+  site_logo: string;
+  site_subtitle: string;
+  api_base_url: string;
+  contact_info: string;
+  doc_url: string;
+  home_content: string;
+  table_default_page_size: number;
+  table_page_size_options: number[];
+  backend_mode_enabled: boolean;
+  purchase_subscription_enabled: boolean;
+  purchase_subscription_url: string;
+  custom_menu_items: CustomMenuItem[];
+  custom_endpoints: CustomEndpoint[];
+  // SMTP settings
+  smtp_host: string;
+  smtp_port: number;
+  smtp_username: string;
+  smtp_password_configured: boolean;
+  smtp_from_email: string;
+  smtp_from_name: string;
+  smtp_use_tls: boolean;
+  // Cloudflare Turnstile settings
+  turnstile_enabled: boolean;
+  turnstile_site_key: string;
+  turnstile_secret_key_configured: boolean;
+  api_key_acl_trust_forwarded_ip: boolean;
+
+  // LinuxDo Connect OAuth settings
+  linuxdo_connect_enabled: boolean;
+  linuxdo_connect_client_id: string;
+  linuxdo_connect_client_secret_configured: boolean;
+  linuxdo_connect_redirect_url: string;
+
+  // DingTalk Connect OAuth settings
+  dingtalk_connect_enabled: boolean;
+  dingtalk_connect_client_id: string;
+  dingtalk_connect_client_secret_configured: boolean;
+  dingtalk_connect_redirect_url: string;
+  dingtalk_connect_corp_restriction_policy: string;
+  dingtalk_connect_internal_corp_id: string;
+  dingtalk_connect_bypass_registration: boolean;
+  dingtalk_connect_sync_corp_email: boolean;
+  dingtalk_connect_sync_display_name: boolean;
+  dingtalk_connect_sync_dept: boolean;
+  dingtalk_connect_sync_corp_email_attr_key: string;
+  dingtalk_connect_sync_display_name_attr_key: string;
+  dingtalk_connect_sync_dept_attr_key: string;
+  dingtalk_connect_sync_corp_email_attr_name: string;
+  dingtalk_connect_sync_display_name_attr_name: string;
+  dingtalk_connect_sync_dept_attr_name: string;
+
+  // WeChat Connect OAuth settings
+  wechat_connect_enabled: boolean;
+  wechat_connect_app_id: string;
+  wechat_connect_app_secret_configured: boolean;
+  wechat_connect_open_app_id?: string;
+  wechat_connect_open_app_secret_configured?: boolean;
+  wechat_connect_mp_app_id?: string;
+  wechat_connect_mp_app_secret_configured?: boolean;
+  wechat_connect_mobile_app_id?: string;
+  wechat_connect_mobile_app_secret_configured?: boolean;
+  wechat_connect_open_enabled?: boolean;
+  wechat_connect_mp_enabled?: boolean;
+  wechat_connect_mobile_enabled?: boolean;
+  wechat_connect_mode: string;
+  wechat_connect_scopes: string;
+  wechat_connect_redirect_url: string;
+  wechat_connect_frontend_redirect_url: string;
+
+  // Generic OIDC OAuth settings
+  oidc_connect_enabled: boolean;
+  oidc_connect_provider_name: string;
+  oidc_connect_client_id: string;
+  oidc_connect_client_secret_configured: boolean;
+  oidc_connect_issuer_url: string;
+  oidc_connect_discovery_url: string;
+  oidc_connect_authorize_url: string;
+  oidc_connect_token_url: string;
+  oidc_connect_userinfo_url: string;
+  oidc_connect_jwks_url: string;
+  oidc_connect_scopes: string;
+  oidc_connect_redirect_url: string;
+  oidc_connect_frontend_redirect_url: string;
+  oidc_connect_token_auth_method: string;
+  oidc_connect_use_pkce: boolean;
+  oidc_connect_validate_id_token: boolean;
+  oidc_connect_allowed_signing_algs: string;
+  oidc_connect_clock_skew_seconds: number;
+  oidc_connect_require_email_verified: boolean;
+  oidc_connect_userinfo_email_path: string;
+  oidc_connect_userinfo_id_path: string;
+  oidc_connect_userinfo_username_path: string;
+  github_oauth_enabled: boolean;
+  github_oauth_client_id: string;
+  github_oauth_client_secret_configured: boolean;
+  github_oauth_redirect_url: string;
+  github_oauth_frontend_redirect_url: string;
+  google_oauth_enabled: boolean;
+  google_oauth_client_id: string;
+  google_oauth_client_secret_configured: boolean;
+  google_oauth_redirect_url: string;
+  google_oauth_frontend_redirect_url: string;
+
+  // Payment configuration
+  payment_enabled: boolean;
+  risk_control_enabled: boolean;
+  payment_min_amount: number;
+  payment_max_amount: number;
+  payment_daily_limit: number;
+  payment_order_timeout_minutes: number;
+  payment_max_pending_orders: number;
+  payment_enabled_types: string[];
+  payment_balance_disabled: boolean;
+  payment_balance_recharge_multiplier: number;
+  payment_recharge_fee_rate: number;
+  payment_load_balance_strategy: string;
+  payment_product_name_prefix: string;
+  payment_product_name_suffix: string;
+  payment_help_image_url: string;
+  payment_help_text: string;
+  payment_cancel_rate_limit_enabled: boolean;
+  payment_cancel_rate_limit_max: number;
+  payment_cancel_rate_limit_window: number;
+  payment_cancel_rate_limit_unit: string;
+  payment_cancel_rate_limit_window_mode: string;
+  payment_alipay_force_qrcode?: boolean;
+  payment_visible_method_alipay_source?: string;
+  payment_visible_method_wxpay_source?: string;
+  payment_visible_method_alipay_enabled?: boolean;
+  payment_visible_method_wxpay_enabled?: boolean;
+
+  // 余额、订阅到期与账号限额通知
+  balance_low_notify_enabled: boolean;
+  balance_low_notify_threshold: number;
+  balance_low_notify_recharge_url: string;
+  subscription_expiry_notify_enabled: boolean;
+  account_quota_notify_enabled: boolean;
+  account_quota_notify_emails: NotifyEmailEntry[];
+
+  // Affiliate (邀请返利) feature switch
+  affiliate_enabled: boolean;
+}
+
+export interface UpdateSettingsRequest {
+  registration_enabled?: boolean;
+  email_verify_enabled?: boolean;
+  registration_email_suffix_whitelist?: string[];
+  promo_code_enabled?: boolean;
+  password_reset_enabled?: boolean;
+  frontend_url?: string;
+  invitation_code_enabled?: boolean;
+  totp_enabled?: boolean; // TOTP 双因素认证
+  login_agreement_enabled?: boolean;
+  login_agreement_mode?: "modal" | "checkbox" | string;
+  login_agreement_updated_at?: string;
+  login_agreement_documents?: LoginAgreementDocument[];
+  default_balance?: number;
+  affiliate_rebate_rate?: number;
+  affiliate_rebate_freeze_hours?: number;
+  affiliate_rebate_duration_days?: number;
+  affiliate_rebate_per_invitee_cap?: number;
+  default_concurrency?: number;
+  default_user_rpm_limit?: number;
+  default_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_email_balance?: number;
+  auth_source_default_email_concurrency?: number;
+  auth_source_default_email_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_email_grant_on_signup?: boolean;
+  auth_source_default_email_grant_on_first_bind?: boolean;
+  auth_source_default_linuxdo_balance?: number;
+  auth_source_default_linuxdo_concurrency?: number;
+  auth_source_default_linuxdo_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_linuxdo_grant_on_signup?: boolean;
+  auth_source_default_linuxdo_grant_on_first_bind?: boolean;
+  auth_source_default_oidc_balance?: number;
+  auth_source_default_oidc_concurrency?: number;
+  auth_source_default_oidc_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_oidc_grant_on_signup?: boolean;
+  auth_source_default_oidc_grant_on_first_bind?: boolean;
+  auth_source_default_wechat_balance?: number;
+  auth_source_default_wechat_concurrency?: number;
+  auth_source_default_wechat_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_wechat_grant_on_signup?: boolean;
+  auth_source_default_wechat_grant_on_first_bind?: boolean;
+  auth_source_default_dingtalk_balance?: number;
+  auth_source_default_dingtalk_concurrency?: number;
+  auth_source_default_dingtalk_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_dingtalk_grant_on_signup?: boolean;
+  auth_source_default_dingtalk_grant_on_first_bind?: boolean;
+  auth_source_default_github_balance?: number;
+  auth_source_default_github_concurrency?: number;
+  auth_source_default_github_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_github_grant_on_signup?: boolean;
+  auth_source_default_github_grant_on_first_bind?: boolean;
+  auth_source_default_google_balance?: number;
+  auth_source_default_google_concurrency?: number;
+  auth_source_default_google_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_google_grant_on_signup?: boolean;
+  auth_source_default_google_grant_on_first_bind?: boolean;
+  force_email_on_third_party_signup?: boolean;
+  site_name?: string;
+  site_logo?: string;
+  site_subtitle?: string;
+  api_base_url?: string;
+  contact_info?: string;
+  doc_url?: string;
+  home_content?: string;
+  table_default_page_size?: number;
+  table_page_size_options?: number[];
+  backend_mode_enabled?: boolean;
+  purchase_subscription_enabled?: boolean;
+  purchase_subscription_url?: string;
+  custom_menu_items?: CustomMenuItem[];
+  custom_endpoints?: CustomEndpoint[];
+  smtp_host?: string;
+  smtp_port?: number;
+  smtp_username?: string;
+  smtp_password?: string;
+  smtp_from_email?: string;
+  smtp_from_name?: string;
+  smtp_use_tls?: boolean;
+  turnstile_enabled?: boolean;
+  turnstile_site_key?: string;
+  turnstile_secret_key?: string;
+  api_key_acl_trust_forwarded_ip?: boolean;
+  linuxdo_connect_enabled?: boolean;
+  linuxdo_connect_client_id?: string;
+  linuxdo_connect_client_secret?: string;
+  linuxdo_connect_redirect_url?: string;
+  dingtalk_connect_enabled?: boolean;
+  dingtalk_connect_client_id?: string;
+  dingtalk_connect_client_secret?: string;
+  dingtalk_connect_redirect_url?: string;
+  dingtalk_connect_corp_restriction_policy?: string;
+  dingtalk_connect_internal_corp_id?: string;
+  dingtalk_connect_bypass_registration?: boolean;
+  dingtalk_connect_sync_corp_email?: boolean;
+  dingtalk_connect_sync_display_name?: boolean;
+  dingtalk_connect_sync_dept?: boolean;
+  dingtalk_connect_sync_corp_email_attr_key?: string;
+  dingtalk_connect_sync_display_name_attr_key?: string;
+  dingtalk_connect_sync_dept_attr_key?: string;
+  dingtalk_connect_sync_corp_email_attr_name?: string;
+  dingtalk_connect_sync_display_name_attr_name?: string;
+  dingtalk_connect_sync_dept_attr_name?: string;
+  wechat_connect_enabled?: boolean;
+  wechat_connect_app_id?: string;
+  wechat_connect_app_secret?: string;
+  wechat_connect_open_app_id?: string;
+  wechat_connect_open_app_secret?: string;
+  wechat_connect_mp_app_id?: string;
+  wechat_connect_mp_app_secret?: string;
+  wechat_connect_mobile_app_id?: string;
+  wechat_connect_mobile_app_secret?: string;
+  wechat_connect_open_enabled?: boolean;
+  wechat_connect_mp_enabled?: boolean;
+  wechat_connect_mobile_enabled?: boolean;
+  wechat_connect_mode?: string;
+  wechat_connect_scopes?: string;
+  wechat_connect_redirect_url?: string;
+  wechat_connect_frontend_redirect_url?: string;
+  oidc_connect_enabled?: boolean;
+  oidc_connect_provider_name?: string;
+  oidc_connect_client_id?: string;
+  oidc_connect_client_secret?: string;
+  oidc_connect_issuer_url?: string;
+  oidc_connect_discovery_url?: string;
+  oidc_connect_authorize_url?: string;
+  oidc_connect_token_url?: string;
+  oidc_connect_userinfo_url?: string;
+  oidc_connect_jwks_url?: string;
+  oidc_connect_scopes?: string;
+  oidc_connect_redirect_url?: string;
+  oidc_connect_frontend_redirect_url?: string;
+  oidc_connect_token_auth_method?: string;
+  oidc_connect_use_pkce?: boolean;
+  oidc_connect_validate_id_token?: boolean;
+  oidc_connect_allowed_signing_algs?: string;
+  oidc_connect_clock_skew_seconds?: number;
+  oidc_connect_require_email_verified?: boolean;
+  oidc_connect_userinfo_email_path?: string;
+  oidc_connect_userinfo_id_path?: string;
+  oidc_connect_userinfo_username_path?: string;
+  github_oauth_enabled?: boolean;
+  github_oauth_client_id?: string;
+  github_oauth_client_secret?: string;
+  github_oauth_redirect_url?: string;
+  github_oauth_frontend_redirect_url?: string;
+  google_oauth_enabled?: boolean;
+  google_oauth_client_id?: string;
+  google_oauth_client_secret?: string;
+  google_oauth_redirect_url?: string;
+  google_oauth_frontend_redirect_url?: string;
+  // Payment configuration
+  payment_enabled?: boolean;
+  risk_control_enabled?: boolean;
+  payment_min_amount?: number;
+  payment_max_amount?: number;
+  payment_daily_limit?: number;
+  payment_order_timeout_minutes?: number;
+  payment_max_pending_orders?: number;
+  payment_enabled_types?: string[];
+  payment_balance_disabled?: boolean;
+  payment_balance_recharge_multiplier?: number;
+  payment_recharge_fee_rate?: number;
+  payment_load_balance_strategy?: string;
+  payment_product_name_prefix?: string;
+  payment_product_name_suffix?: string;
+  payment_help_image_url?: string;
+  payment_help_text?: string;
+  payment_cancel_rate_limit_enabled?: boolean;
+  payment_cancel_rate_limit_max?: number;
+  payment_cancel_rate_limit_window?: number;
+  payment_cancel_rate_limit_unit?: string;
+  payment_cancel_rate_limit_window_mode?: string;
+  payment_alipay_force_qrcode?: boolean;
+  payment_visible_method_alipay_source?: string;
+  payment_visible_method_wxpay_source?: string;
+  payment_visible_method_alipay_enabled?: boolean;
+  payment_visible_method_wxpay_enabled?: boolean;
+  // 余额、订阅到期与账号限额通知
+  balance_low_notify_enabled?: boolean;
+  balance_low_notify_threshold?: number;
+  balance_low_notify_recharge_url?: string;
+  subscription_expiry_notify_enabled?: boolean;
+  account_quota_notify_enabled?: boolean;
+  account_quota_notify_emails?: NotifyEmailEntry[];
+
+  // Affiliate (邀请返利) feature switch
+  affiliate_enabled?: boolean;
+}
+
+/**
+ * Get all system settings
+ * @returns System settings
+ */
+export async function getSettings(): Promise<SystemSettings> {
+  const { data } = await apiClient.get<SystemSettings>("/admin/settings");
+  return data;
+}
+
+/**
+ * Update system settings
+ * @param settings - Partial settings to update
+ * @returns Updated settings
+ */
+export async function updateSettings(
+  settings: UpdateSettingsRequest,
+): Promise<SystemSettings> {
+  const { data } = await apiClient.put<SystemSettings>(
+    "/admin/settings",
+    settings,
+  );
+  return data;
+}
+
+/**
+ * Test SMTP connection request
+ */
+export interface TestSmtpRequest {
+  smtp_host: string;
+  smtp_port: number;
+  smtp_username: string;
+  smtp_password: string;
+  smtp_use_tls: boolean;
+}
+
+/**
+ * Test SMTP connection with provided config
+ * @param config - SMTP configuration to test
+ * @returns Test result message
+ */
+export async function testSmtpConnection(
+  config: TestSmtpRequest,
+): Promise<{ message: string }> {
+  const { data } = await apiClient.post<{ message: string }>(
+    "/admin/settings/test-smtp",
+    config,
+  );
+  return data;
+}
+
+/**
+ * Send test email request
+ */
+export interface SendTestEmailRequest {
+  email: string;
+  smtp_host: string;
+  smtp_port: number;
+  smtp_username: string;
+  smtp_password: string;
+  smtp_from_email: string;
+  smtp_from_name: string;
+  smtp_use_tls: boolean;
+}
+
+/**
+ * Send test email with provided SMTP config
+ * @param request - Email address and SMTP config
+ * @returns Test result message
+ */
+export async function sendTestEmail(
+  request: SendTestEmailRequest,
+): Promise<{ message: string }> {
+  const { data } = await apiClient.post<{ message: string }>(
+    "/admin/settings/send-test-email",
+    request,
+  );
+  return data;
+}
+
+// ==================== Email Template Settings ====================
+
+export interface EmailTemplateOption {
+  value: string;
+  label?: string;
+  description?: string;
+  category?: string;
+  optional?: boolean;
+}
+
+export type EmailTemplateEventOption = string | EmailTemplateOption;
+
+export interface EmailTemplateSummary {
+  event: string;
+  locale: string;
+  subject: string;
+  is_custom?: boolean;
+  updated_at?: string;
+}
+
+export interface EmailTemplateListResponse {
+  events: EmailTemplateEventOption[];
+  locales: string[];
+  templates?: EmailTemplateSummary[];
+  placeholders?: string[];
+}
+
+export interface EmailTemplateDetail {
+  event: string;
+  locale: string;
+  subject: string;
+  html: string;
+  is_custom?: boolean;
+  updated_at?: string;
+  placeholders?: string[];
+}
+
+export interface UpdateEmailTemplateRequest {
+  subject: string;
+  html: string;
+}
+
+export interface PreviewEmailTemplateRequest extends UpdateEmailTemplateRequest {
+  event: string;
+  locale: string;
+}
+
+export interface EmailTemplatePreviewResponse {
+  subject: string;
+  html: string;
+}
+
+export async function getEmailTemplates(): Promise<EmailTemplateListResponse> {
+  const { data } = await apiClient.get<EmailTemplateListResponse>(
+    "/admin/settings/email-templates",
+  );
+  return data;
+}
+
+export async function getEmailTemplate(
+  event: string,
+  locale: string,
+): Promise<EmailTemplateDetail> {
+  const { data } = await apiClient.get<EmailTemplateDetail>(
+    `/admin/settings/email-templates/${encodeURIComponent(event)}/${encodeURIComponent(locale)}`,
+  );
+  return data;
+}
+
+export async function updateEmailTemplate(
+  event: string,
+  locale: string,
+  request: UpdateEmailTemplateRequest,
+): Promise<EmailTemplateDetail> {
+  const { data } = await apiClient.put<EmailTemplateDetail>(
+    `/admin/settings/email-templates/${encodeURIComponent(event)}/${encodeURIComponent(locale)}`,
+    request,
+  );
+  return data;
+}
+
+export async function restoreOfficialEmailTemplate(
+  event: string,
+  locale: string,
+): Promise<EmailTemplateDetail> {
+  const { data } = await apiClient.post<EmailTemplateDetail>(
+    `/admin/settings/email-templates/${encodeURIComponent(event)}/${encodeURIComponent(locale)}/restore-official`,
+  );
+  return data;
+}
+
+export async function previewEmailTemplate(
+  request: PreviewEmailTemplateRequest,
+): Promise<EmailTemplatePreviewResponse> {
+  const { data } = await apiClient.post<EmailTemplatePreviewResponse>(
+    "/admin/settings/email-template-preview",
+    request,
+  );
+  return data;
+}
+
+/**
+ * Admin API Key status response
+ */
+export interface AdminApiKeyStatus {
+  exists: boolean;
+  masked_key: string;
+}
+
+/**
+ * Get admin API key status
+ * @returns Status indicating if key exists and masked version
+ */
+export async function getAdminApiKey(): Promise<AdminApiKeyStatus> {
+  const { data } = await apiClient.get<AdminApiKeyStatus>(
+    "/admin/settings/admin-api-key",
+  );
+  return data;
+}
+
+/**
+ * Regenerate admin API key
+ * @returns The new full API key (only shown once)
+ */
+export async function regenerateAdminApiKey(): Promise<{ key: string }> {
+  const { data } = await apiClient.post<{ key: string }>(
+    "/admin/settings/admin-api-key/regenerate",
+  );
+  return data;
+}
+
+/**
+ * Delete admin API key
+ * @returns Success message
+ */
+export async function deleteAdminApiKey(): Promise<{ message: string }> {
+  const { data } = await apiClient.delete<{ message: string }>(
+    "/admin/settings/admin-api-key",
+  );
+  return data;
+}
+
+export const settingsAPI = {
+  getSettings,
+  updateSettings,
+  testSmtpConnection,
+  sendTestEmail,
+  getEmailTemplates,
+  getEmailTemplate,
+  updateEmailTemplate,
+  restoreOfficialEmailTemplate,
+  previewEmailTemplate,
+  getAdminApiKey,
+  regenerateAdminApiKey,
+  deleteAdminApiKey,
+};
+
+export default settingsAPI;

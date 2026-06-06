@@ -1,0 +1,468 @@
+# SocialOps Configuration File
+# SocialOps 配置文件 — 网站总账号池 + 社交执行计费平台
+#
+# Copy this file to config.yaml (or /app/data/config.yaml in Docker) and modify as needed
+# 复制此文件为 config.yaml（Docker 部署时为 /app/data/config.yaml）并根据需要修改
+#
+# Documentation / 文档: https://github.com/Wei-Shaw/socialops
+
+# =============================================================================
+# Server Configuration
+# 服务器配置
+# =============================================================================
+server:
+  # Bind address (0.0.0.0 for all interfaces)
+  # 绑定地址（0.0.0.0 表示监听所有网络接口）
+  host: "0.0.0.0"
+  # Port to listen on
+  # 监听端口
+  port: 8080
+  # Mode: "debug" for development, "release" for production
+  # 运行模式："debug" 用于开发，"release" 用于生产环境
+  mode: "release"
+  # Frontend base URL used to generate external links in emails (e.g. password reset)
+  # 用于生成邮件中的外部链接（例如：重置密码链接）的前端基础地址
+  # Example: "https://example.com"
+  frontend_url: ""
+  # Trusted proxies for X-Forwarded-For parsing (CIDR/IP). Empty disables trusted proxies.
+  # 信任的代理地址（CIDR/IP 格式），用于解析 X-Forwarded-For 头。留空则禁用代理信任。
+  trusted_proxies: []
+  # Global max request body size in bytes (default: 256MB)
+  # 全局最大请求体大小（字节，默认 256MB）
+  # Applies to all requests, especially important for h2c first request memory protection
+  # 适用于所有请求，对 h2c 第一请求的内存保护尤为重要
+  max_request_body_size: 268435456
+  # HTTP/2 Cleartext (h2c) configuration
+  # HTTP/2 Cleartext (h2c) 配置
+  h2c:
+    # Enable HTTP/2 Cleartext for client connections
+    # 启用 HTTP/2 Cleartext 客户端连接
+    enabled: true
+    # Max concurrent streams per connection
+    # 每个连接的最大并发流数量
+    max_concurrent_streams: 50
+    # Idle timeout for connections (seconds)
+    # 连接空闲超时时间（秒）
+    idle_timeout: 75
+    # Max frame size in bytes (default: 1MB)
+    # 最大帧大小（字节，默认 1MB）
+    max_read_frame_size: 1048576
+    # Max upload buffer per connection in bytes (default: 2MB)
+    # 每个连接的最大上传缓冲区（字节，默认 2MB）
+    max_upload_buffer_per_connection: 2097152
+    # Max upload buffer per stream in bytes (default: 512KB)
+    # 每个流的最大上传缓冲区（字节，默认 512KB）
+    max_upload_buffer_per_stream: 524288
+
+# =============================================================================
+# Run Mode Configuration
+# 运行模式配置
+# =============================================================================
+# Run mode: "standard" (default) or "simple" (for internal use)
+# 运行模式："standard"（默认）或 "simple"（内部使用）
+# - standard: Full SaaS features with billing/balance checks
+# - standard: 完整 SaaS 功能，包含计费和余额校验
+# - simple: Hides SaaS features and skips billing/balance checks
+# - simple: 隐藏 SaaS 功能，跳过计费和余额校验
+run_mode: "standard"
+
+# =============================================================================
+# CORS Configuration
+# 跨域资源共享 (CORS) 配置
+# =============================================================================
+cors:
+  # Allowed origins list. Leave empty to disable cross-origin requests.
+  # 允许的来源列表。留空则禁用跨域请求。
+  allowed_origins: []
+  # Allow credentials (cookies/authorization headers). Cannot be used with "*".
+  # 允许携带凭证（cookies/授权头）。不能与 "*" 通配符同时使用。
+  allow_credentials: true
+
+# =============================================================================
+# Security Configuration
+# 安全配置
+# =============================================================================
+security:
+  url_allowlist:
+    # Enable URL allowlist validation (disable to skip all URL checks)
+    # 启用 URL 白名单验证（禁用则跳过所有 URL 检查）
+    enabled: false
+    # Allowed external service hosts for configured integrations.
+    # 配置集成可访问的外部服务主机列表。
+    upstream_hosts:
+      - "api.github.com"
+      - "github.com"
+      - "oauth2.googleapis.com"
+      - "openidconnect.googleapis.com"
+      - "api.weixin.qq.com"
+      - "oapi.dingtalk.com"
+      - "login.dingtalk.com"
+    # Reserved for future SocialOps data sync allowlists.
+    # 预留给未来 SocialOps 数据同步白名单。
+    crs_hosts: []
+    # Allow localhost/private IPs for external integrations (use only in trusted networks)
+    # 允许本地/私有 IP 地址用于外部集成（仅在可信网络中使用）
+    allow_private_hosts: true
+    # Allow http:// URLs when allowlist is disabled (default: false, require https)
+    # 白名单禁用时是否允许 http:// URL（默认: false，要求 https）
+    allow_insecure_http: true
+  response_headers:
+    # Enable configurable response header filtering (default: true)
+    # 启用可配置的响应头过滤（默认启用，过滤上游敏感响应头）
+    enabled: true
+    # Extra allowed response headers from upstream
+    # 额外允许的上游响应头
+    additional_allowed: []
+    # Force-remove response headers from upstream
+    # 强制移除的上游响应头
+    force_remove: []
+  csp:
+    # Enable Content-Security-Policy header
+    # 启用内容安全策略 (CSP) 响应头
+    enabled: true
+    # Default CSP policy (override if you host assets on other domains)
+    # 默认 CSP 策略（如果静态资源托管在其他域名，请自行覆盖）
+    # Note: __CSP_NONCE__ will be replaced with 'nonce-xxx' at request time for inline script security
+    # 注意：__CSP_NONCE__ 会在请求时被替换为 'nonce-xxx'，用于内联脚本安全
+    policy: "default-src 'self'; script-src 'self' __CSP_NONCE__ https://challenges.cloudflare.com https://static.cloudflareinsights.com https://*.stripe.com https://static.airwallex.com https://checkout.airwallex.com https://static-demo.airwallex.com https://checkout-demo.airwallex.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://static.airwallex.com https://checkout.airwallex.com https://static-demo.airwallex.com https://checkout-demo.airwallex.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https:; frame-src https://challenges.cloudflare.com https://*.stripe.com https://checkout.airwallex.com https://checkout-demo.airwallex.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+  proxy_probe:
+    # Allow skipping TLS verification for proxy probe (debug only)
+    # 允许代理探测时跳过 TLS 证书验证（仅用于调试）
+    insecure_skip_verify: false
+  proxy_fallback:
+    # Allow auxiliary services (update check, public metadata) to fallback to direct
+    # connection when proxy initialization fails. Does not affect user task execution.
+    # 辅助服务（更新检查、公开元数据拉取）代理初始化失败时是否允许回退直连。
+    # 不影响用户任务执行。默认 false：fail-fast 防止 IP 泄露。
+    allow_direct_on_error: false
+
+log:
+  # Log level: debug/info/warn/error
+  # 日志级别：debug/info/warn/error
+  level: "info"
+  # Log format: json/console
+  # 日志格式：json/console
+  format: "console"
+  # Service name field written into each log line
+  # 每条日志都会附带 service 字段
+  service_name: "socialops"
+  # Environment field written into each log line
+  # 每条日志都会附带 env 字段
+  env: "production"
+  # Include caller information
+  # 是否输出调用方位置信息
+  caller: true
+  # Stacktrace threshold: none/error/fatal
+  # 堆栈输出阈值：none/error/fatal
+  stacktrace_level: "error"
+  output:
+    # Keep stdout/stderr output for container log collection
+    # 保持标准输出用于容器日志采集
+    to_stdout: true
+    # Enable file output (default path auto-derived)
+    # 启用文件输出（默认路径自动推导）
+    to_file: true
+    # Empty means:
+    # - DATA_DIR set: {{DATA_DIR}}/logs/socialops.log
+    # - otherwise: /app/data/logs/socialops.log
+    # 留空时：
+    # - 设置 DATA_DIR：{{DATA_DIR}}/logs/socialops.log
+    # - 否则：/app/data/logs/socialops.log
+    file_path: ""
+  rotation:
+    # Max file size before rotation (MB)
+    # 单文件滚动阈值（MB）
+    max_size_mb: 100
+    # Number of rotated files to keep (0 means unlimited)
+    # 保留历史文件数量（0 表示不限制）
+    max_backups: 10
+    # Number of days to keep old log files (0 means unlimited)
+    # 历史日志保留天数（0 表示不限制）
+    max_age_days: 7
+    # Compress rotated files
+    # 是否压缩历史日志
+    compress: true
+    # Use local time for timestamp in rotated filename
+    # 滚动文件名时间戳使用本地时区
+    local_time: true
+  sampling:
+    # Enable zap sampler (reduce high-frequency repetitive logs)
+    # 启用 zap 采样（减少高频重复日志）
+    enabled: false
+    # Number of first entries per second to always log
+    # 每秒无采样保留的前 N 条日志
+    initial: 100
+    # Thereafter keep 1 out of N entries per second
+    # 之后每 N 条保留 1 条
+    thereafter: 100
+
+database:
+  # Database host address
+  # 数据库主机地址
+  host: "localhost"
+  # Database port
+  # 数据库端口
+  port: 5432
+  # Database username
+  # 数据库用户名
+  user: "postgres"
+  # Database password
+  # 数据库密码
+  password: "your_secure_password_here"
+  # Database name
+  # 数据库名称
+  dbname: "socialops"
+  # SSL mode: disable, prefer, require, verify-ca, verify-full
+  # SSL 模式：disable（禁用）, prefer（优先加密，默认）, require（要求）, verify-ca（验证CA）, verify-full（完全验证）
+  # 默认值为 "prefer"，数据库支持 SSL 时自动使用加密连接，不支持时回退明文
+  sslmode: "prefer"
+  # Max open connections (高并发场景建议 256+，需配合 PostgreSQL max_connections 调整)
+  # 最大打开连接数
+  max_open_conns: 256
+  # Max idle connections (建议为 max_open_conns 的 50%，减少频繁建连开销)
+  # 最大空闲连接数
+  max_idle_conns: 128
+  # Connection max lifetime (minutes)
+  # 连接最大存活时间（分钟）
+  conn_max_lifetime_minutes: 30
+  # Connection max idle time (minutes)
+  # 空闲连接最大存活时间（分钟）
+  conn_max_idle_time_minutes: 5
+
+# =============================================================================
+# Redis Configuration
+# Redis 配置
+# =============================================================================
+redis:
+  # Redis host address
+  # Redis 主机地址
+  host: "localhost"
+  # Redis port
+  # Redis 端口
+  port: 6379
+  # Redis password (leave empty if no password is set)
+  # Redis 密码（如果未设置密码则留空）
+  password: ""
+  # Database number (0-15)
+  # 数据库编号（0-15）
+  db: 0
+  # Connection pool size (max concurrent connections)
+  # 连接池大小（最大并发连接数）
+  pool_size: 1024
+  # Minimum number of idle connections (高并发场景建议 128+，保持足够热连接)
+  # 最小空闲连接数
+  min_idle_conns: 128
+  # Enable TLS/SSL connection
+  # 是否启用 TLS/SSL 连接
+  enable_tls: false
+
+jwt:
+  # IMPORTANT: Change this to a random string in production!
+  # 重要：生产环境中请更改为随机字符串！
+  # Generate with / 生成命令: openssl rand -hex 32
+  secret: "change-this-to-a-secure-random-string"
+  # Token expiration time in hours (max 168)
+  # 令牌过期时间（小时，最大 168）
+  expire_hour: 24
+  # Access Token 过期时间（分钟）
+  # 优先级说明：
+  # - >0: 按分钟生效（优先于 expire_hour）
+  # - =0: 回退使用 expire_hour
+  access_token_expire_minutes: 0
+
+# =============================================================================
+# TOTP (2FA) Configuration
+# TOTP 双因素认证配置
+# =============================================================================
+totp:
+  # IMPORTANT: Set a fixed encryption key for TOTP secrets.
+  # 重要：设置固定的 TOTP 加密密钥。
+  # If left empty, a random key will be generated on each startup, causing all
+  # existing TOTP configurations to become invalid (users won't be able to
+  # login with 2FA).
+  # 如果留空，每次启动将生成随机密钥，导致现有的 TOTP 配置失效（用户无法使用
+  # 双因素认证登录）。
+  # Generate with / 生成命令: openssl rand -hex 32
+  encryption_key: ""
+
+# =============================================================================
+# LinuxDo Connect OAuth Login (SSO)
+# LinuxDo Connect OAuth 登录（用于 SocialOps 用户登录）
+# =============================================================================
+linuxdo_connect:
+  enabled: false
+  client_id: ""
+  client_secret: ""
+  authorize_url: "https://connect.linux.do/oauth2/authorize"
+  token_url: "https://connect.linux.do/oauth2/token"
+  userinfo_url: "https://connect.linux.do/api/user"
+  scopes: "user"
+  # 示例: "https://your-domain.com/api/v1/auth/oauth/linuxdo/callback"
+  redirect_url: ""
+  # 安全提示：
+  # - 建议使用同源相对路径（以 / 开头），避免把 token 重定向到意外的第三方域名
+  # - 该地址不应包含 #fragment（本实现使用 URL fragment 传递 access_token）
+  frontend_redirect_url: "/auth/linuxdo/callback"
+  token_auth_method: "client_secret_post" # client_secret_post | client_secret_basic | none
+  # 注意：当 token_auth_method=none（public client）时，必须启用 PKCE
+  use_pkce: true
+  userinfo_email_path: ""
+  userinfo_id_path: ""
+  userinfo_username_path: ""
+
+# =============================================================================
+# Generic OIDC OAuth Login (SSO)
+# 通用 OIDC OAuth 登录（用于 SocialOps 用户登录）
+# =============================================================================
+oidc_connect:
+  enabled: false
+  provider_name: "OIDC"
+  client_id: ""
+  client_secret: ""
+  # 例如: "https://keycloak.example.com/realms/myrealm"
+  issuer_url: ""
+  # 可选: OIDC Discovery URL。为空时可手动填写 authorize/token/userinfo/jwks
+  discovery_url: ""
+  authorize_url: ""
+  token_url: ""
+  # 可选（仅补充 email/username，不用于 sub 可信绑定）
+  userinfo_url: ""
+  # validate_id_token=true 时必填
+  jwks_url: ""
+  scopes: "openid email profile"
+  # 示例: "https://your-domain.com/api/v1/auth/oauth/oidc/callback"
+  redirect_url: ""
+  # 安全提示：
+  # - 建议使用同源相对路径（以 / 开头），避免把 token 重定向到意外的第三方域名
+  # - 该地址不应包含 #fragment（本实现使用 URL fragment 传递 access_token）
+  frontend_redirect_url: "/auth/oidc/callback"
+  token_auth_method: "client_secret_post" # client_secret_post | client_secret_basic | none
+  # 注意：当 token_auth_method=none（public client）时，必须启用 PKCE
+  use_pkce: false
+  # 开启后强制校验 id_token 的签名和 claims（推荐）
+  validate_id_token: true
+  allowed_signing_algs: "RS256,ES256,PS256"
+  # 允许的时钟偏移（秒）
+  clock_skew_seconds: 120
+  # 若 Provider 返回 email_verified=false，是否拒绝登录
+  require_email_verified: false
+  userinfo_email_path: ""
+  userinfo_id_path: ""
+  userinfo_username_path: ""
+
+# =============================================================================
+# Default Settings
+# 默认设置
+# =============================================================================
+default:
+  # Initial admin account (created on first run)
+  # 初始管理员账户（首次运行时创建）
+  admin_email: "admin@example.com"
+  admin_password: "admin123"
+
+  # Default settings for new users
+  # 新用户默认设置
+  # Max concurrent requests per user
+  # 每用户最大并发请求数
+  user_concurrency: 5
+  # Initial balance for new users
+  # 新用户初始余额
+  user_balance: 0
+
+  # API key settings
+  # API 密钥设置
+  # Prefix for generated API keys
+  # 生成的 API 密钥前缀
+  api_key_prefix: "sk-"
+
+  # Rate multiplier (affects billing calculation)
+  # 费率倍数（影响计费计算）
+  rate_multiplier: 1.0
+
+# =============================================================================
+# API Key Auth Cache
+# API Key 认证缓存
+# =============================================================================
+api_key_auth_cache:
+  # In-process L1 cache size (0 disables L1)
+  # 进程内 L1 缓存容量（0 表示禁用）
+  l1_size: 65535
+  # L1 cache TTL in seconds
+  # L1 缓存有效期（秒）
+  l1_ttl_seconds: 15
+  # Redis L2 cache TTL in seconds
+  # Redis L2 缓存有效期（秒）
+  l2_ttl_seconds: 300
+  # Negative cache TTL for missing keys
+  # 未命中负缓存有效期（秒）
+  negative_ttl_seconds: 30
+  # TTL jitter percentage to avoid thundering herd
+  # TTL 抖动百分比，避免集中回源
+  jitter_percent: 10
+  # Enable singleflight request coalescing
+  # 启用 singleflight 合并并发回源
+  singleflight: true
+
+# =============================================================================
+# Subscription Maintenance
+# 订阅维护队列
+# =============================================================================
+subscription_maintenance:
+  # Worker count for asynchronous subscription maintenance
+  # 异步订阅维护 worker 数量
+  worker_count: 2
+  # Queue size for subscription maintenance jobs
+  # 订阅维护任务队列容量
+  queue_size: 1024
+
+# =============================================================================
+# Dashboard Cache and Aggregation
+# 仪表盘缓存与预聚合
+# =============================================================================
+dashboard_cache:
+  enabled: true
+  key_prefix: "socialops:"
+  stats_fresh_ttl_seconds: 15
+  stats_ttl_seconds: 30
+  stats_refresh_timeout_seconds: 30
+
+dashboard_aggregation:
+  enabled: true
+  interval_seconds: 60
+  lookback_seconds: 120
+  backfill_enabled: false
+  backfill_max_days: 31
+  retention:
+    usage_logs_days: 90
+    usage_billing_dedup_days: 365
+    hourly_days: 180
+    daily_days: 730
+  recompute_days: 2
+
+# =============================================================================
+# Usage Cleanup
+# 使用记录清理
+# =============================================================================
+usage_cleanup:
+  enabled: true
+  max_range_days: 31
+  batch_size: 5000
+  worker_interval_seconds: 10
+  task_timeout_seconds: 1800
+
+turnstile:
+  # Require Turnstile in release mode (when enabled, login/register will fail if not configured)
+  # 在 release 模式下要求 Turnstile 验证（启用后，若未配置则登录/注册会失败）
+  required: false
+
+update:
+  # Proxy URL for accessing GitHub (used for online update checks and release downloads)
+  # 用于访问 GitHub 的代理地址（用于在线更新检查和版本下载）
+  # Supports: http, https, socks5, socks5h
+  # Examples:
+  #   - HTTP proxy: "http://127.0.0.1:7890"
+  #   - SOCKS5 proxy: "socks5://127.0.0.1:1080"
+  #   - With authentication: "http://user:pass@proxy.example.com:8080"
+  # Leave empty for direct connection (recommended for overseas servers)
+  # 留空表示直连（适用于海外服务器）
+  proxy_url: ""
