@@ -26,6 +26,7 @@ import (
 const (
 	ConfigFileName             = "config.yaml"
 	InstallLockFile            = ".installed"
+	postgresMaintenanceDB      = "postgres"
 	defaultUserConcurrency     = 5
 	simpleModeAdminConcurrency = 30
 )
@@ -69,6 +70,13 @@ func GetConfigFilePath() string {
 // GetInstallLockPath returns the full path to .installed lock file
 func GetInstallLockPath() string {
 	return GetDataDir() + "/" + InstallLockFile
+}
+
+func ensureDataDir() error {
+	if err := os.MkdirAll(GetDataDir(), 0700); err != nil {
+		return fmt.Errorf("create data directory: %w", err)
+	}
+	return nil
 }
 
 // SetupConfig holds the setup configuration
@@ -162,11 +170,15 @@ func NeedsSetup() bool {
 
 // TestDatabaseConnection tests the database connection and creates database if not exists
 func TestDatabaseConnection(cfg *DatabaseConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("database config is required")
+	}
+	if !validateDBName(cfg.DBName) {
+		return fmt.Errorf("invalid database name")
+	}
+
 	// First, connect to the default 'postgres' database to check/create target database
-	defaultDSN := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode,
-	)
+	defaultDSN, targetDSN := databaseConnectionDSNs(cfg)
 
 	db, err := sql.Open("postgres", defaultDSN)
 	if err != nil {
@@ -214,11 +226,6 @@ func TestDatabaseConnection(cfg *DatabaseConfig) error {
 	}
 	db = nil
 
-	targetDSN := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode,
-	)
-
 	targetDB, err := sql.Open("postgres", targetDSN)
 	if err != nil {
 		return fmt.Errorf("failed to connect to database '%s': %w", cfg.DBName, err)
@@ -238,6 +245,14 @@ func TestDatabaseConnection(cfg *DatabaseConfig) error {
 	}
 
 	return nil
+}
+
+func databaseConnectionDSNs(cfg *DatabaseConfig) (maintenanceDSN string, targetDSN string) {
+	return postgresConnectionDSN(cfg, postgresMaintenanceDB), postgresConnectionDSN(cfg, cfg.DBName)
+}
+
+func postgresConnectionDSN(cfg *DatabaseConfig, dbName string) string {
+	return config.BuildPostgresDSN(cfg.Host, cfg.Port, cfg.User, cfg.Password, dbName, cfg.SSLMode, "")
 }
 
 // TestRedisConnection tests the Redis connection
@@ -323,16 +338,15 @@ func Install(cfg *SetupConfig) error {
 
 // createInstallLock creates a lock file to prevent re-installation attacks
 func createInstallLock() error {
+	if err := ensureDataDir(); err != nil {
+		return err
+	}
 	content := fmt.Sprintf("installed_at=%s\n", time.Now().UTC().Format(time.RFC3339))
 	return os.WriteFile(GetInstallLockPath(), []byte(content), 0400) // Read-only for owner
 }
 
 func initializeDatabase(cfg *SetupConfig) error {
-	dsn := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Database.Host, cfg.Database.Port, cfg.Database.User,
-		cfg.Database.Password, cfg.Database.DBName, cfg.Database.SSLMode,
-	)
+	dsn := postgresConnectionDSN(&cfg.Database, cfg.Database.DBName)
 
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
@@ -351,11 +365,7 @@ func initializeDatabase(cfg *SetupConfig) error {
 }
 
 func createAdminUser(cfg *SetupConfig) (bool, string, error) {
-	dsn := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Database.Host, cfg.Database.Port, cfg.Database.User,
-		cfg.Database.Password, cfg.Database.DBName, cfg.Database.SSLMode,
-	)
+	dsn := postgresConnectionDSN(&cfg.Database, cfg.Database.DBName)
 
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
@@ -429,6 +439,10 @@ func createAdminUser(cfg *SetupConfig) (bool, string, error) {
 }
 
 func writeConfigFile(cfg *SetupConfig) error {
+	if err := ensureDataDir(); err != nil {
+		return err
+	}
+
 	// Ensure timezone has a default value
 	tz := cfg.Timezone
 	if tz == "" {

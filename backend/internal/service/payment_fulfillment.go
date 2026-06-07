@@ -189,7 +189,7 @@ func (s *PaymentService) alreadyProcessed(ctx context.Context, o *dbent.PaymentO
 	case OrderStatusFailed:
 		return s.executeFulfillment(ctx, o.ID)
 	case OrderStatusPaid, OrderStatusRecharging:
-		return fmt.Errorf("order %d is being processed", o.ID)
+		return nil
 	case OrderStatusExpired:
 		slog.Warn("webhook payment success for expired order beyond grace period",
 			"orderID", o.ID,
@@ -361,6 +361,7 @@ func (s *PaymentService) sendBalanceRechargeSuccessNotification(ctx context.Cont
 func (s *PaymentService) sendSubscriptionPurchaseSuccessNotification(ctx context.Context, o *dbent.PaymentOrder) error {
 	variables := map[string]string{
 		"subscription_group": "Subscription",
+		"plan_name":          "",
 		"subscription_days":  "",
 		"expiry_time":        "",
 		"order_id":           strconv.FormatInt(o.ID, 10),
@@ -368,9 +369,15 @@ func (s *PaymentService) sendSubscriptionPurchaseSuccessNotification(ctx context
 	if o.SubscriptionDays != nil {
 		variables["subscription_days"] = strconv.Itoa(*o.SubscriptionDays)
 	}
+	if o.PlanID != nil && s.configService != nil {
+		if plan, err := s.configService.GetPlan(ctx, *o.PlanID); err == nil && plan != nil && strings.TrimSpace(plan.Name) != "" {
+			variables["plan_name"] = plan.Name
+			variables["subscription_group"] = plan.Name
+		}
+	}
 	if o.SubscriptionGroupID != nil {
 		if s.groupRepo != nil {
-			if group, err := s.groupRepo.GetByID(ctx, *o.SubscriptionGroupID); err == nil && group != nil && strings.TrimSpace(group.Name) != "" {
+			if group, err := s.groupRepo.GetByID(ctx, *o.SubscriptionGroupID); err == nil && group != nil && strings.TrimSpace(group.Name) != "" && variables["subscription_group"] == "Subscription" {
 				variables["subscription_group"] = group.Name
 			}
 		}
@@ -425,6 +432,17 @@ func (s *PaymentService) ExecuteSubscriptionFulfillment(ctx context.Context, oid
 func (s *PaymentService) doSub(ctx context.Context, o *dbent.PaymentOrder) error {
 	gid := *o.SubscriptionGroupID
 	days := *o.SubscriptionDays
+	var plan *dbent.SubscriptionPlan
+	if o.PlanID != nil && s.configService != nil {
+		loadedPlan, err := s.configService.GetPlan(ctx, *o.PlanID)
+		if err != nil {
+			return fmt.Errorf("load plan %d: %w", *o.PlanID, err)
+		}
+		plan = loadedPlan
+		if plan != nil && plan.GroupID > 0 {
+			gid = plan.GroupID
+		}
+	}
 	g, err := s.groupRepo.GetByID(ctx, gid)
 	if err != nil || g.Status != payment.EntityStatusActive {
 		return fmt.Errorf("group %d no longer exists or inactive", gid)
@@ -435,12 +453,74 @@ func (s *PaymentService) doSub(ctx context.Context, o *dbent.PaymentOrder) error
 		slog.Info("subscription already assigned for order, skipping", "orderID", o.ID, "groupID", gid)
 		return s.markCompleted(ctx, o, "SUBSCRIPTION_SUCCESS")
 	}
-	orderNote := fmt.Sprintf("payment order %d", o.ID)
-	_, _, err = s.subscriptionSvc.AssignOrExtendSubscription(ctx, &AssignSubscriptionInput{UserID: o.UserID, GroupID: gid, ValidityDays: days, AssignedBy: 0, Notes: orderNote})
+	orderNote := paymentSubscriptionOrderNote(o.ID)
+	alreadyApplied, err := s.subscriptionFulfillmentAlreadyApplied(ctx, o, gid, orderNote)
+	if err != nil {
+		return err
+	}
+	if alreadyApplied {
+		slog.Info("subscription assignment already applied for order note, skipping extension", "orderID", o.ID, "groupID", gid)
+		return s.markCompleted(ctx, o, "SUBSCRIPTION_SUCCESS")
+	}
+	assignInput := &AssignSubscriptionInput{
+		UserID:       o.UserID,
+		GroupID:      gid,
+		ValidityDays: days,
+		AssignedBy:   0,
+		Notes:        orderNote,
+	}
+	if plan != nil {
+		assignInput.PlanID = &plan.ID
+		assignInput.PlanName = plan.Name
+		assignInput.PlanPlatform = firstNonEmpty(strings.TrimSpace(plan.Platform), g.Platform)
+		assignInput.DailyLimitUSD = firstNonNilServiceFloat64(plan.DailyLimitUsd, g.DailyLimitUSD)
+		assignInput.WeeklyLimitUSD = firstNonNilServiceFloat64(plan.WeeklyLimitUsd, g.WeeklyLimitUSD)
+		assignInput.MonthlyLimitUSD = firstNonNilServiceFloat64(plan.MonthlyLimitUsd, g.MonthlyLimitUSD)
+	}
+	_, _, err = s.subscriptionSvc.AssignOrExtendSubscription(ctx, assignInput)
 	if err != nil {
 		return fmt.Errorf("assign subscription: %w", err)
 	}
 	return s.markCompleted(ctx, o, "SUBSCRIPTION_SUCCESS")
+}
+
+func paymentSubscriptionOrderNote(orderID int64) string {
+	return fmt.Sprintf("payment order %d", orderID)
+}
+
+func (s *PaymentService) subscriptionFulfillmentAlreadyApplied(ctx context.Context, o *dbent.PaymentOrder, gid int64, orderNote string) (bool, error) {
+	if s == nil || s.subscriptionSvc == nil || s.subscriptionSvc.userSubRepo == nil || o == nil {
+		return false, nil
+	}
+	sub, err := s.subscriptionSvc.userSubRepo.GetByUserIDAndGroupID(ctx, o.UserID, gid)
+	if err != nil {
+		if errors.Is(err, ErrSubscriptionNotFound) || infraerrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("check subscription fulfillment idempotency: %w", err)
+	}
+	return subscriptionNotesContainExactLine(sub.Notes, orderNote), nil
+}
+
+func subscriptionNotesContainExactLine(notes string, target string) bool {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return false
+	}
+	normalized := strings.ReplaceAll(notes, "\r\n", "\n")
+	for _, line := range strings.Split(normalized, "\n") {
+		if strings.TrimSpace(line) == target {
+			return true
+		}
+	}
+	return false
+}
+
+func firstNonNilServiceFloat64(primary, fallback *float64) *float64 {
+	if primary != nil {
+		return primary
+	}
+	return fallback
 }
 
 func (s *PaymentService) hasAuditLog(ctx context.Context, orderID int64, action string) bool {

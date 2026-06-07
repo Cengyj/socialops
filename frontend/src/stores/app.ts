@@ -13,6 +13,23 @@ import {
   type ReleaseInfo
 } from '@/api/admin/system'
 import { getPublicSettings as fetchPublicSettingsAPI } from '@/api/auth'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
+
+function getInjectedAppConfig(): PublicSettings | undefined {
+  return typeof window === 'undefined' ? undefined : window.__APP_CONFIG__
+}
+
+function setInjectedAppConfig(config: PublicSettings): void {
+  if (typeof window !== 'undefined') {
+    window.__APP_CONFIG__ = { ...config }
+  }
+}
+
+function clearInjectedAppConfig(): void {
+  if (typeof window !== 'undefined') {
+    delete window.__APP_CONFIG__
+  }
+}
 
 export const useAppStore = defineStore('app', () => {
   // ==================== State ====================
@@ -267,7 +284,7 @@ export const useAppStore = defineStore('app', () => {
       versionLoaded.value = true
       return data
     } catch (error) {
-      console.error('Failed to fetch version:', error)
+      recordClientDiagnostic('app.fetchVersion', error)
       return null
     } finally {
       versionLoading.value = false
@@ -288,9 +305,7 @@ export const useAppStore = defineStore('app', () => {
    * Apply settings to store state (internal helper to avoid code duplication)
    */
   function applySettings(config: PublicSettings): void {
-    if (typeof window !== 'undefined') {
-      window.__APP_CONFIG__ = { ...config }
-    }
+    setInjectedAppConfig(config)
     cachedPublicSettings.value = config
     siteName.value = config.site_name || 'SocialOps'
     siteLogo.value = config.site_logo || ''
@@ -307,9 +322,10 @@ export const useAppStore = defineStore('app', () => {
    */
   async function fetchPublicSettings(force = false): Promise<PublicSettings | null> {
     // Check for injected config from server (eliminates flash)
-    if (!publicSettingsLoaded.value && !force && window.__APP_CONFIG__) {
-      applySettings(window.__APP_CONFIG__)
-      return window.__APP_CONFIG__
+    const injectedConfig = getInjectedAppConfig()
+    if (!publicSettingsLoaded.value && !force && injectedConfig) {
+      applySettings(injectedConfig)
+      return injectedConfig
     }
 
     // Return cached data if available and not forcing refresh
@@ -325,6 +341,12 @@ export const useAppStore = defineStore('app', () => {
         promo_code_enabled: true,
         password_reset_enabled: false,
         invitation_code_enabled: false,
+        totp_enabled: false,
+        login_agreement_enabled: false,
+        login_agreement_mode: 'modal',
+        login_agreement_updated_at: '',
+        login_agreement_revision: '',
+        login_agreement_documents: [],
         turnstile_enabled: false,
         turnstile_site_key: '',
         site_name: siteName.value,
@@ -334,13 +356,15 @@ export const useAppStore = defineStore('app', () => {
         contact_info: contactInfo.value,
         doc_url: docUrl.value,
         home_content: '',
-        hide_ccs_import_button: false,
         payment_enabled: false,
+        purchase_subscription_enabled: false,
+        purchase_subscription_url: '',
         table_default_page_size: 20,
         table_page_size_options: [10, 20, 50, 100],
         custom_menu_items: [],
         custom_endpoints: [],
         linuxdo_oauth_enabled: false,
+        dingtalk_oauth_enabled: false,
         wechat_oauth_enabled: false,
         wechat_oauth_open_enabled: false,
         wechat_oauth_mp_enabled: false,
@@ -354,6 +378,7 @@ export const useAppStore = defineStore('app', () => {
         balance_low_notify_enabled: false,
         account_quota_notify_enabled: false,
         balance_low_notify_threshold: 0,
+        balance_low_notify_recharge_url: '',
         risk_control_enabled: false,
         affiliate_enabled: false,
       }
@@ -370,7 +395,7 @@ export const useAppStore = defineStore('app', () => {
       applySettings(data)
       return data
     } catch (error) {
-      console.error('Failed to fetch public settings:', error)
+      recordClientDiagnostic('app.fetchPublicSettings', error)
       return null
     } finally {
       publicSettingsLoading.value = false
@@ -383,6 +408,7 @@ export const useAppStore = defineStore('app', () => {
   function clearPublicSettingsCache(): void {
     publicSettingsLoaded.value = false
     cachedPublicSettings.value = null
+    clearInjectedAppConfig()
   }
 
   /**
@@ -391,8 +417,9 @@ export const useAppStore = defineStore('app', () => {
    * @returns true if config was found and applied, false otherwise
    */
   function initFromInjectedConfig(): boolean {
-    if (window.__APP_CONFIG__) {
-      applySettings(window.__APP_CONFIG__)
+    const injectedConfig = getInjectedAppConfig()
+    if (injectedConfig) {
+      applySettings(injectedConfig)
       return true
     }
     return false

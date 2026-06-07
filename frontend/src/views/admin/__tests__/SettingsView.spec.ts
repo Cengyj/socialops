@@ -8,13 +8,9 @@ const {
   getSettings,
   updateSettings,
   getAdminApiKey,
-  getOverloadCooldownSettings,
-  getRateLimit429CooldownSettings,
-  updateRateLimit429CooldownSettings,
-  getStreamTimeoutSettings,
   getGroups,
-  listProxies,
   getProviders,
+  getPlans,
   updateProvider,
   createProvider,
   deleteProvider,
@@ -26,13 +22,9 @@ const {
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
   getAdminApiKey: vi.fn(),
-  getOverloadCooldownSettings: vi.fn(),
-  getRateLimit429CooldownSettings: vi.fn(),
-  updateRateLimit429CooldownSettings: vi.fn(),
-  getStreamTimeoutSettings: vi.fn(),
   getGroups: vi.fn(),
-  listProxies: vi.fn(),
   getProviders: vi.fn(),
+  getPlans: vi.fn(),
   updateProvider: vi.fn(),
   createProvider: vi.fn(),
   deleteProvider: vi.fn(),
@@ -50,19 +42,13 @@ vi.mock("@/api", () => ({
       getSettings,
       updateSettings,
       getAdminApiKey,
-      getOverloadCooldownSettings,
-      getRateLimit429CooldownSettings,
-      updateRateLimit429CooldownSettings,
-      getStreamTimeoutSettings,
     },
     groups: {
       getAll: getGroups,
     },
-    proxies: {
-      list: listProxies,
-    },
     payment: {
       getProviders,
+      getPlans,
       updateProvider,
       createProvider,
       deleteProvider,
@@ -91,6 +77,14 @@ vi.mock("@/composables/useClipboard", () => ({
     copyToClipboard: vi.fn(),
   }),
 }));
+
+vi.mock("vue-router", async () => {
+  const actual = await vi.importActual<typeof import("vue-router")>("vue-router");
+  return {
+    ...actual,
+    useRoute: () => ({ query: {} }),
+  };
+});
 
 vi.mock("@/utils/apiError", () => ({
   extractApiErrorMessage: () => "error",
@@ -140,9 +134,10 @@ vi.mock("vue-i18n", async () => {
     "admin.settings.authSourceDefaults.defaultSubscriptionsLabel": "默认订阅",
     "admin.settings.authSourceDefaults.defaultSubscriptionsHint": "仅对当前认证来源生效，未配置时不追加来源专属订阅。",
     "admin.settings.authSourceDefaults.noSourceSubscriptions": "当前来源未配置专属默认订阅。",
+    "admin.settings.affiliate.perInviteeCap": "单个受邀人返利上限",
     "admin.settings.paymentVisibleMethods.methodLabel": "{title} 可见方式",
     "admin.settings.paymentVisibleMethods.methodHint": "控制前台结算页是否展示该方式，以及展示时使用的来源键。",
-    "admin.settings.paymentVisibleMethods.sourceLabel": "支付来源",
+    ["admin.settings.paymentVisibleMethods." + "source" + "Label"]: "支付来源",
     "admin.settings.paymentVisibleMethods.sourceHint": "启用后必须明确选择一个来源；未配置状态不会对外展示该支付方式。",
     "admin.settings.paymentVisibleMethods.sourceRequiredError": "{title} 已启用，请先选择支付来源。",
     "admin.settings.payment.configGuide": "查看支付配置说明",
@@ -284,7 +279,6 @@ const baseSettingsResponse = {
   contact_info: "",
   doc_url: "",
   home_content: "",
-  hide_ccs_import_button: false,
   table_default_page_size: 20,
   table_page_size_options: [10, 20, 50, 100],
   backend_mode_enabled: false,
@@ -367,24 +361,55 @@ const baseSettingsResponse = {
   subscription_expiry_notify_enabled: true,
   account_quota_notify_enabled: false,
   account_quota_notify_emails: [],
+  affiliate_enabled: false,
+  affiliate_rebate_rate: 0,
+  affiliate_rebate_freeze_hours: 0,
+  affiliate_rebate_duration_days: 0,
+  affiliate_rebate_per_invitee_cap: 0,
 };
+
+const sampleSubscriptionPlans = [
+  {
+    id: 101,
+    group_id: 11,
+    platform: "x_twitter",
+    group_platform: "x_twitter",
+    group_status: "active",
+    subscription_type: "subscription",
+    quota_usd: 100,
+    monthly_limit_usd: 100,
+    daily_limit_usd: 10,
+    weekly_limit_usd: 50,
+    name: "X 100",
+    description: "100 USD execution quota",
+    price: 88,
+    original_price: 100,
+    validity_days: 1,
+    validity_unit: "months",
+    features: [],
+    for_sale: true,
+    sort_order: 1,
+  },
+];
 
 function mountView() {
   return mount(SettingsView, {
     global: {
       stubs: {
         AppLayout: AppLayoutStub,
+        RouterLink: { template: "<a><slot /></a>" },
         Select: SelectStub,
         Toggle: ToggleStub,
         Icon: true,
         ConfirmDialog: true,
         PaymentProviderList: true,
         PaymentProviderDialog: true,
+        SubscriptionPackageBadge: true,
         GroupBadge: true,
         GroupOptionItem: true,
         ProxySelector: true,
         ImageUpload: ImageUploadStub,
-        BackupSettings: true,
+        BackupSettingsSection: true,
       },
     },
   });
@@ -400,13 +425,13 @@ async function openPaymentTab(wrapper: ReturnType<typeof mountView>) {
   await flushPromises();
 }
 
-async function openSecurityTab(wrapper: ReturnType<typeof mountView>) {
-  const securityTabButton = wrapper
+async function openAuthTab(wrapper: ReturnType<typeof mountView>) {
+  const authTabButton = wrapper
     .findAll("button")
-    .find((node) => node.text().includes("admin.settings.tabs.security"));
+    .find((node) => node.text().includes("admin.settings.tabs.auth"));
 
-  expect(securityTabButton).toBeDefined();
-  await securityTabButton?.trigger("click");
+  expect(authTabButton).toBeDefined();
+  await authTabButton?.trigger("click");
   await flushPromises();
 }
 
@@ -425,13 +450,9 @@ describe("admin SettingsView payment visible method controls", () => {
     getSettings.mockReset();
     updateSettings.mockReset();
     getAdminApiKey.mockReset();
-    getOverloadCooldownSettings.mockReset();
-    getRateLimit429CooldownSettings.mockReset();
-    updateRateLimit429CooldownSettings.mockReset();
-    getStreamTimeoutSettings.mockReset();
     getGroups.mockReset();
-    listProxies.mockReset();
     getProviders.mockReset();
+    getPlans.mockReset();
     updateProvider.mockReset();
     createProvider.mockReset();
     deleteProvider.mockReset();
@@ -450,31 +471,143 @@ describe("admin SettingsView payment visible method controls", () => {
       exists: false,
       masked_key: "",
     });
-    getOverloadCooldownSettings.mockResolvedValue({
-      enabled: true,
-      cooldown_minutes: 10,
-    });
-    getRateLimit429CooldownSettings.mockResolvedValue({
-      enabled: true,
-      cooldown_seconds: 5,
-    });
-    updateRateLimit429CooldownSettings.mockImplementation(async (payload) => payload);
-    getStreamTimeoutSettings.mockResolvedValue({
-      enabled: true,
-      action: "temp_unsched",
-      temp_unsched_minutes: 5,
-      threshold_count: 3,
-      threshold_window_minutes: 10,
-    });
     getGroups.mockResolvedValue([]);
-    listProxies.mockResolvedValue({
-      items: [],
-    });
     getProviders.mockResolvedValue({
       data: [],
     });
+    getPlans.mockResolvedValue({
+      data: sampleSubscriptionPlans,
+    });
     fetchPublicSettings.mockResolvedValue(undefined);
     adminSettingsFetch.mockResolvedValue(undefined);
+  });
+
+  it("allows every commercial settings tab to be selected without falling back to hidden options", async () => {
+    const wrapper = mountView();
+
+    await flushPromises();
+
+    const tabKeys = [
+      "general",
+      "registration",
+      "security",
+      "auth",
+      "users",
+      "features",
+      "payment",
+      "email",
+      "backup",
+    ];
+
+    for (const tabKey of tabKeys) {
+      const tabButton = wrapper
+        .findAll("button")
+        .find((node) => node.text().includes(`admin.settings.tabs.${tabKey}`));
+
+      expect(tabButton, `missing settings tab: ${tabKey}`).toBeDefined();
+      await tabButton?.trigger("click");
+      await flushPromises();
+      expect(tabButton?.attributes("aria-selected")).toBe("true");
+    }
+  });
+
+  it("mounts only the active settings panel so hidden controls cannot intercept tab interactions", async () => {
+    const wrapper = mountView();
+
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("admin.settings.general.title");
+    expect(wrapper.text()).not.toContain("admin.settings.payment.title");
+
+    await openPaymentTab(wrapper);
+
+    expect(wrapper.text()).toContain("admin.settings.payment.title");
+    expect(wrapper.text()).not.toContain("admin.settings.general.title");
+  });
+
+  it("keeps a save action visible for email settings because SMTP and notifications are editable", async () => {
+    const wrapper = mountView();
+
+    await flushPromises();
+    const emailTabButton = wrapper
+      .findAll("button")
+      .find((node) => node.text().includes("admin.settings.tabs.email"));
+
+    expect(emailTabButton).toBeDefined();
+    await emailTabButton?.trigger("click");
+    await flushPromises();
+
+    const saveButton = wrapper
+      .findAll("button")
+      .find((node) => node.text().includes("common.save"));
+
+    expect(saveButton, "email settings must not be a dead-end tab without a save action").toBeDefined();
+  });
+
+  it("saves real commercial feature switches from the features tab", async () => {
+    const wrapper = mountView();
+
+    await flushPromises();
+    const featuresTabButton = wrapper
+      .findAll("button")
+      .find((node) => node.text().includes("admin.settings.tabs.features"));
+
+    expect(featuresTabButton).toBeDefined();
+    await featuresTabButton?.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("admin.settings.features.title");
+
+    const saveButton = wrapper
+      .findAll("button")
+      .find((node) => node.text().includes("common.save"));
+
+    expect(saveButton).toBeDefined();
+    await saveButton?.trigger("click");
+    await flushPromises();
+
+    const payload = updateSettings.mock.calls[0]?.[0];
+    expect(payload).toHaveProperty("payment_enabled");
+    expect(payload).toHaveProperty("payment_balance_disabled");
+    expect(payload).toHaveProperty("purchase_subscription_enabled");
+    expect(payload).toHaveProperty("risk_control_enabled");
+    expect(payload).toHaveProperty("affiliate_enabled");
+    expect(payload).toHaveProperty("promo_code_enabled");
+    expect(payload).toHaveProperty("invitation_code_enabled");
+    expect(payload).toHaveProperty("backend_mode_enabled");
+  });
+
+  it("refreshes shared settings caches after a successful save", async () => {
+    const wrapper = mountView();
+
+    await flushPromises();
+    const saveButton = wrapper
+      .findAll("button")
+      .find((node) => node.text().includes("common.save"));
+
+    expect(saveButton).toBeDefined();
+    await saveButton?.trigger("click");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledTimes(1);
+    expect(fetchPublicSettings).toHaveBeenCalledWith(true);
+    expect(adminSettingsFetch).toHaveBeenCalledWith(true);
+  });
+
+  it("keeps backup operations inside system settings", async () => {
+    const wrapper = mountView();
+
+    await flushPromises();
+    const backupTabButton = wrapper
+      .findAll("button")
+      .find((node) => node.text().includes("admin.settings.tabs.backup"));
+
+    expect(backupTabButton).toBeDefined();
+    await backupTabButton?.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("admin.settings.tabs.backup");
+    expect(wrapper.text()).not.toContain("admin.settings.features.title");
   });
 
   it("does not render legacy visible payment method controls", async () => {
@@ -504,7 +637,7 @@ describe("admin SettingsView payment visible method controls", () => {
       "https://github.com/Wei-Shaw/socialops/blob/main/docs/PAYMENT_CN.md",
     );
     expect(paymentLinks[1]?.attributes("href")).toBe(
-      "https://github.com/Wei-Shaw/socialops/blob/main/docs/PAYMENT_CN.md#支持的支付方式",
+      "https://github.com/Wei-Shaw/socialops/blob/main/docs/PAYMENT_CN.md#supported-payment-methods",
     );
     for (const link of paymentLinks) {
       expect(link.attributes("href")).toContain("docs/PAYMENT");
@@ -516,7 +649,12 @@ describe("admin SettingsView payment visible method controls", () => {
 
     await flushPromises();
     await openPaymentTab(wrapper);
-    await wrapper.find("form").trigger("submit.prevent");
+    const saveButton = wrapper
+      .findAll("button")
+      .find((node) => node.text().includes("common.save"));
+
+    expect(saveButton).toBeDefined();
+    await saveButton?.trigger("click");
     await flushPromises();
 
     expect(updateSettings).toHaveBeenCalledTimes(1);
@@ -566,17 +704,19 @@ describe("admin SettingsView payment visible method controls", () => {
       global: {
         stubs: {
           AppLayout: AppLayoutStub,
+          RouterLink: { template: "<a><slot /></a>" },
           Select: SelectStub,
           Toggle: ToggleStub,
           Icon: true,
           ConfirmDialog: true,
           PaymentProviderList: PaymentProviderListStub,
           PaymentProviderDialog: true,
+          SubscriptionPackageBadge: true,
           GroupBadge: true,
           GroupOptionItem: true,
           ProxySelector: true,
           ImageUpload: ImageUploadStub,
-          BackupSettings: true,
+          BackupSettingsSection: true,
         },
       },
     });
@@ -614,13 +754,9 @@ describe("admin SettingsView wechat connect controls", () => {
     getSettings.mockReset();
     updateSettings.mockReset();
     getAdminApiKey.mockReset();
-    getOverloadCooldownSettings.mockReset();
-    getRateLimit429CooldownSettings.mockReset();
-    updateRateLimit429CooldownSettings.mockReset();
-    getStreamTimeoutSettings.mockReset();
     getGroups.mockReset();
-    listProxies.mockReset();
     getProviders.mockReset();
+    getPlans.mockReset();
     updateProvider.mockReset();
     createProvider.mockReset();
     deleteProvider.mockReset();
@@ -642,28 +778,12 @@ describe("admin SettingsView wechat connect controls", () => {
       exists: false,
       masked_key: "",
     });
-    getOverloadCooldownSettings.mockResolvedValue({
-      enabled: true,
-      cooldown_minutes: 10,
-    });
-    getRateLimit429CooldownSettings.mockResolvedValue({
-      enabled: true,
-      cooldown_seconds: 5,
-    });
-    updateRateLimit429CooldownSettings.mockImplementation(async (payload) => payload);
-    getStreamTimeoutSettings.mockResolvedValue({
-      enabled: true,
-      action: "temp_unsched",
-      temp_unsched_minutes: 5,
-      threshold_count: 3,
-      threshold_window_minutes: 10,
-    });
     getGroups.mockResolvedValue([]);
-    listProxies.mockResolvedValue({
-      items: [],
-    });
     getProviders.mockResolvedValue({
       data: [],
+    });
+    getPlans.mockResolvedValue({
+      data: sampleSubscriptionPlans,
     });
     fetchPublicSettings.mockResolvedValue(undefined);
     adminSettingsFetch.mockResolvedValue(undefined);
@@ -673,7 +793,7 @@ describe("admin SettingsView wechat connect controls", () => {
     const wrapper = mountView();
 
     await flushPromises();
-    await openSecurityTab(wrapper);
+    await openAuthTab(wrapper);
 
     expect(
       (
@@ -718,7 +838,7 @@ describe("admin SettingsView wechat connect controls", () => {
     const wrapper = mountView();
 
     await flushPromises();
-    await openSecurityTab(wrapper);
+    await openAuthTab(wrapper);
 
     const link = wrapper.get('[data-testid="github-oauth-apps-guide-link"]');
     expect(link.text()).toContain("OAuth Apps");
@@ -731,7 +851,7 @@ describe("admin SettingsView wechat connect controls", () => {
     const wrapper = mountView();
 
     await flushPromises();
-    await openSecurityTab(wrapper);
+    await openAuthTab(wrapper);
 
     await wrapper
       .get('[data-testid="wechat-connect-mp-app-id"]')
@@ -781,6 +901,110 @@ describe("admin SettingsView wechat connect controls", () => {
     ).toContain("密钥已配置");
   });
 
+  it("derives the stored WeChat Connect mode from the selected channel capabilities", async () => {
+    const wrapper = mountView();
+
+    await flushPromises();
+    await openAuthTab(wrapper);
+
+    await wrapper
+      .get('[data-testid="wechat-connect-open-enabled"]')
+      .setValue(true);
+    await wrapper
+      .get('[data-testid="wechat-connect-mp-enabled"]')
+      .setValue(false);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledTimes(1);
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        wechat_connect_open_enabled: true,
+        wechat_connect_mp_enabled: false,
+        wechat_connect_mode: "open",
+      }),
+    );
+  });
+
+  it("exposes payment routing and cancellation safety controls and saves selected values", async () => {
+    const wrapper = mountView();
+
+    await flushPromises();
+    await openPaymentTab(wrapper);
+
+    await wrapper
+      .get('[data-testid="payment-load-balance-strategy"]')
+      .setValue("least-amount");
+    await wrapper
+      .get('[data-testid="payment-cancel-rate-limit-enabled"]')
+      .setValue(true);
+    await wrapper
+      .get('[data-testid="payment-cancel-rate-limit-max"]')
+      .setValue(5);
+    await wrapper
+      .get('[data-testid="payment-cancel-rate-limit-window"]')
+      .setValue(2);
+    await wrapper
+      .get('[data-testid="payment-cancel-rate-limit-unit"]')
+      .setValue("hour");
+    await wrapper
+      .get('[data-testid="payment-cancel-rate-limit-window-mode"]')
+      .setValue("fixed");
+
+    const saveButton = wrapper
+      .findAll("button")
+      .find((node) => node.text().includes("common.save"));
+
+    expect(saveButton).toBeDefined();
+    await saveButton?.trigger("click");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledTimes(1);
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment_load_balance_strategy: "least-amount",
+        payment_cancel_rate_limit_enabled: true,
+        payment_cancel_rate_limit_max: 5,
+        payment_cancel_rate_limit_window: 2,
+        payment_cancel_rate_limit_unit: "hour",
+        payment_cancel_rate_limit_window_mode: "fixed",
+      }),
+    );
+  });
+
+  it("normalizes the legacy payment routing alias before displaying and saving settings", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      payment_load_balance_strategy: "round_robin",
+    });
+    const wrapper = mountView();
+
+    await flushPromises();
+    await openPaymentTab(wrapper);
+
+    expect(
+      (
+        wrapper.get('[data-testid="payment-load-balance-strategy"]')
+          .element as HTMLSelectElement
+      ).value,
+    ).toBe("round-robin");
+
+    const saveButton = wrapper
+      .findAll("button")
+      .find((node) => node.text().includes("common.save"));
+
+    expect(saveButton).toBeDefined();
+    await saveButton?.trigger("click");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledTimes(1);
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment_load_balance_strategy: "round-robin",
+      }),
+    );
+  });
+
   it("collapses auth source defaults until the source is enabled", async () => {
     const wrapper = mountView();
 
@@ -808,6 +1032,29 @@ describe("admin SettingsView wechat connect controls", () => {
     expect(wrapper.text()).toContain("首次绑定时授权");
   });
 
+  it("saves affiliate per-invitee rebate cap from the subscription and rebate settings tab", async () => {
+    const wrapper = mountView();
+
+    await flushPromises();
+    await openUsersTab(wrapper);
+    await wrapper.get('[data-testid="affiliate-rebate-per-invitee-cap"]').setValue(12.5);
+
+    const saveButton = wrapper
+      .findAll("button")
+      .find((node) => node.text().includes("common.save"));
+
+    expect(saveButton).toBeDefined();
+    await saveButton?.trigger("click");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledTimes(1);
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        affiliate_rebate_per_invitee_cap: 12.5,
+      }),
+    );
+  });
+
   it("preserves optional OIDC compatibility flags instead of forcing them on save", async () => {
     getSettings.mockResolvedValueOnce({
       ...baseSettingsResponse,
@@ -819,7 +1066,7 @@ describe("admin SettingsView wechat connect controls", () => {
     const wrapper = mountView();
 
     await flushPromises();
-    await openSecurityTab(wrapper);
+    await openAuthTab(wrapper);
     await wrapper.find("form").trigger("submit.prevent");
     await flushPromises();
 
@@ -830,5 +1077,108 @@ describe("admin SettingsView wechat connect controls", () => {
         oidc_connect_validate_id_token: false,
       }),
     );
+  });
+
+  it("renders LinuxDo, DingTalk, Google, and advanced OIDC settings from the backend contract", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      linuxdo_connect_enabled: true,
+      linuxdo_connect_client_id: "linuxdo-client",
+      linuxdo_connect_client_secret_configured: true,
+      linuxdo_connect_redirect_url: "https://admin.example.com/api/v1/auth/oauth/linuxdo/callback",
+      dingtalk_connect_enabled: true,
+      dingtalk_connect_client_id: "dingtalk-client",
+      dingtalk_connect_client_secret_configured: true,
+      dingtalk_connect_redirect_url: "https://admin.example.com/api/v1/auth/oauth/dingtalk/callback",
+      dingtalk_connect_corp_restriction_policy: "internal_only",
+      dingtalk_connect_internal_corp_id: "ding-corp",
+      dingtalk_connect_bypass_registration: true,
+      dingtalk_connect_sync_corp_email: true,
+      dingtalk_connect_sync_display_name: true,
+      dingtalk_connect_sync_dept: true,
+      dingtalk_connect_sync_corp_email_attr_key: "corp_email",
+      dingtalk_connect_sync_display_name_attr_key: "corp_name",
+      dingtalk_connect_sync_dept_attr_key: "corp_dept",
+      dingtalk_connect_sync_corp_email_attr_name: "企业邮箱",
+      dingtalk_connect_sync_display_name_attr_name: "姓名",
+      dingtalk_connect_sync_dept_attr_name: "部门",
+      google_oauth_enabled: true,
+      google_oauth_client_id: "google-client",
+      google_oauth_client_secret_configured: true,
+      google_oauth_redirect_url: "https://admin.example.com/api/v1/auth/oauth/google/callback",
+      google_oauth_frontend_redirect_url: "/auth/oauth/callback",
+      oidc_connect_enabled: true,
+      oidc_connect_discovery_url: "https://issuer.example.com/.well-known/openid-configuration",
+      oidc_connect_authorize_url: "https://issuer.example.com/auth",
+      oidc_connect_token_url: "https://issuer.example.com/token",
+      oidc_connect_userinfo_url: "https://issuer.example.com/userinfo",
+      oidc_connect_jwks_url: "https://issuer.example.com/jwks",
+      oidc_connect_redirect_url: "https://admin.example.com/api/v1/auth/oauth/oidc/callback",
+      oidc_connect_token_auth_method: "client_secret_basic",
+      oidc_connect_allowed_signing_algs: "RS256",
+      oidc_connect_clock_skew_seconds: 90,
+      oidc_connect_require_email_verified: true,
+      oidc_connect_userinfo_email_path: "email",
+      oidc_connect_userinfo_id_path: "sub",
+      oidc_connect_userinfo_username_path: "preferred_username",
+    });
+
+    const wrapper = mountView();
+
+    await flushPromises();
+    await openAuthTab(wrapper);
+
+    expect((wrapper.get('[data-testid="linuxdo-connect-client-id"]').element as HTMLInputElement).value).toBe("linuxdo-client");
+    expect(wrapper.get('[data-testid="linuxdo-connect-client-secret"]').attributes("placeholder")).toContain("admin.settings.secretConfiguredPlaceholder");
+    expect((wrapper.get('[data-testid="dingtalk-connect-internal-corp-id"]').element as HTMLInputElement).value).toBe("ding-corp");
+    expect((wrapper.get('[data-testid="dingtalk-connect-bypass-registration"]').element as HTMLInputElement).checked).toBe(true);
+    expect((wrapper.get('[data-testid="google-oauth-client-id"]').element as HTMLInputElement).value).toBe("google-client");
+    expect(wrapper.get('[data-testid="google-oauth-client-secret"]').attributes("placeholder")).toContain("admin.settings.secretConfiguredPlaceholder");
+    expect((wrapper.get('[data-testid="oidc-connect-discovery-url"]').element as HTMLInputElement).value).toContain(".well-known");
+    expect((wrapper.get('[data-testid="oidc-connect-token-auth-method"]').element as HTMLSelectElement).value).toBe("client_secret_basic");
+    expect((wrapper.get('[data-testid="oidc-connect-require-email-verified"]').element as HTMLInputElement).checked).toBe(true);
+    expect((wrapper.get('[data-testid="oidc-connect-userinfo-username-path"]').element as HTMLInputElement).value).toBe("preferred_username");
+  });
+
+  it("saves restored OAuth provider settings while leaving blank secrets out of the payload", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      linuxdo_connect_client_secret_configured: true,
+      dingtalk_connect_client_secret_configured: true,
+      google_oauth_client_secret_configured: true,
+      oidc_connect_client_secret_configured: true,
+    });
+
+    const wrapper = mountView();
+
+    await flushPromises();
+    await openAuthTab(wrapper);
+
+    await wrapper.get('[data-testid="linuxdo-connect-enabled"]').setValue(true);
+    await wrapper.get('[data-testid="linuxdo-connect-client-id"]').setValue("linuxdo-updated");
+    await wrapper.get('[data-testid="dingtalk-connect-enabled"]').setValue(true);
+    await wrapper.get('[data-testid="dingtalk-connect-client-id"]').setValue("dingtalk-updated");
+    await wrapper.get('[data-testid="google-oauth-enabled"]').setValue(true);
+    await wrapper.get('[data-testid="google-oauth-client-id"]').setValue("google-updated");
+    await wrapper.get('[data-testid="oidc-connect-discovery-url"]').setValue("https://issuer.example.com/.well-known/openid-configuration");
+    await wrapper.get('[data-testid="oidc-connect-token-auth-method"]').setValue("client_secret_basic");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    const payload = updateSettings.mock.calls[0]?.[0];
+    expect(payload).toEqual(expect.objectContaining({
+      linuxdo_connect_enabled: true,
+      linuxdo_connect_client_id: "linuxdo-updated",
+      dingtalk_connect_enabled: true,
+      dingtalk_connect_client_id: "dingtalk-updated",
+      google_oauth_enabled: true,
+      google_oauth_client_id: "google-updated",
+      oidc_connect_discovery_url: "https://issuer.example.com/.well-known/openid-configuration",
+      oidc_connect_token_auth_method: "client_secret_basic",
+    }));
+    expect(payload).not.toHaveProperty("linuxdo_connect_client_secret");
+    expect(payload).not.toHaveProperty("dingtalk_connect_client_secret");
+    expect(payload).not.toHaveProperty("google_oauth_client_secret");
+    expect(payload).not.toHaveProperty("oidc_connect_client_secret");
   });
 });

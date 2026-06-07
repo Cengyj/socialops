@@ -13,7 +13,7 @@ FROM ${POSTGRES_IMAGE} AS pg-client
 FROM ${ALPINE_IMAGE}
 
 LABEL maintainer="Wei-Shaw <github.com/Wei-Shaw>"
-LABEL description="SocialOps - AI API Gateway Platform"
+LABEL description="SocialOps - Website Account Pool Social Operations Platform"
 LABEL org.opencontainers.image.source="https://github.com/Wei-Shaw/socialops"
 
 # Install runtime dependencies

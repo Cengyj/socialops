@@ -84,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -110,15 +110,16 @@ function handleDismiss() {
   announcementStore.dismissPopup()
 }
 
-// Manage body overflow — only set, never unset (bell component handles restore)
 watch(
   () => announcementStore.currentPopup,
   (popup) => {
-    if (popup) {
-      document.body.style.overflow = 'hidden'
-    }
+    document.body.style.overflow = popup ? 'hidden' : ''
   }
 )
+
+onBeforeUnmount(() => {
+  document.body.style.overflow = ''
+})
 </script>
 
 <style scoped>

@@ -132,10 +132,11 @@
             <span class="text-sm font-medium text-gray-900 dark:text-white">
               <template v-if="row.type === 'balance'">${{ value.toFixed(2) }}</template>
               <template v-else-if="row.type === 'subscription'">
-                {{ row.validity_days || 30 }} {{ t('admin.redeem.days') }}
-                <span v-if="row.group" class="ml-1 text-xs text-gray-500 dark:text-gray-400"
-                  >({{ row.group.name }})</span
-                >
+                {{ redeemCodePackageName(row) }}
+                <span class="ml-1 text-xs text-gray-500 dark:text-gray-400">
+                  {{ row.validity_days || selectedPlanValidity(row.plan_id) || 30 }}
+                  {{ t('admin.redeem.days') }}
+                </span>
               </template>
               <template v-else>{{ value }}</template>
             </span>
@@ -311,48 +312,66 @@
                 {{ t('admin.redeem.invitationHint') }}
               </p>
             </div>
-            <!-- 订阅类型：显示分组选择和有效天数 -->
+            <!-- 订阅类型：显示套餐选择和有效天数 -->
             <template v-if="generateForm.type === 'subscription'">
               <div>
-                <label class="input-label">{{ t('admin.redeem.selectGroup') }}</label>
+                <label class="input-label">{{ t('admin.redeem.selectPackage') }}</label>
                 <Select
-                  v-model="generateForm.group_id"
-                  :options="subscriptionGroupOptions"
-                  :placeholder="t('admin.redeem.selectGroupPlaceholder')"
+                  v-model="generateForm.plan_id"
+                  :options="subscriptionPackageOptions"
+                  :placeholder="t('admin.redeem.selectPackagePlaceholder')"
                 >
                   <template #selected="{ option }">
                     <span v-if="option" class="font-medium text-gray-900 dark:text-white">
-                      {{ (option as unknown as GroupOption).label }}
+                      {{ (option as unknown as PackageOption).label }}
                     </span>
                     <span v-else class="text-gray-400">{{
-                      t('admin.redeem.selectGroupPlaceholder')
+                      t('admin.redeem.selectPackagePlaceholder')
                     }}</span>
                   </template>
                   <template #option="{ option }">
                     <div class="flex min-w-0 flex-col">
                       <span class="truncate font-medium">
-                        {{ (option as unknown as GroupOption).label }}
+                        {{ (option as unknown as PackageOption).label }}
                       </span>
                       <span
-                        v-if="(option as unknown as GroupOption).description"
+                        v-if="(option as unknown as PackageOption).description"
                         class="truncate text-xs text-gray-500 dark:text-gray-400"
                       >
-                        {{ (option as unknown as GroupOption).description }}
+                        {{ (option as unknown as PackageOption).description }}
                       </span>
                     </div>
                   </template>
                 </Select>
               </div>
-              <div>
-                <label class="input-label">{{ t('admin.redeem.validityDays') }}</label>
-                <input
-                  v-model.number="generateForm.validity_days"
-                  type="number"
-                  min="1"
-                  max="365"
-                  required
-                  class="input"
-                />
+              <div
+                v-if="selectedGeneratePlan"
+                class="grid grid-cols-3 gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm dark:border-dark-600 dark:bg-dark-700/50"
+              >
+                <div>
+                  <span class="block text-xs text-gray-500 dark:text-gray-400">
+                    {{ t('admin.redeem.packageQuota') }}
+                  </span>
+                  <span class="font-medium text-gray-900 dark:text-white">
+                    {{ formatUSD(selectedGeneratePlan.quota_usd ?? selectedGeneratePlan.monthly_limit_usd) }}
+                  </span>
+                </div>
+                <div>
+                  <span class="block text-xs text-gray-500 dark:text-gray-400">
+                    {{ t('admin.redeem.packagePrice') }}
+                  </span>
+                  <span class="font-medium text-gray-900 dark:text-white">
+                    {{ formatUSD(selectedGeneratePlan.price) }}
+                  </span>
+                </div>
+                <div>
+                  <span class="block text-xs text-gray-500 dark:text-gray-400">
+                    {{ t('admin.redeem.packageValidity') }}
+                  </span>
+                  <span class="font-medium text-gray-900 dark:text-white">
+                    {{ selectedGeneratePlan.validity_days }} {{ t('admin.redeem.days') }}
+                  </span>
+                </div>
               </div>
             </template>
             <div>
@@ -487,17 +506,17 @@
             <div class="space-y-2">
               <label class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                 <input
-                  v-model="batchUpdateForm.update_group_id"
+                  v-model="batchUpdateForm.update_plan_id"
                   type="checkbox"
                   class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                 />
-                {{ t('admin.redeem.batchFields.group') }}
+                {{ t('admin.redeem.batchFields.package') }}
               </label>
               <Select
-                v-if="batchUpdateForm.update_group_id"
-                v-model="batchUpdateForm.group_id"
-                :options="batchGroupOptions"
-                :placeholder="t('admin.redeem.selectGroupPlaceholder')"
+                v-if="batchUpdateForm.update_plan_id"
+                v-model="batchUpdateForm.plan_id"
+                :options="batchPackageOptions"
+                :placeholder="t('admin.redeem.selectPackagePlaceholder')"
               />
             </div>
 
@@ -620,6 +639,7 @@ import type {
   RedeemCodeType,
   BatchUpdateRedeemCodeFields
 } from '@/types'
+import type { SubscriptionPlan } from '@/types/payment'
 import type { Column } from '@/components/common/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
@@ -633,39 +653,66 @@ const { t } = useI18n()
 const appStore = useAppStore()
 const { copyToClipboard: clipboardCopy } = useClipboard()
 
-interface GroupOption {
-  value: number
+interface PackageOption {
+  value: number | null
   label: string
   description: string | null
-}
-
-interface SubscriptionGroupLike {
-  id: number
-  name: string
-  description?: string | null
-  subscription_type?: string
+  [key: string]: unknown
 }
 
 const showGenerateDialog = ref(false)
 const showResultDialog = ref(false)
 const generatedCodes = ref<RedeemCode[]>([])
-const subscriptionGroups = ref<SubscriptionGroupLike[]>([])
+const subscriptionPlans = ref<SubscriptionPlan[]>([])
 
-// 订阅类型分组选项
-const subscriptionGroupOptions = computed(() => {
-  return subscriptionGroups.value
-    .filter((g) => !g.subscription_type || g.subscription_type === 'subscription')
-    .map((g) => ({
-      value: g.id,
-      label: g.name,
-      description: g.description ?? null
+// 订阅类型套餐选项
+const subscriptionPackageOptions = computed<PackageOption[]>(() => {
+  return subscriptionPlans.value
+    .filter((plan) => plan.for_sale !== false)
+    .map((plan) => ({
+      value: plan.id,
+      label: plan.name,
+      description: packageDescription(plan)
     }))
 })
 
-const batchGroupOptions = computed(() => [
-  { value: null, label: t('admin.redeem.clearGroup') },
-  ...subscriptionGroupOptions.value
+const batchPackageOptions = computed<PackageOption[]>(() => [
+  { value: null, label: t('admin.redeem.clearPackage'), description: null },
+  ...subscriptionPackageOptions.value
 ])
+
+const planByID = computed(() => new Map(subscriptionPlans.value.map((plan) => [plan.id, plan])))
+
+const formatUSD = (value?: number | null) => {
+  if (value == null || !Number.isFinite(Number(value))) {
+    return '-'
+  }
+  return `$${Number(value).toFixed(2)}`
+}
+
+const planQuota = (plan?: SubscriptionPlan | null) => plan?.quota_usd ?? plan?.monthly_limit_usd ?? null
+
+const packageDescription = (plan: SubscriptionPlan) => {
+  return [
+    formatUSD(planQuota(plan)),
+    `${plan.validity_days} ${t('admin.redeem.days')}`,
+    formatUSD(plan.price)
+  ].join(' · ')
+}
+
+const selectedPlanValidity = (planID?: number | null) => {
+  if (planID == null) {
+    return null
+  }
+  return planByID.value.get(Number(planID))?.validity_days ?? null
+}
+
+const redeemCodePackageName = (code: RedeemCode) => {
+  if (code.plan_id != null) {
+    return planByID.value.get(Number(code.plan_id))?.name ?? `#${code.plan_id}`
+  }
+  return code.group?.name ?? '-'
+}
 
 const generatedCodesText = computed(() => {
   return generatedCodes.value.map((code) => code.code).join('\n')
@@ -808,8 +855,8 @@ const batchUpdateForm = reactive({
   expires_at_local: '',
   update_notes: false,
   notes: '',
-  update_group_id: false,
-  group_id: null as number | null
+  update_plan_id: false,
+  plan_id: null as number | null
 })
 
 type RedeemCodeExpiryOption = 'never' | '1' | '3' | '7' | 'custom'
@@ -826,10 +873,16 @@ const generateForm = reactive({
   type: 'balance' as RedeemCodeType,
   value: 10,
   count: 1,
-  group_id: null as number | null,
-  validity_days: 30,
+  plan_id: null as number | null,
   expiry_option: 'never' as RedeemCodeExpiryOption,
   custom_expiry_days: 7
+})
+
+const selectedGeneratePlan = computed(() => {
+  if (generateForm.plan_id == null) {
+    return null
+  }
+  return planByID.value.get(Number(generateForm.plan_id)) ?? null
 })
 
 // 监听类型变化，邀请码类型时自动设置 value 为 0
@@ -966,8 +1019,8 @@ const resetBatchUpdateForm = () => {
   )
   batchUpdateForm.update_notes = false
   batchUpdateForm.notes = ''
-  batchUpdateForm.update_group_id = false
-  batchUpdateForm.group_id = null
+  batchUpdateForm.update_plan_id = false
+  batchUpdateForm.plan_id = null
 }
 
 const openBatchUpdateDialog = () => {
@@ -1004,18 +1057,18 @@ const buildBatchUpdateFields = (): BatchUpdateRedeemCodeFields | null => {
   if (batchUpdateForm.update_notes) {
     fields.notes = batchUpdateForm.notes
   }
-  if (batchUpdateForm.update_group_id) {
-    fields.group_id =
-      batchUpdateForm.group_id == null ? null : Number(batchUpdateForm.group_id)
+  if (batchUpdateForm.update_plan_id) {
+    fields.plan_id =
+      batchUpdateForm.plan_id == null ? null : Number(batchUpdateForm.plan_id)
   }
 
   return Object.keys(fields).length > 0 ? fields : null
 }
 
 const handleGenerateCodes = async () => {
-  // 订阅类型必须选择分组
-  if (generateForm.type === 'subscription' && !generateForm.group_id) {
-    appStore.showError(t('admin.redeem.groupRequired'))
+  // 订阅类型必须选择套餐
+  if (generateForm.type === 'subscription' && !generateForm.plan_id) {
+    appStore.showError(t('admin.redeem.packageRequired'))
     return
   }
 
@@ -1027,20 +1080,18 @@ const handleGenerateCodes = async () => {
 
   generating.value = true
   try {
-    const result = await adminAPI.redeem.generate(
-      generateForm.count,
-      generateForm.type,
-      generateForm.value,
-      generateForm.type === 'subscription' ? generateForm.group_id : undefined,
-      generateForm.type === 'subscription' ? generateForm.validity_days : undefined,
-      expiresInDays
-    )
+    const result = await adminAPI.redeem.generate({
+      count: generateForm.count,
+      type: generateForm.type,
+      value: generateForm.type === 'subscription' ? 0 : generateForm.value,
+      plan_id: generateForm.type === 'subscription' ? generateForm.plan_id : undefined,
+      expires_in_days: expiresInDays
+    })
     showGenerateDialog.value = false
     generatedCodes.value = result
     showResultDialog.value = true
     // 重置表单
-    generateForm.group_id = null
-    generateForm.validity_days = 30
+    generateForm.plan_id = null
     generateForm.expiry_option = 'never'
     generateForm.custom_expiry_days = 7
     loadCodes()
@@ -1136,7 +1187,7 @@ const handleBatchUpdate = async () => {
     batchUpdateForm.update_status ||
     batchUpdateForm.update_expires_at ||
     batchUpdateForm.update_notes ||
-    batchUpdateForm.update_group_id
+    batchUpdateForm.update_plan_id
   if (!hasSelectedFields) {
     appStore.showError(t('admin.redeem.noBatchFieldsSelected'))
     return
@@ -1162,19 +1213,19 @@ const handleBatchUpdate = async () => {
   }
 }
 
-// 加载订阅类型分组
-const loadSubscriptionGroups = async () => {
+// 加载订阅类型套餐
+const loadSubscriptionPlans = async () => {
   try {
-    const groups = await adminAPI.groups.getAll()
-    subscriptionGroups.value = groups
+    const { data } = await adminAPI.payment.getPlans()
+    subscriptionPlans.value = data
   } catch (error) {
-    console.error('Error loading subscription groups:', error)
+    console.error('Error loading subscription packages:', error)
   }
 }
 
 onMounted(() => {
   loadCodes()
-  loadSubscriptionGroups()
+  loadSubscriptionPlans()
 })
 
 onUnmounted(() => {

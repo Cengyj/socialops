@@ -1,6 +1,8 @@
 package schema
 
 import (
+	"github.com/Wei-Shaw/socialops/internal/domain"
+
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
@@ -39,7 +41,7 @@ func (SocialTaskLog) Fields() []ent.Field {
 		// 任务信息
 		field.String("action").
 			MaxLen(50).
-			Comment("收费社交操作类型：login_check / follow / message / post / like"),
+			Comment("Billable social action: login_check / follow / message / post / like / retweet"),
 		field.Text("target").
 			Optional().
 			Nillable().
@@ -48,6 +50,14 @@ func (SocialTaskLog) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("操作内容（如私信内容、推文内容等）"),
+		field.JSON("payload", domain.SocialTaskPayload{}).
+			Optional().
+			SchemaType(map[string]string{dialect.Postgres: "jsonb"}).
+			Comment("Structured execution payload snapshot"),
+		field.JSON("template_snapshot", domain.SocialTaskTemplateSnapshot{}).
+			Optional().
+			SchemaType(map[string]string{dialect.Postgres: "jsonb"}).
+			Comment("Saved task template snapshot resolved at submission time"),
 
 		// 执行结果
 		field.String("status").

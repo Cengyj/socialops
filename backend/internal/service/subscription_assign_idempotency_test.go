@@ -28,7 +28,7 @@ func (groupRepoNoop) DeleteCascade(context.Context, int64) ([]int64, error) {
 func (groupRepoNoop) List(context.Context, pagination.PaginationParams) ([]Group, *pagination.PaginationResult, error) {
 	panic("unexpected List call")
 }
-func (groupRepoNoop) ListWithFilters(context.Context, pagination.PaginationParams, string, string, string, *bool) ([]Group, *pagination.PaginationResult, error) {
+func (groupRepoNoop) ListWithFilters(context.Context, pagination.PaginationParams, string, string, string, string, *bool) ([]Group, *pagination.PaginationResult, error) {
 	panic("unexpected ListWithFilters call")
 }
 func (groupRepoNoop) ListActive(context.Context) ([]Group, error) {
@@ -92,7 +92,7 @@ func (userSubRepoNoop) ListActiveByUserID(context.Context, int64) ([]UserSubscri
 func (userSubRepoNoop) ListByGroupID(context.Context, int64, pagination.PaginationParams) ([]UserSubscription, *pagination.PaginationResult, error) {
 	panic("unexpected ListByGroupID call")
 }
-func (userSubRepoNoop) List(context.Context, pagination.PaginationParams, *int64, *int64, string, string, string, string) ([]UserSubscription, *pagination.PaginationResult, error) {
+func (userSubRepoNoop) List(context.Context, pagination.PaginationParams, *int64, *int64, *int64, string, string, string, string) ([]UserSubscription, *pagination.PaginationResult, error) {
 	panic("unexpected List call")
 }
 func (userSubRepoNoop) ExistsByUserIDAndGroupID(context.Context, int64, int64) (bool, error) {
@@ -218,7 +218,7 @@ func (s *subscriptionUserSubRepoStub) Update(_ context.Context, sub *UserSubscri
 }
 
 func TestAssignSubscriptionReuseWhenSemanticsMatch(t *testing.T) {
-	start := time.Date(2026, 2, 20, 10, 0, 0, 0, time.UTC)
+	start := time.Now().UTC().Add(-time.Hour)
 	groupRepo := &subscriptionGroupRepoStub{
 		group: &Group{ID: 1, SubscriptionType: SubscriptionTypeSubscription},
 	}
@@ -229,6 +229,7 @@ func TestAssignSubscriptionReuseWhenSemanticsMatch(t *testing.T) {
 		GroupID:   1,
 		StartsAt:  start,
 		ExpiresAt: start.AddDate(0, 0, 30),
+		Status:    SubscriptionStatusActive,
 		Notes:     "init",
 	})
 
@@ -244,8 +245,53 @@ func TestAssignSubscriptionReuseWhenSemanticsMatch(t *testing.T) {
 	require.Equal(t, 0, subRepo.createCalls, "reuse should not create new subscription")
 }
 
+func TestAssignSubscriptionRenewsExpiredExistingRecord(t *testing.T) {
+	oldStart := time.Now().AddDate(0, 0, -10)
+	oldWindowStart := startOfDay(oldStart)
+	groupRepo := &subscriptionGroupRepoStub{
+		group: &Group{ID: 1, SubscriptionType: SubscriptionTypeSubscription},
+	}
+	subRepo := newSubscriptionUserSubRepoStub()
+	subRepo.seed(&UserSubscription{
+		ID:                 12,
+		UserID:             3001,
+		GroupID:            1,
+		StartsAt:           oldStart,
+		ExpiresAt:          oldStart.AddDate(0, 0, 7),
+		Status:             SubscriptionStatusExpired,
+		DailyWindowStart:   &oldWindowStart,
+		WeeklyWindowStart:  &oldWindowStart,
+		MonthlyWindowStart: &oldWindowStart,
+		DailyUsageUSD:      10,
+		WeeklyUsageUSD:     20,
+		MonthlyUsageUSD:    30,
+		Notes:              "same-note",
+	})
+
+	svc := NewSubscriptionService(groupRepo, subRepo, nil, nil, nil)
+	sub, err := svc.AssignSubscription(context.Background(), &AssignSubscriptionInput{
+		UserID:       3001,
+		GroupID:      1,
+		ValidityDays: 7,
+		AssignedBy:   9,
+		Notes:        "same-note",
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(12), sub.ID)
+	require.Equal(t, SubscriptionStatusActive, sub.Status)
+	require.True(t, sub.StartsAt.After(oldStart), "expired assignment should start a fresh active period")
+	require.True(t, sub.ExpiresAt.After(time.Now()), "expired assignment should get a current expiry")
+	require.NotNil(t, sub.DailyWindowStart)
+	require.Equal(t, startOfDay(sub.StartsAt), *sub.DailyWindowStart)
+	require.Zero(t, sub.DailyUsageUSD)
+	require.Zero(t, sub.WeeklyUsageUSD)
+	require.Zero(t, sub.MonthlyUsageUSD)
+	require.Equal(t, int64(9), *sub.AssignedBy)
+	require.Zero(t, subRepo.createCalls, "unique user/group subscription should be renewed in place")
+}
+
 func TestAssignSubscriptionConflictWhenSemanticsMismatch(t *testing.T) {
-	start := time.Date(2026, 2, 20, 10, 0, 0, 0, time.UTC)
+	start := time.Now().UTC().Add(-time.Hour)
 	groupRepo := &subscriptionGroupRepoStub{
 		group: &Group{ID: 1, SubscriptionType: SubscriptionTypeSubscription},
 	}
@@ -256,6 +302,7 @@ func TestAssignSubscriptionConflictWhenSemanticsMismatch(t *testing.T) {
 		GroupID:   1,
 		StartsAt:  start,
 		ExpiresAt: start.AddDate(0, 0, 30),
+		Status:    SubscriptionStatusActive,
 		Notes:     "old-note",
 	})
 
@@ -272,7 +319,7 @@ func TestAssignSubscriptionConflictWhenSemanticsMismatch(t *testing.T) {
 }
 
 func TestBulkAssignSubscriptionCreatedReusedAndConflict(t *testing.T) {
-	start := time.Date(2026, 2, 20, 10, 0, 0, 0, time.UTC)
+	start := time.Now().UTC().Add(-time.Hour)
 	groupRepo := &subscriptionGroupRepoStub{
 		group: &Group{ID: 1, SubscriptionType: SubscriptionTypeSubscription},
 	}
@@ -284,6 +331,7 @@ func TestBulkAssignSubscriptionCreatedReusedAndConflict(t *testing.T) {
 		GroupID:   1,
 		StartsAt:  start,
 		ExpiresAt: start.AddDate(0, 0, 30),
+		Status:    SubscriptionStatusActive,
 		Notes:     "same-note",
 	})
 	// user 3: 语义冲突（有效期不一致），应 failed
@@ -293,6 +341,7 @@ func TestBulkAssignSubscriptionCreatedReusedAndConflict(t *testing.T) {
 		GroupID:   1,
 		StartsAt:  start,
 		ExpiresAt: start.AddDate(0, 0, 60),
+		Status:    SubscriptionStatusActive,
 		Notes:     "same-note",
 	})
 
@@ -380,6 +429,40 @@ func TestDetectAssignSemanticConflictCases(t *testing.T) {
 	})
 	require.True(t, conflict)
 	require.Equal(t, "notes_mismatch", reason)
+
+	planID := int64(101)
+	daily := 6.0
+	base.PlanID = &planID
+	base.PlanName = "X Starter Monthly"
+	base.PlanPlatform = "x_twitter"
+	base.DailyLimitUSD = &daily
+
+	reason, conflict = detectAssignSemanticConflict(base, &AssignSubscriptionInput{
+		UserID:        1,
+		GroupID:       1,
+		PlanID:        &planID,
+		PlanName:      "X Starter Monthly",
+		PlanPlatform:  "x_twitter",
+		DailyLimitUSD: &daily,
+		ValidityDays:  30,
+		Notes:         "same",
+	})
+	require.False(t, conflict)
+	require.Equal(t, "", reason)
+
+	otherPlanID := int64(102)
+	reason, conflict = detectAssignSemanticConflict(base, &AssignSubscriptionInput{
+		UserID:        1,
+		GroupID:       1,
+		PlanID:        &otherPlanID,
+		PlanName:      "X Growth Monthly",
+		PlanPlatform:  "x_twitter",
+		DailyLimitUSD: &daily,
+		ValidityDays:  30,
+		Notes:         "same",
+	})
+	require.True(t, conflict)
+	require.Equal(t, "plan_mismatch", reason)
 }
 
 func TestAssignSubscriptionGroupTypeValidation(t *testing.T) {

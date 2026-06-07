@@ -215,6 +215,8 @@ import { useAuthStore, useAppStore } from '@/stores'
 import { getPublicSettings, isTotp2FARequired, isWeChatWebOAuthEnabled } from '@/api/auth'
 import type { LoginAgreementDocument, TotpLoginResponse } from '@/types'
 import { extractI18nErrorMessage } from '@/utils/apiError'
+import { buildSafeAuthErrorMessage } from '@/utils/authError'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 import { clearAllAffiliateReferralCodes } from '@/utils/oauthAffiliate'
 
 const { t } = useI18n()
@@ -330,7 +332,7 @@ onMounted(async () => {
     passwordResetEnabled.value = settings.password_reset_enabled
     applyLoginAgreementSettings(settings)
   } catch (error) {
-    console.error('Failed to load public settings:', error)
+    recordClientDiagnostic('auth.login.load_public_settings', error)
     loginAgreementEnabled.value = false
     agreementAccepted.value = true
   } finally {
@@ -397,7 +399,7 @@ function rejectLoginAgreement(): void {
   localStorage.removeItem(LOGIN_AGREEMENT_STORAGE_KEY)
   agreementAccepted.value = false
   showAgreementModal.value = false
-  appStore.showWarning('未同意最新条款前，无法输入账号密码或使用快捷登录。')
+  appStore.showWarning(t('auth.loginAgreement.loginRejectWarning'))
 }
 
 // ==================== Turnstile Handlers ====================
@@ -428,7 +430,7 @@ function validateForm(): boolean {
   let isValid = true
 
   if (agreementGateActive.value) {
-    appStore.showWarning('请先阅读并同意最新条款后再登录。')
+    appStore.showWarning(t('auth.loginAgreement.loginGateWarning'))
     if (loginAgreementMode.value !== 'checkbox') {
       showAgreementModal.value = true
     }
@@ -535,8 +537,10 @@ async function handle2FAVerify(code: string): Promise<void> {
     const redirectTo = (router.currentRoute.value.query.redirect as string) || '/dashboard'
     await router.push(redirectTo)
   } catch (error: unknown) {
-    const err = error as { message?: string; response?: { data?: { message?: string } } }
-    const message = err.response?.data?.message || err.message || t('profile.totp.loginFailed')
+    recordClientDiagnostic('auth.login.totp_verify', error)
+    const message = buildSafeAuthErrorMessage(error, {
+      fallback: t('profile.totp.loginFailed')
+    })
 
     if (totpModalRef.value) {
       totpModalRef.value.setError(message)

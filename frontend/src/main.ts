@@ -4,7 +4,17 @@ import App from './App.vue'
 import router from './router'
 import i18n, { initI18n } from './i18n'
 import { useAppStore } from '@/stores/app'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 import './style.css'
+
+function installGlobalDiagnostics() {
+  window.addEventListener('error', (event) => {
+    recordClientDiagnostic('window.error', event.error ?? event.message)
+  })
+  window.addEventListener('unhandledrejection', (event) => {
+    recordClientDiagnostic('window.unhandledrejection', event.reason)
+  })
+}
 
 function initThemeClass() {
   const savedTheme = localStorage.getItem('theme')
@@ -16,9 +26,14 @@ function initThemeClass() {
 
 async function bootstrap() {
   // Apply theme class globally before app mount to keep all routes consistent.
+  installGlobalDiagnostics()
   initThemeClass()
 
   const app = createApp(App)
+  app.config.errorHandler = (error, _instance, info) => {
+    recordClientDiagnostic(`vue.${info || 'error'}`, error)
+  }
+
   const pinia = createPinia()
   app.use(pinia)
 

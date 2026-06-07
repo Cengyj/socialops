@@ -34,6 +34,7 @@ type AdminService interface {
 	ExpireRedeemCode(ctx context.Context, id int64) (*RedeemCode, error)
 	AdminUpdateAPIKeyGroupID(ctx context.Context, keyID int64, groupID *int64) (*AdminUpdateAPIKeyGroupIDResult, error)
 	AdminResetAPIKeyRateLimitUsage(ctx context.Context, keyID int64) (*APIKey, error)
+	AdminUpdateAPIKeyGroupAndRateLimitUsage(ctx context.Context, keyID int64, groupID *int64, resetRateLimitUsage bool) (*AdminUpdateAPIKeyGroupIDResult, error)
 }
 
 type CreateUserInput struct {
@@ -128,6 +129,7 @@ type GenerateRedeemCodesInput struct {
 	Type         string
 	Value        float64
 	GroupID      *int64
+	PlanID       *int64
 	ValidityDays int
 	ExpiresAt    *time.Time
 }
@@ -221,5 +223,9 @@ func (s *adminServiceSkeleton) AdminUpdateAPIKeyGroupID(_ context.Context, keyID
 }
 
 func (s *adminServiceSkeleton) AdminResetAPIKeyRateLimitUsage(_ context.Context, keyID int64) (*APIKey, error) {
+	return nil, ErrAdminServiceNotConfigured
+}
+
+func (s *adminServiceSkeleton) AdminUpdateAPIKeyGroupAndRateLimitUsage(_ context.Context, keyID int64, groupID *int64, resetRateLimitUsage bool) (*AdminUpdateAPIKeyGroupIDResult, error) {
 	return nil, ErrAdminServiceNotConfigured
 }

@@ -37,7 +37,8 @@ type GenerateRedeemCodesRequest struct {
 	Count         int        `json:"count" binding:"required,min=1,max=100"`
 	Type          string     `json:"type" binding:"required,oneof=balance concurrency subscription invitation"`
 	Value         float64    `json:"value"`
-	GroupID       *int64     `json:"group_id"`      // 订阅类型必填
+	GroupID       *int64     `json:"group_id"` // 订阅类型必填
+	PlanID        *int64     `json:"plan_id"`
 	ValidityDays  int        `json:"validity_days"` // 订阅类型使用，正数增加/负数退款扣减
 	ExpiresAt     *time.Time `json:"expires_at"`
 	ExpiresInDays *int       `json:"expires_in_days" binding:"omitempty,min=1,max=3650"`
@@ -50,7 +51,8 @@ type CreateAndRedeemCodeRequest struct {
 	Type          string     `json:"type" binding:"omitempty,oneof=balance concurrency subscription invitation"` // 不传时默认 balance（向后兼容）
 	Value         float64    `json:"value" binding:"required"`
 	UserID        int64      `json:"user_id" binding:"required,gt=0"`
-	GroupID       *int64     `json:"group_id"`      // subscription 类型必填
+	GroupID       *int64     `json:"group_id"` // subscription 类型必填
+	PlanID        *int64     `json:"plan_id"`
 	ValidityDays  int        `json:"validity_days"` // subscription 类型：正数增加，负数退款扣减
 	Notes         string     `json:"notes"`
 	ExpiresAt     *time.Time `json:"expires_at"`
@@ -148,6 +150,7 @@ func (h *RedeemHandler) Generate(c *gin.Context) {
 			Type:         req.Type,
 			Value:        req.Value,
 			GroupID:      req.GroupID,
+			PlanID:       req.PlanID,
 			ValidityDays: req.ValidityDays,
 			ExpiresAt:    expiresAt,
 		})
@@ -184,11 +187,11 @@ func (h *RedeemHandler) CreateAndRedeem(c *gin.Context) {
 	}
 
 	if req.Type == "subscription" {
-		if req.GroupID == nil {
-			response.BadRequest(c, "group_id is required for subscription type")
+		if req.PlanID == nil && req.GroupID == nil {
+			response.BadRequest(c, "plan_id or group_id is required for subscription type")
 			return
 		}
-		if req.ValidityDays == 0 {
+		if req.PlanID == nil && req.ValidityDays == 0 {
 			response.BadRequest(c, "validity_days must not be zero for subscription type")
 			return
 		}
@@ -216,6 +219,7 @@ func (h *RedeemHandler) CreateAndRedeem(c *gin.Context) {
 			Status:       service.StatusUnused,
 			Notes:        req.Notes,
 			GroupID:      req.GroupID,
+			PlanID:       req.PlanID,
 			ValidityDays: req.ValidityDays,
 			ExpiresAt:    expiresAt,
 		})
@@ -349,6 +353,9 @@ func redeemBatchUpdateFieldsFromDTO(in dto.BatchUpdateRedeemCodeFields) service.
 	if in.GroupID.Set {
 		out.GroupID = service.NullableInt64Update{Set: true, Value: in.GroupID.Value}
 	}
+	if in.PlanID.Set {
+		out.PlanID = service.NullableInt64Update{Set: true, Value: in.PlanID.Value}
+	}
 	return out
 }
 
@@ -373,19 +380,16 @@ func (h *RedeemHandler) Expire(c *gin.Context) {
 // GetStats handles getting redeem code statistics
 // GET /api/v1/admin/redeem-codes/stats
 func (h *RedeemHandler) GetStats(c *gin.Context) {
-	// Return mock data for now
-	response.Success(c, gin.H{
-		"total_codes":             0,
-		"active_codes":            0,
-		"used_codes":              0,
-		"expired_codes":           0,
-		"total_value_distributed": 0.0,
-		"by_type": gin.H{
-			"balance":     0,
-			"concurrency": 0,
-			"trial":       0,
-		},
-	})
+	if h.redeemService == nil {
+		response.InternalError(c, "redeem service not configured")
+		return
+	}
+	stats, err := h.redeemService.GetStats(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, stats)
 }
 
 // Export handles exporting redeem codes to CSV

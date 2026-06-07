@@ -12,6 +12,8 @@ import (
 
 	dbent "github.com/Wei-Shaw/socialops/ent"
 	"github.com/Wei-Shaw/socialops/ent/socialip"
+	infraerrors "github.com/Wei-Shaw/socialops/internal/pkg/errors"
+	"github.com/Wei-Shaw/socialops/internal/pkg/proxyurl"
 	"golang.org/x/net/proxy"
 )
 
@@ -51,23 +53,16 @@ func (c *SocialIPChecker) TestIP(ctx context.Context, ipID int64) (*SocialIPChec
 	ipEnt, err := c.entClient.SocialIP.Get(ctx, int64(ipID))
 	if err != nil {
 		if dbent.IsNotFound(err) {
-			return nil, fmt.Errorf("social IP not found: %d", ipID)
+			return nil, infraerrors.NotFound("SOCIAL_IP_NOT_FOUND", "social IP not found")
 		}
 		return nil, err
 	}
 
 	result := c.checkConnectivity(ipEnt)
 
-	// Update the database
-	now := time.Now()
-	update := c.entClient.SocialIP.UpdateOneID(ipEnt.ID).
-		SetStatus(result.Status).
-		SetLastCheckAt(now)
-	if result.LatencyMs > 0 {
-		update.SetLatencyMs(result.LatencyMs)
-	}
-	if _, err := update.Save(ctx); err != nil {
+	if err := c.updateCheckResult(ctx, ipEnt.ID, result); err != nil {
 		slog.Error("failed to update IP status", "ip_id", ipID, "error", err)
+		return nil, err
 	}
 
 	return result, nil
@@ -87,19 +82,25 @@ func (c *SocialIPChecker) TestAllByUser(ctx context.Context, userID int64) ([]*S
 		results[i] = c.checkConnectivity(ip)
 
 		// Update DB
-		now := time.Now()
-		update := c.entClient.SocialIP.UpdateOneID(ip.ID).
-			SetStatus(results[i].Status).
-			SetLastCheckAt(now)
-		if results[i].LatencyMs > 0 {
-			update.SetLatencyMs(results[i].LatencyMs)
-		}
-		if _, err := update.Save(ctx); err != nil {
+		if err := c.updateCheckResult(ctx, ip.ID, results[i]); err != nil {
 			slog.Error("failed to update IP status", "ip_id", ip.ID, "error", err)
 		}
 	}
 
 	return results, nil
+}
+
+func (c *SocialIPChecker) updateCheckResult(ctx context.Context, id int64, result *SocialIPCheckResult) error {
+	update := c.entClient.SocialIP.UpdateOneID(id).
+		SetStatus(result.Status).
+		SetLastCheckAt(time.Now())
+	if result.LatencyMs > 0 {
+		update.SetLatencyMs(result.LatencyMs)
+	} else {
+		update.ClearLatencyMs()
+	}
+	_, err := update.Save(ctx)
+	return err
 }
 
 func (c *SocialIPChecker) checkConnectivity(ipEnt *dbent.SocialIP) *SocialIPCheckResult {
@@ -114,7 +115,7 @@ func (c *SocialIPChecker) checkConnectivity(ipEnt *dbent.SocialIP) *SocialIPChec
 	}
 
 	endpoint := *ipEnt.Endpoint
-	parsed, err := url.Parse(endpoint)
+	_, parsed, err := proxyurl.Parse(endpoint)
 	if err != nil {
 		result.Status = SocialIPStatusOffline
 		result.Error = fmt.Sprintf("invalid endpoint URL: %v", err)

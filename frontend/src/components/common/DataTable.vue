@@ -201,6 +201,7 @@ import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useI18n } from 'vue-i18n'
 import type { Column } from './types'
 import Icon from '@/components/icons/Icon.vue'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 const { t } = useI18n()
 
@@ -414,7 +415,7 @@ const readPersistedSortState = (): PersistedSortState | null => {
     if (!key) return null
     return { key, order: normalizeSortOrder(parsed.order) }
   } catch (e) {
-    console.error('[DataTable] Failed to read persisted sort state:', e)
+    recordClientDiagnostic('dataTable.readPersistedSortState', e)
     return null
   }
 }
@@ -424,7 +425,7 @@ const writePersistedSortState = (state: PersistedSortState) => {
   try {
     localStorage.setItem(props.sortStorageKey, JSON.stringify(state))
   } catch (e) {
-    console.error('[DataTable] Failed to persist sort state:', e)
+    recordClientDiagnostic('dataTable.writePersistedSortState', e)
   }
 }
 

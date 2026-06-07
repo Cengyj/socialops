@@ -145,7 +145,7 @@ func TestAffiliateRepository_AccrueQuota_ReusesOuterTransaction(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, bound, "invitee must bind to inviter")
 
-	applied, err := repo.AccrueQuota(txCtx, inviter.ID, invitee.ID, 3.5, 0, nil)
+	applied, err := repo.AccrueQuota(txCtx, inviter.ID, invitee.ID, 3.5, 0, nil, 0)
 	require.NoError(t, err)
 	require.True(t, applied, "AccrueQuota must report applied=true")
 
@@ -168,6 +168,56 @@ func TestAffiliateRepository_AccrueQuota_ReusesOuterTransaction(t *testing.T) {
 	require.NoError(t, rows.Scan(&postRollbackCount))
 	require.Equal(t, 0, postRollbackCount,
 		"AccrueQuota must propagate the outer tx — found persisted rows after rollback")
+}
+
+func TestAffiliateRepository_AccrueQuota_AppliesPerInviteeCapInTransaction(t *testing.T) {
+	ctx := context.Background()
+	tx := testEntTx(t)
+	txCtx := dbent.NewTxContext(ctx, tx)
+	client := tx.Client()
+
+	repo := NewAffiliateRepository(client, integrationDB)
+
+	inviter := mustCreateUser(t, client, &service.User{
+		Email:        fmt.Sprintf("affiliate-cap-inviter-%d@example.com", time.Now().UnixNano()),
+		PasswordHash: "hash",
+		Role:         service.RoleUser,
+		Status:       service.StatusActive,
+		Concurrency:  5,
+	})
+	invitee := mustCreateUser(t, client, &service.User{
+		Email:        fmt.Sprintf("affiliate-cap-invitee-%d@example.com", time.Now().UnixNano()+1),
+		PasswordHash: "hash",
+		Role:         service.RoleUser,
+		Status:       service.StatusActive,
+		Concurrency:  5,
+	})
+
+	_, err := repo.EnsureUserAffiliate(txCtx, inviter.ID)
+	require.NoError(t, err)
+	_, err = repo.EnsureUserAffiliate(txCtx, invitee.ID)
+	require.NoError(t, err)
+
+	applied, err := repo.AccrueQuota(txCtx, inviter.ID, invitee.ID, 8, 0, nil, 10)
+	require.NoError(t, err)
+	require.True(t, applied)
+
+	applied, err = repo.AccrueQuota(txCtx, inviter.ID, invitee.ID, 8, 0, nil, 10)
+	require.NoError(t, err)
+	require.True(t, applied, "second accrual should be truncated to remaining cap")
+
+	total := querySingleFloat(t, txCtx, client,
+		"SELECT COALESCE(SUM(amount), 0)::double precision FROM user_affiliate_ledger WHERE user_id = $1 AND source_user_id = $2 AND action = 'accrue'",
+		inviter.ID, invitee.ID)
+	require.InDelta(t, 10.0, total, 1e-9)
+
+	quota := querySingleFloat(t, txCtx, client,
+		"SELECT aff_quota::double precision FROM user_affiliates WHERE user_id = $1", inviter.ID)
+	require.InDelta(t, 10.0, quota, 1e-9)
+
+	applied, err = repo.AccrueQuota(txCtx, inviter.ID, invitee.ID, 1, 0, nil, 10)
+	require.NoError(t, err)
+	require.False(t, applied, "cap is exhausted")
 }
 
 func TestAffiliateRepository_TransferQuotaToBalance_EmptyQuota(t *testing.T) {
@@ -261,6 +311,41 @@ func TestAffiliateRepository_AdminCustomCode(t *testing.T) {
 	require.False(t, reset.AffCodeCustom)
 
 	// The old custom code is now free again
+	_, err = repo.GetAffiliateByCode(txCtx, customCode)
+	require.ErrorIs(t, err, service.ErrAffiliateProfileNotFound)
+}
+
+func TestAffiliateRepository_ClearUserAffiliateSettings(t *testing.T) {
+	ctx := context.Background()
+	tx := testEntTx(t)
+	txCtx := dbent.NewTxContext(ctx, tx)
+	client := tx.Client()
+
+	repo := NewAffiliateRepository(client, integrationDB)
+
+	u := mustCreateUser(t, client, &service.User{
+		Email:        fmt.Sprintf("affiliate-clear-%d@example.com", time.Now().UnixNano()),
+		PasswordHash: "hash",
+		Role:         service.RoleUser,
+		Status:       service.StatusActive,
+	})
+
+	customCode := fmt.Sprintf("CLR%09d", time.Now().UnixNano()%1_000_000_000)
+	require.NoError(t, repo.UpdateUserAffCode(txCtx, u.ID, customCode))
+	rate := 27.5
+	require.NoError(t, repo.SetUserRebateRate(txCtx, u.ID, &rate))
+
+	newCode, err := repo.ClearUserAffiliateSettings(txCtx, u.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, newCode)
+	require.NotEqual(t, customCode, newCode)
+
+	cleared, err := repo.EnsureUserAffiliate(txCtx, u.ID)
+	require.NoError(t, err)
+	require.Equal(t, newCode, cleared.AffCode)
+	require.False(t, cleared.AffCodeCustom)
+	require.Nil(t, cleared.AffRebateRatePercent)
+
 	_, err = repo.GetAffiliateByCode(txCtx, customCode)
 	require.ErrorIs(t, err, service.ErrAffiliateProfileNotFound)
 }

@@ -19,6 +19,8 @@ type SubscriptionPlan struct {
 	ID int64 `json:"id,omitempty"`
 	// GroupID holds the value of the "group_id" field.
 	GroupID int64 `json:"group_id,omitempty"`
+	// Platform holds the value of the "platform" field.
+	Platform string `json:"platform,omitempty"`
 	// Name holds the value of the "name" field.
 	Name string `json:"name,omitempty"`
 	// Description holds the value of the "description" field.
@@ -39,6 +41,12 @@ type SubscriptionPlan struct {
 	ForSale bool `json:"for_sale,omitempty"`
 	// SortOrder holds the value of the "sort_order" field.
 	SortOrder int `json:"sort_order,omitempty"`
+	// DailyLimitUsd holds the value of the "daily_limit_usd" field.
+	DailyLimitUsd *float64 `json:"daily_limit_usd,omitempty"`
+	// WeeklyLimitUsd holds the value of the "weekly_limit_usd" field.
+	WeeklyLimitUsd *float64 `json:"weekly_limit_usd,omitempty"`
+	// MonthlyLimitUsd holds the value of the "monthly_limit_usd" field.
+	MonthlyLimitUsd *float64 `json:"monthly_limit_usd,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -53,11 +61,11 @@ func (*SubscriptionPlan) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case subscriptionplan.FieldForSale:
 			values[i] = new(sql.NullBool)
-		case subscriptionplan.FieldPrice, subscriptionplan.FieldOriginalPrice:
+		case subscriptionplan.FieldPrice, subscriptionplan.FieldOriginalPrice, subscriptionplan.FieldDailyLimitUsd, subscriptionplan.FieldWeeklyLimitUsd, subscriptionplan.FieldMonthlyLimitUsd:
 			values[i] = new(sql.NullFloat64)
 		case subscriptionplan.FieldID, subscriptionplan.FieldGroupID, subscriptionplan.FieldValidityDays, subscriptionplan.FieldSortOrder:
 			values[i] = new(sql.NullInt64)
-		case subscriptionplan.FieldName, subscriptionplan.FieldDescription, subscriptionplan.FieldValidityUnit, subscriptionplan.FieldFeatures, subscriptionplan.FieldProductName:
+		case subscriptionplan.FieldPlatform, subscriptionplan.FieldName, subscriptionplan.FieldDescription, subscriptionplan.FieldValidityUnit, subscriptionplan.FieldFeatures, subscriptionplan.FieldProductName:
 			values[i] = new(sql.NullString)
 		case subscriptionplan.FieldCreatedAt, subscriptionplan.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -87,6 +95,12 @@ func (_m *SubscriptionPlan) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field group_id", values[i])
 			} else if value.Valid {
 				_m.GroupID = value.Int64
+			}
+		case subscriptionplan.FieldPlatform:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field platform", values[i])
+			} else if value.Valid {
+				_m.Platform = value.String
 			}
 		case subscriptionplan.FieldName:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -149,6 +163,27 @@ func (_m *SubscriptionPlan) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.SortOrder = int(value.Int64)
 			}
+		case subscriptionplan.FieldDailyLimitUsd:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field daily_limit_usd", values[i])
+			} else if value.Valid {
+				_m.DailyLimitUsd = new(float64)
+				*_m.DailyLimitUsd = value.Float64
+			}
+		case subscriptionplan.FieldWeeklyLimitUsd:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field weekly_limit_usd", values[i])
+			} else if value.Valid {
+				_m.WeeklyLimitUsd = new(float64)
+				*_m.WeeklyLimitUsd = value.Float64
+			}
+		case subscriptionplan.FieldMonthlyLimitUsd:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field monthly_limit_usd", values[i])
+			} else if value.Valid {
+				_m.MonthlyLimitUsd = new(float64)
+				*_m.MonthlyLimitUsd = value.Float64
+			}
 		case subscriptionplan.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field created_at", values[i])
@@ -200,6 +235,9 @@ func (_m *SubscriptionPlan) String() string {
 	builder.WriteString("group_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.GroupID))
 	builder.WriteString(", ")
+	builder.WriteString("platform=")
+	builder.WriteString(_m.Platform)
+	builder.WriteString(", ")
 	builder.WriteString("name=")
 	builder.WriteString(_m.Name)
 	builder.WriteString(", ")
@@ -231,6 +269,21 @@ func (_m *SubscriptionPlan) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("sort_order=")
 	builder.WriteString(fmt.Sprintf("%v", _m.SortOrder))
+	builder.WriteString(", ")
+	if v := _m.DailyLimitUsd; v != nil {
+		builder.WriteString("daily_limit_usd=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.WeeklyLimitUsd; v != nil {
+		builder.WriteString("weekly_limit_usd=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.MonthlyLimitUsd; v != nil {
+		builder.WriteString("monthly_limit_usd=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

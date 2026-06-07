@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -21,6 +22,8 @@ var (
 	ErrPromoCodeAlreadyUsed = infraerrors.Conflict("PROMO_CODE_ALREADY_USED", "you have already used this promo code")
 	ErrPromoCodeInvalid     = infraerrors.BadRequest("PROMO_CODE_INVALID", "invalid promo code")
 )
+
+const promoCodeMaxLength = 32
 
 // PromoService 优惠码服务
 type PromoService struct {
@@ -84,6 +87,37 @@ func (s *PromoService) validatePromoCodeStatus(promoCode *PromoCode) error {
 		return ErrPromoCodeInvalid
 	}
 	return nil
+}
+
+func validatePromoCodeAmount(amount float64) error {
+	if amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
+		return ErrPromoCodeInvalid
+	}
+	return nil
+}
+
+func validatePromoCodeMaxUses(maxUses int) error {
+	if maxUses < 0 {
+		return ErrPromoCodeInvalid
+	}
+	return nil
+}
+
+func normalizePromoCodeForUpdate(code string) (string, error) {
+	normalized := strings.ToUpper(strings.TrimSpace(code))
+	if normalized == "" || len(normalized) > promoCodeMaxLength {
+		return "", ErrPromoCodeInvalid
+	}
+	return normalized, nil
+}
+
+func validatePromoCodeStatusValue(status string) error {
+	switch status {
+	case PromoCodeStatusActive, PromoCodeStatusDisabled:
+		return nil
+	default:
+		return ErrPromoCodeInvalid
+	}
 }
 
 // ApplyPromoCode 应用优惠码（注册成功后调用）
@@ -180,6 +214,16 @@ func (s *PromoService) GenerateRandomCode() (string, error) {
 
 // Create 创建优惠码
 func (s *PromoService) Create(ctx context.Context, input *CreatePromoCodeInput) (*PromoCode, error) {
+	if input == nil {
+		return nil, ErrPromoCodeInvalid
+	}
+	if err := validatePromoCodeAmount(input.BonusAmount); err != nil {
+		return nil, err
+	}
+	if err := validatePromoCodeMaxUses(input.MaxUses); err != nil {
+		return nil, err
+	}
+
 	code := strings.TrimSpace(input.Code)
 	if code == "" {
 		// 自动生成
@@ -188,10 +232,16 @@ func (s *PromoService) Create(ctx context.Context, input *CreatePromoCodeInput) 
 		if err != nil {
 			return nil, err
 		}
+	} else {
+		var err error
+		code, err = normalizePromoCodeForUpdate(code)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	promoCode := &PromoCode{
-		Code:        strings.ToUpper(code),
+		Code:        code,
 		BonusAmount: input.BonusAmount,
 		MaxUses:     input.MaxUses,
 		UsedCount:   0,
@@ -218,24 +268,40 @@ func (s *PromoService) GetByID(ctx context.Context, id int64) (*PromoCode, error
 
 // Update 更新优惠码
 func (s *PromoService) Update(ctx context.Context, id int64, input *UpdatePromoCodeInput) (*PromoCode, error) {
+	if input == nil {
+		return nil, ErrPromoCodeInvalid
+	}
 	promoCode, err := s.promoRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
 	if input.Code != nil {
-		promoCode.Code = strings.ToUpper(strings.TrimSpace(*input.Code))
+		code, err := normalizePromoCodeForUpdate(*input.Code)
+		if err != nil {
+			return nil, err
+		}
+		promoCode.Code = code
 	}
 	if input.BonusAmount != nil {
+		if err := validatePromoCodeAmount(*input.BonusAmount); err != nil {
+			return nil, err
+		}
 		promoCode.BonusAmount = *input.BonusAmount
 	}
 	if input.MaxUses != nil {
+		if err := validatePromoCodeMaxUses(*input.MaxUses); err != nil {
+			return nil, err
+		}
 		promoCode.MaxUses = *input.MaxUses
 	}
 	if input.Status != nil {
+		if err := validatePromoCodeStatusValue(*input.Status); err != nil {
+			return nil, err
+		}
 		promoCode.Status = *input.Status
 	}
-	if input.ExpiresAt != nil {
+	if input.ExpiresAtSet {
 		promoCode.ExpiresAt = input.ExpiresAt
 	}
 	if input.Notes != nil {
@@ -251,6 +317,14 @@ func (s *PromoService) Update(ctx context.Context, id int64, input *UpdatePromoC
 
 // Delete 删除优惠码
 func (s *PromoService) Delete(ctx context.Context, id int64) error {
+	promoCode, err := s.promoRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if promoCode.UsedCount > 0 {
+		return ErrPromoCodeAlreadyUsed
+	}
+
 	if err := s.promoRepo.Delete(ctx, id); err != nil {
 		return fmt.Errorf("delete promo code: %w", err)
 	}

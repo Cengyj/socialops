@@ -3,12 +3,14 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	dbent "github.com/Wei-Shaw/socialops/ent"
+	"github.com/Wei-Shaw/socialops/internal/domain"
 	"github.com/Wei-Shaw/socialops/internal/pkg/pagination"
 	"github.com/Wei-Shaw/socialops/internal/pkg/usagestats"
 	"github.com/Wei-Shaw/socialops/internal/service"
@@ -23,26 +25,40 @@ func NewUsageLogRepository(_ *dbent.Client, sqlDB *sql.DB) service.UsageLogRepos
 }
 
 func (r *usageLogRepository) ListWithFilters(ctx context.Context, params pagination.PaginationParams, filters usagestats.UsageLogFilters) ([]service.UsageLog, *pagination.PaginationResult, error) {
-	where, args := socialUsageWhere(filters)
+	where, args := socialUsageWhereWithAlias(filters, "stl")
 
-	countQuery := "SELECT COUNT(*) FROM social_task_logs" + where
+	countQuery := "SELECT COUNT(*) FROM social_task_logs stl" + where
 	var total int64
 	if err := scanSingleRow(ctx, r.sql, countQuery, args, &total); err != nil {
 		return nil, nil, err
 	}
 
 	query := `
-SELECT id,
-       user_id,
+SELECT stl.id,
+       stl.user_id,
        NULL AS api_key_id,
        NULL AS group_id,
-       action AS operation,
-       status,
+       stl.social_account_id,
+       ` + socialUsagePlatformColumn("sa") + ` AS platform,
+       COALESCE(sa.name, '') AS account_name,
+       stl.action AS operation,
+       stl.status,
        1 AS quantity,
-       COALESCE(charged_amount, 0) AS cost,
-       created_at,
-       executed_at AS completed_at
-FROM social_task_logs` + where + socialUsageOrder(params) + fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
+       ` + socialUsageCostColumn("stl") + ` AS cost,
+       stl.charge_status,
+       stl.charge_source,
+       stl.target,
+       stl.content,
+       stl.payload,
+       stl.template_snapshot,
+       stl.result_message,
+       stl.proxy_snapshot,
+       stl.billing_request_id,
+       stl.idempotency_key,
+       stl.created_at,
+       stl.executed_at AS completed_at
+FROM social_task_logs stl
+LEFT JOIN social_accounts sa ON sa.id = stl.social_account_id` + where + socialUsageOrderWithAlias(params, "stl") + fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
 	queryArgs := append(append([]any{}, args...), params.Limit(), params.Offset())
 
 	rows, err := r.sql.QueryContext(ctx, query, queryArgs...)
@@ -73,8 +89,8 @@ SELECT COUNT(*),
        0,
        0,
        COUNT(*),
-       COALESCE(SUM(charged_amount), 0),
-       COALESCE(SUM(charged_amount), 0),
+       ` + socialUsageCostSum("") + `,
+       ` + socialUsageCostSum("") + `,
        0
 FROM social_task_logs` + where
 
@@ -160,15 +176,15 @@ func (r *usageLogRepository) GetDashboardStats(ctx context.Context) (*usagestats
 	if err := scanSingleRow(
 		ctx,
 		r.sql,
-		`SELECT COUNT(DISTINCT CASE WHEN created_at >= $1 THEN user_id END),
-		        COUNT(DISTINCT CASE WHEN created_at >= $2 THEN user_id END),
+		`SELECT COUNT(DISTINCT CASE WHEN COALESCE(executed_at, created_at) >= $1 AND COALESCE(executed_at, created_at) <= $4 THEN user_id END),
+		        COUNT(DISTINCT CASE WHEN COALESCE(executed_at, created_at) >= $2 AND COALESCE(executed_at, created_at) <= $4 THEN user_id END),
 		        COUNT(*),
-		        COALESCE(SUM(COALESCE(charged_amount, 0)), 0),
-		        COALESCE(SUM(CASE WHEN created_at >= $1 THEN 1 ELSE 0 END), 0),
-		        COALESCE(SUM(CASE WHEN created_at >= $1 THEN COALESCE(charged_amount, 0) ELSE 0 END), 0),
-		        COALESCE(SUM(CASE WHEN created_at >= $3 THEN 1 ELSE 0 END), 0)
+		        `+socialUsageCostSum("")+`,
+		        COALESCE(SUM(CASE WHEN COALESCE(executed_at, created_at) >= $1 AND COALESCE(executed_at, created_at) <= $4 THEN 1 ELSE 0 END), 0),
+		        `+socialUsageWindowCostSum("", 1, 4)+`,
+		        COALESCE(SUM(CASE WHEN COALESCE(executed_at, created_at) >= $3 AND COALESCE(executed_at, created_at) <= $4 THEN 1 ELSE 0 END), 0)
 		   FROM social_task_logs`,
-		[]any{todayStart, hourStart, recentStart},
+		[]any{todayStart, hourStart, recentStart, now},
 		&stats.ActiveUsers,
 		&stats.HourlyActiveUsers,
 		&stats.TotalRequests,
@@ -214,13 +230,13 @@ func (r *usageLogRepository) GetUserDashboardStats(ctx context.Context, userID i
 		ctx,
 		r.sql,
 		`SELECT COUNT(*),
-		        COALESCE(SUM(COALESCE(charged_amount, 0)), 0),
-		        COALESCE(SUM(CASE WHEN created_at >= $2 THEN 1 ELSE 0 END), 0),
-		        COALESCE(SUM(CASE WHEN created_at >= $2 THEN COALESCE(charged_amount, 0) ELSE 0 END), 0),
-		        COALESCE(SUM(CASE WHEN created_at >= $3 THEN 1 ELSE 0 END), 0)
+		        `+socialUsageCostSum("")+`,
+		        COALESCE(SUM(CASE WHEN COALESCE(executed_at, created_at) >= $2 AND COALESCE(executed_at, created_at) <= $4 THEN 1 ELSE 0 END), 0),
+		        `+socialUsageWindowCostSum("", 2, 4)+`,
+		        COALESCE(SUM(CASE WHEN COALESCE(executed_at, created_at) >= $3 AND COALESCE(executed_at, created_at) <= $4 THEN 1 ELSE 0 END), 0)
 		   FROM social_task_logs
 		  WHERE user_id = $1`,
-		[]any{userID, todayStart, recentStart},
+		[]any{userID, todayStart, recentStart, now},
 		&stats.TotalRequests,
 		&stats.TotalActualCost,
 		&stats.TodayRequests,
@@ -236,7 +252,7 @@ func (r *usageLogRepository) GetUserDashboardStats(ctx context.Context, userID i
 	stats.Rpm = recentRequests / 5
 	stats.Tpm = stats.Rpm
 
-	byPlatform, err := r.getUserDashboardStatsByPlatform(ctx, userID, todayStart)
+	byPlatform, err := r.getUserDashboardStatsByPlatform(ctx, userID, todayStart, now)
 	if err != nil {
 		return nil, err
 	}
@@ -244,21 +260,22 @@ func (r *usageLogRepository) GetUserDashboardStats(ctx context.Context, userID i
 	return stats, nil
 }
 
-func (r *usageLogRepository) getUserDashboardStatsByPlatform(ctx context.Context, userID int64, todayStart time.Time) ([]usagestats.PlatformDashboardStats, error) {
+func (r *usageLogRepository) getUserDashboardStatsByPlatform(ctx context.Context, userID int64, todayStart, now time.Time) ([]usagestats.PlatformDashboardStats, error) {
 	rows, err := r.sql.QueryContext(
 		ctx,
-		`SELECT COALESCE(sa.platform, ''),
+		`SELECT `+socialUsagePlatformColumn("sa")+`,
 		        COUNT(*),
-		        COALESCE(SUM(COALESCE(stl.charged_amount, 0)), 0),
-		        COALESCE(SUM(CASE WHEN stl.created_at >= $2 THEN 1 ELSE 0 END), 0),
-		        COALESCE(SUM(CASE WHEN stl.created_at >= $2 THEN COALESCE(stl.charged_amount, 0) ELSE 0 END), 0)
+		        `+socialUsageCostSum("stl")+`,
+		        COALESCE(SUM(CASE WHEN COALESCE(stl.executed_at, stl.created_at) >= $2 AND COALESCE(stl.executed_at, stl.created_at) <= $3 THEN 1 ELSE 0 END), 0),
+		        `+socialUsageWindowCostSum("stl", 2, 3)+`
 		   FROM social_task_logs stl
 		   LEFT JOIN social_accounts sa ON sa.id = stl.social_account_id
 		  WHERE stl.user_id = $1
-		  GROUP BY COALESCE(sa.platform, '')
-		  ORDER BY COALESCE(sa.platform, '') ASC`,
+		  GROUP BY `+socialUsagePlatformColumn("sa")+`
+		  ORDER BY `+socialUsagePlatformColumn("sa")+` ASC`,
 		userID,
 		todayStart,
+		now,
 	)
 	if err != nil {
 		return nil, err
@@ -294,10 +311,10 @@ func (r *usageLogRepository) GetUsageTrend(ctx context.Context, start, end time.
 
 	rows, err := r.sql.QueryContext(
 		ctx,
-		`SELECT created_at, COALESCE(charged_amount, 0)
+		`SELECT COALESCE(executed_at, created_at), `+socialUsageCostColumn("")+`
 		   FROM social_task_logs
-		  WHERE created_at >= $1 AND created_at <= $2
-		  ORDER BY created_at ASC`,
+		  WHERE COALESCE(executed_at, created_at) >= $1 AND COALESCE(executed_at, created_at) <= $2
+		  ORDER BY COALESCE(executed_at, created_at) ASC`,
 		start.UTC(),
 		end.UTC(),
 	)
@@ -308,12 +325,16 @@ func (r *usageLogRepository) GetUsageTrend(ctx context.Context, start, end time.
 
 	byDate := map[string]*usagestats.TrendDataPoint{}
 	for rows.Next() {
-		var createdAt time.Time
+		var rawActivityAt any
 		var cost float64
-		if err := rows.Scan(&createdAt, &cost); err != nil {
+		if err := rows.Scan(&rawActivityAt, &cost); err != nil {
 			return nil, err
 		}
-		date := trendBucket(createdAt, granularity)
+		activityAt, err := scanUsageActivityTime(rawActivityAt)
+		if err != nil {
+			return nil, err
+		}
+		date := trendBucket(activityAt, granularity)
 		point := byDate[date]
 		if point == nil {
 			point = &usagestats.TrendDataPoint{Date: date}
@@ -343,15 +364,15 @@ func (r *usageLogRepository) GetUserUsageTrend(ctx context.Context, start, end t
 
 	rows, err := r.sql.QueryContext(
 		ctx,
-		`SELECT stl.created_at,
+		`SELECT COALESCE(stl.executed_at, stl.created_at),
 		        stl.user_id,
 		        COALESCE(u.email, ''),
 		        COALESCE(u.username, ''),
-		        COALESCE(stl.charged_amount, 0)
+		        `+socialUsageCostColumn("stl")+`
 		   FROM social_task_logs stl
 		   LEFT JOIN users u ON u.id = stl.user_id AND u.deleted_at IS NULL
-		  WHERE stl.created_at >= $1 AND stl.created_at <= $2
-		  ORDER BY stl.created_at ASC`,
+		  WHERE COALESCE(stl.executed_at, stl.created_at) >= $1 AND COALESCE(stl.executed_at, stl.created_at) <= $2
+		  ORDER BY COALESCE(stl.executed_at, stl.created_at) ASC`,
 		start.UTC(),
 		end.UTC(),
 	)
@@ -364,17 +385,27 @@ func (r *usageLogRepository) GetUserUsageTrend(ctx context.Context, start, end t
 		date   string
 		userID int64
 	}
+	type userTrendTotal struct {
+		userID     int64
+		actualCost float64
+		requests   int64
+	}
 	byUserDate := map[userTrendKey]*usagestats.UserUsageTrendPoint{}
+	byUserTotal := map[int64]*userTrendTotal{}
 	for rows.Next() {
-		var createdAt time.Time
+		var rawActivityAt any
 		var userID int64
 		var email string
 		var username string
 		var cost float64
-		if err := rows.Scan(&createdAt, &userID, &email, &username, &cost); err != nil {
+		if err := rows.Scan(&rawActivityAt, &userID, &email, &username, &cost); err != nil {
 			return nil, err
 		}
-		date := trendBucket(createdAt, granularity)
+		activityAt, err := scanUsageActivityTime(rawActivityAt)
+		if err != nil {
+			return nil, err
+		}
+		date := trendBucket(activityAt, granularity)
 		key := userTrendKey{date: date, userID: userID}
 		point := byUserDate[key]
 		if point == nil {
@@ -385,13 +416,47 @@ func (r *usageLogRepository) GetUserUsageTrend(ctx context.Context, start, end t
 		point.Tokens++
 		point.Cost += cost
 		point.ActualCost += cost
+
+		total := byUserTotal[userID]
+		if total == nil {
+			total = &userTrendTotal{userID: userID}
+			byUserTotal[userID] = total
+		}
+		total.requests++
+		total.actualCost += cost
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
+	var topUsers map[int64]struct{}
+	if limit > 0 && len(byUserTotal) > limit {
+		totals := make([]userTrendTotal, 0, len(byUserTotal))
+		for _, total := range byUserTotal {
+			totals = append(totals, *total)
+		}
+		sort.Slice(totals, func(i, j int) bool {
+			if totals[i].actualCost != totals[j].actualCost {
+				return totals[i].actualCost > totals[j].actualCost
+			}
+			if totals[i].requests != totals[j].requests {
+				return totals[i].requests > totals[j].requests
+			}
+			return totals[i].userID < totals[j].userID
+		})
+		topUsers = make(map[int64]struct{}, limit)
+		for i := 0; i < limit; i++ {
+			topUsers[totals[i].userID] = struct{}{}
+		}
+	}
+
 	points := make([]usagestats.UserUsageTrendPoint, 0, len(byUserDate))
 	for _, point := range byUserDate {
+		if topUsers != nil {
+			if _, ok := topUsers[point.UserID]; !ok {
+				continue
+			}
+		}
 		points = append(points, *point)
 	}
 	sort.Slice(points, func(i, j int) bool {
@@ -406,9 +471,6 @@ func (r *usageLogRepository) GetUserUsageTrend(ctx context.Context, start, end t
 		}
 		return points[i].UserID < points[j].UserID
 	})
-	if limit > 0 && len(points) > limit {
-		points = points[:limit]
-	}
 	return points, nil
 }
 
@@ -424,9 +486,9 @@ func (r *usageLogRepository) GetUserUsageTrendByUserID(ctx context.Context, user
 	where, args := socialUsageWhere(filters)
 	rows, err := r.sql.QueryContext(
 		ctx,
-		`SELECT created_at, COALESCE(charged_amount, 0)
+		`SELECT COALESCE(executed_at, created_at), `+socialUsageCostColumn("")+`
 		   FROM social_task_logs`+where+`
-		  ORDER BY created_at ASC`,
+		  ORDER BY COALESCE(executed_at, created_at) ASC`,
 		args...,
 	)
 	if err != nil {
@@ -436,12 +498,16 @@ func (r *usageLogRepository) GetUserUsageTrendByUserID(ctx context.Context, user
 
 	byDate := map[string]*usagestats.TrendDataPoint{}
 	for rows.Next() {
-		var createdAt time.Time
+		var rawActivityAt any
 		var cost float64
-		if err := rows.Scan(&createdAt, &cost); err != nil {
+		if err := rows.Scan(&rawActivityAt, &cost); err != nil {
 			return nil, err
 		}
-		date := trendBucket(createdAt, granularity)
+		activityAt, err := scanUsageActivityTime(rawActivityAt)
+		if err != nil {
+			return nil, err
+		}
+		date := trendBucket(activityAt, granularity)
 		point := byDate[date]
 		if point == nil {
 			point = &usagestats.TrendDataPoint{Date: date}
@@ -476,9 +542,9 @@ func (r *usageLogRepository) GetUserSpendingRanking(ctx context.Context, start, 
 	if err := scanSingleRow(
 		ctx,
 		r.sql,
-		`SELECT COUNT(*), COALESCE(SUM(COALESCE(charged_amount, 0)), 0)
+		`SELECT COUNT(*), `+socialUsageCostSum("")+`
 		   FROM social_task_logs
-		  WHERE created_at >= $1 AND created_at <= $2`,
+		  WHERE COALESCE(executed_at, created_at) >= $1 AND COALESCE(executed_at, created_at) <= $2`,
 		[]any{start.UTC(), end.UTC()},
 		&resp.TotalRequests,
 		&resp.TotalActualCost,
@@ -492,12 +558,13 @@ func (r *usageLogRepository) GetUserSpendingRanking(ctx context.Context, start, 
 		`SELECT stl.user_id,
 		        COALESCE(u.email, ''),
 		        COUNT(*),
-		        COALESCE(SUM(COALESCE(stl.charged_amount, 0)), 0)
+		        `+socialUsageCostSum("stl")+`
 		   FROM social_task_logs stl
 		   LEFT JOIN users u ON u.id = stl.user_id AND u.deleted_at IS NULL
-		  WHERE stl.created_at >= $1 AND stl.created_at <= $2
+		  WHERE COALESCE(stl.executed_at, stl.created_at) >= $1 AND COALESCE(stl.executed_at, stl.created_at) <= $2
 		  GROUP BY stl.user_id, COALESCE(u.email, '')
-		  ORDER BY COALESCE(SUM(COALESCE(stl.charged_amount, 0)), 0) DESC, COUNT(*) DESC, stl.user_id ASC
+		  HAVING `+socialUsageCostSum("stl")+` > 0
+		  ORDER BY `+socialUsageCostSum("stl")+` DESC, COUNT(*) DESC, stl.user_id ASC
 		  LIMIT $3`,
 		start.UTC(),
 		end.UTC(),
@@ -524,26 +591,40 @@ func (r *usageLogRepository) GetUserSpendingRanking(ctx context.Context, start, 
 
 func (r *usageLogRepository) GetByID(ctx context.Context, id, userID int64) (*service.UsageLog, error) {
 	filters := usagestats.UsageLogFilters{UserID: userID}
-	where, args := socialUsageWhere(filters)
+	where, args := socialUsageWhereWithAlias(filters, "stl")
 	args = append(args, id)
-	idPredicate := fmt.Sprintf("id = $%d", len(args))
+	idPredicate := fmt.Sprintf("stl.id = $%d", len(args))
 	if where == "" {
 		where = " WHERE " + idPredicate
 	} else {
 		where += " AND " + idPredicate
 	}
 	query := `
-SELECT id,
-       user_id,
+SELECT stl.id,
+       stl.user_id,
        NULL AS api_key_id,
        NULL AS group_id,
-       action AS operation,
-       status,
+       stl.social_account_id,
+       ` + socialUsagePlatformColumn("sa") + ` AS platform,
+       COALESCE(sa.name, '') AS account_name,
+       stl.action AS operation,
+       stl.status,
        1 AS quantity,
-       COALESCE(charged_amount, 0) AS cost,
-       created_at,
-       executed_at AS completed_at
-FROM social_task_logs` + where
+       ` + socialUsageCostColumn("stl") + ` AS cost,
+       stl.charge_status,
+       stl.charge_source,
+       stl.target,
+       stl.content,
+       stl.payload,
+       stl.template_snapshot,
+       stl.result_message,
+       stl.proxy_snapshot,
+       stl.billing_request_id,
+       stl.idempotency_key,
+       stl.created_at,
+       stl.executed_at AS completed_at
+FROM social_task_logs stl
+LEFT JOIN social_accounts sa ON sa.id = stl.social_account_id` + where
 
 	rows, err := r.sql.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -556,7 +637,7 @@ FROM social_task_logs` + where
 		}
 		return nil, service.ErrUsageLogNotFound
 	}
-	item, err := scanUsageLogRow(rows)
+	item, err := scanUsageLogDetailRow(rows)
 	if err != nil {
 		return nil, err
 	}
@@ -588,27 +669,40 @@ func trendBucket(t time.Time, granularity string) string {
 }
 
 func socialUsageWhere(filters usagestats.UsageLogFilters) (string, []any) {
+	return socialUsageWhereWithAlias(filters, "")
+}
+
+func socialUsageWhereWithAlias(filters usagestats.UsageLogFilters, alias string) (string, []any) {
 	clauses := make([]string, 0)
 	args := make([]any, 0)
+	column := func(name string) string {
+		if alias == "" {
+			return name
+		}
+		return alias + "." + name
+	}
 	add := func(format string, value any) {
 		args = append(args, value)
 		clauses = append(clauses, fmt.Sprintf(format, len(args)))
 	}
 
 	if filters.UserID > 0 {
-		add("user_id = $%d", filters.UserID)
+		add(column("user_id")+" = $%d", filters.UserID)
 	}
 	if filters.APIKeyID > 0 {
 		clauses = append(clauses, "1 = 0")
 	}
 	if filters.AccountID > 0 {
-		add("social_account_id = $%d", filters.AccountID)
+		add(column("social_account_id")+" = $%d", filters.AccountID)
 	}
 	if filters.GroupID > 0 {
 		clauses = append(clauses, "1 = 0")
 	}
 	if strings.TrimSpace(filters.Model) != "" {
-		add("action = $%d", strings.TrimSpace(filters.Model))
+		add(column("action")+" = $%d", strings.TrimSpace(filters.Model))
+	}
+	if strings.TrimSpace(filters.Status) != "" {
+		add(column("status")+" = $%d", strings.ToLower(strings.TrimSpace(filters.Status)))
 	}
 	if filters.RequestType != nil {
 		clauses = append(clauses, "1 = 0")
@@ -623,10 +717,10 @@ func socialUsageWhere(filters usagestats.UsageLogFilters) (string, []any) {
 		clauses = append(clauses, "1 = 0")
 	}
 	if filters.StartTime != nil {
-		add("created_at >= $%d", *filters.StartTime)
+		add(socialUsageActivityColumn(alias)+" >= $%d", *filters.StartTime)
 	}
 	if filters.EndTime != nil {
-		add("created_at <= $%d", *filters.EndTime)
+		add(socialUsageActivityColumn(alias)+" <= $%d", *filters.EndTime)
 	}
 	if len(clauses) == 0 {
 		return "", args
@@ -635,18 +729,103 @@ func socialUsageWhere(filters usagestats.UsageLogFilters) (string, []any) {
 }
 
 func socialUsageOrder(params pagination.PaginationParams) string {
+	return socialUsageOrderWithAlias(params, "")
+}
+
+func socialUsageOrderWithAlias(params pagination.PaginationParams, alias string) string {
 	direction := "DESC"
 	if params.NormalizedSortOrder(pagination.SortOrderDesc) == pagination.SortOrderAsc {
 		direction = "ASC"
 	}
+	idColumn := "id"
+	if alias != "" {
+		idColumn = alias + ".id"
+	}
 	switch strings.ToLower(strings.TrimSpace(params.SortBy)) {
 	case "cost":
-		return " ORDER BY cost " + direction + ", id " + direction
+		return " ORDER BY cost " + direction + ", " + idColumn + " " + direction
 	case "operation", "model":
-		return " ORDER BY operation " + direction + ", id " + direction
+		return " ORDER BY operation " + direction + ", " + idColumn + " " + direction
 	default:
-		return " ORDER BY created_at " + direction + ", id " + direction
+		return " ORDER BY " + socialUsageActivityColumn(alias) + " " + direction + ", " + idColumn + " " + direction
 	}
+}
+
+func socialUsageActivityColumn(alias string) string {
+	if alias == "" {
+		return "COALESCE(executed_at, created_at)"
+	}
+	return "COALESCE(" + alias + ".executed_at, " + alias + ".created_at)"
+}
+
+func socialUsagePlatformColumn(alias string) string {
+	column := func(name string) string {
+		if alias == "" {
+			return name
+		}
+		return alias + "." + name
+	}
+	return "COALESCE(NULLIF(" + column("platform_key") + ", ''), " + column("platform") + ", '')"
+}
+
+func socialUsageCostColumn(alias string) string {
+	column := func(name string) string {
+		if alias == "" {
+			return name
+		}
+		return alias + "." + name
+	}
+	return "CASE WHEN " + column("status") + " = 'success' AND " + column("charge_status") + " = 'charged' THEN COALESCE(" + column("charged_amount") + ", 0) ELSE 0 END"
+}
+
+func socialUsageCostSum(alias string) string {
+	return "COALESCE(SUM(" + socialUsageCostColumn(alias) + "), 0)"
+}
+
+func socialUsageWindowCostSum(alias string, startArg, endArg int) string {
+	activity := socialUsageActivityColumn(alias)
+	return fmt.Sprintf(
+		"COALESCE(SUM(CASE WHEN %s >= $%d AND %s <= $%d THEN %s ELSE 0 END), 0)",
+		activity,
+		startArg,
+		activity,
+		endArg,
+		socialUsageCostColumn(alias),
+	)
+}
+
+func scanUsageActivityTime(value any) (time.Time, error) {
+	switch v := value.(type) {
+	case time.Time:
+		return v, nil
+	case string:
+		return parseUsageActivityTimeString(v)
+	case []byte:
+		return parseUsageActivityTimeString(string(v))
+	default:
+		return time.Time{}, fmt.Errorf("unsupported social usage activity time type %T", value)
+	}
+}
+
+func parseUsageActivityTimeString(value string) (time.Time, error) {
+	value = strings.TrimSpace(value)
+	for _, layout := range []string{
+		time.RFC3339Nano,
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05.999999999Z07:00",
+		"2006-01-02 15:04:05.999999999 -0700 MST",
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02 15:04:05-07:00",
+		"2006-01-02 15:04:05Z07:00",
+		"2006-01-02 15:04:05 -0700 MST",
+		"2006-01-02 15:04:05",
+	} {
+		parsed, err := time.Parse(layout, value)
+		if err == nil {
+			return parsed, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("invalid social usage activity time %q", value)
 }
 
 type usageLogScanner interface {
@@ -655,19 +834,120 @@ type usageLogScanner interface {
 
 func scanUsageLogRow(row usageLogScanner) (service.UsageLog, error) {
 	var item service.UsageLog
+	var payloadRaw []byte
+	var templateSnapshotRaw []byte
 	if err := row.Scan(
 		&item.ID,
 		&item.UserID,
 		&item.APIKeyID,
 		&item.GroupID,
+		&item.SocialAccountID,
+		&item.Platform,
+		&item.AccountName,
 		&item.Operation,
 		&item.Status,
 		&item.Quantity,
 		&item.Cost,
+		&item.ChargeStatus,
+		&item.ChargeSource,
+		&item.Target,
+		&item.Content,
+		&payloadRaw,
+		&templateSnapshotRaw,
+		&item.ResultMessage,
+		&item.ProxySnapshot,
+		&item.BillingRequestID,
+		&item.IdempotencyKey,
 		&item.CreatedAt,
 		&item.CompletedAt,
 	); err != nil {
 		return service.UsageLog{}, err
 	}
+	if payload, err := decodeSocialTaskPayloadJSON(payloadRaw); err != nil {
+		return service.UsageLog{}, err
+	} else {
+		item.Payload = payload
+	}
+	if snapshot, err := decodeSocialTaskTemplateSnapshotJSON(templateSnapshotRaw); err != nil {
+		return service.UsageLog{}, err
+	} else {
+		item.TemplateSnapshot = snapshot
+	}
 	return item, nil
+}
+
+func scanUsageLogDetailRow(row usageLogScanner) (service.UsageLog, error) {
+	var item service.UsageLog
+	var payloadRaw []byte
+	var templateSnapshotRaw []byte
+	if err := row.Scan(
+		&item.ID,
+		&item.UserID,
+		&item.APIKeyID,
+		&item.GroupID,
+		&item.SocialAccountID,
+		&item.Platform,
+		&item.AccountName,
+		&item.Operation,
+		&item.Status,
+		&item.Quantity,
+		&item.Cost,
+		&item.ChargeStatus,
+		&item.ChargeSource,
+		&item.Target,
+		&item.Content,
+		&payloadRaw,
+		&templateSnapshotRaw,
+		&item.ResultMessage,
+		&item.ProxySnapshot,
+		&item.BillingRequestID,
+		&item.IdempotencyKey,
+		&item.CreatedAt,
+		&item.CompletedAt,
+	); err != nil {
+		return service.UsageLog{}, err
+	}
+	if payload, err := decodeSocialTaskPayloadJSON(payloadRaw); err != nil {
+		return service.UsageLog{}, err
+	} else {
+		item.Payload = payload
+	}
+	if snapshot, err := decodeSocialTaskTemplateSnapshotJSON(templateSnapshotRaw); err != nil {
+		return service.UsageLog{}, err
+	} else {
+		item.TemplateSnapshot = snapshot
+	}
+	return item, nil
+}
+
+func decodeSocialTaskPayloadJSON(raw []byte) (*domain.SocialTaskPayload, error) {
+	if len(bytesTrimSpace(raw)) == 0 || string(bytesTrimSpace(raw)) == "null" {
+		return nil, nil
+	}
+	var payload domain.SocialTaskPayload
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, err
+	}
+	if payload.IsZero() {
+		return nil, nil
+	}
+	return &payload, nil
+}
+
+func decodeSocialTaskTemplateSnapshotJSON(raw []byte) (*domain.SocialTaskTemplateSnapshot, error) {
+	if len(bytesTrimSpace(raw)) == 0 || string(bytesTrimSpace(raw)) == "null" {
+		return nil, nil
+	}
+	var snapshot domain.SocialTaskTemplateSnapshot
+	if err := json.Unmarshal(raw, &snapshot); err != nil {
+		return nil, err
+	}
+	if snapshot.IsZero() {
+		return nil, nil
+	}
+	return &snapshot, nil
+}
+
+func bytesTrimSpace(raw []byte) []byte {
+	return []byte(strings.TrimSpace(string(raw)))
 }

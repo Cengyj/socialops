@@ -390,6 +390,45 @@ func TestUserHandlerGetProfileDoesNotInferEditedProfileSourcesWithoutMatchingIde
 	require.NotContains(t, resp.Data, "profile_sources")
 }
 
+func TestUserHandlerChangePasswordRevokesRefreshSessions(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	user := &service.User{
+		ID:           31,
+		Email:        "password-session@example.com",
+		Username:     "password-session",
+		Role:         service.RoleUser,
+		Status:       service.StatusActive,
+		TokenVersion: 11,
+	}
+	require.NoError(t, user.SetPassword("old-password"))
+
+	repo := &userHandlerRepoStub{user: user}
+	refreshTokenCache := &userHandlerRefreshTokenCacheStub{}
+	cfg := &config.Config{
+		JWT: config.JWTConfig{
+			Secret:     "test-secret",
+			ExpireHour: 1,
+		},
+	}
+	authService := service.NewAuthService(nil, repo, nil, refreshTokenCache, cfg, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewUserHandler(service.NewUserService(repo, nil, nil, nil), authService, nil, nil, nil)
+
+	body := []byte(`{"old_password":"old-password","new_password":"new-password"}`)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/user/password", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 31})
+
+	handler.ChangePassword(c)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, []int64{31}, refreshTokenCache.revokedUserIDs)
+	require.Equal(t, int64(12), repo.user.TokenVersion)
+	require.True(t, repo.user.CheckPassword("new-password"))
+}
+
 type userHandlerEmailCacheStub struct {
 	data *service.VerificationCodeData
 }

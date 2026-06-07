@@ -21,20 +21,42 @@ func NewSubscriptionHandler(subscriptionService *service.SubscriptionService) *S
 
 type AssignSubscriptionRequest struct {
 	UserID       int64  `json:"user_id" binding:"required"`
-	GroupID      int64  `json:"group_id" binding:"required"`
+	GroupID      *int64 `json:"group_id,omitempty"`
+	PlanID       *int64 `json:"plan_id,omitempty"`
 	ValidityDays int    `json:"validity_days"`
 	Notes        string `json:"notes"`
 }
 
 type BulkAssignSubscriptionRequest struct {
 	UserIDs      []int64 `json:"user_ids" binding:"required,min=1"`
-	GroupID      int64   `json:"group_id" binding:"required"`
+	GroupID      *int64  `json:"group_id,omitempty"`
+	PlanID       *int64  `json:"plan_id,omitempty"`
+	ValidityDays int     `json:"validity_days"`
+	Notes        string  `json:"notes"`
+}
+
+type CreateSubscriptionRequest struct {
+	UserID       int64  `json:"user_id" binding:"required"`
+	PlanID       int64  `json:"plan_id"`
+	ValidityDays int    `json:"validity_days"`
+	Notes        string `json:"notes"`
+}
+
+type BulkCreateSubscriptionRequest struct {
+	UserIDs      []int64 `json:"user_ids" binding:"required,min=1"`
+	PlanID       int64   `json:"plan_id"`
 	ValidityDays int     `json:"validity_days"`
 	Notes        string  `json:"notes"`
 }
 
 type AdjustSubscriptionRequest struct {
 	Days int `json:"days" binding:"required"`
+}
+
+type ResetSubscriptionQuotaRequest struct {
+	Daily   bool `json:"daily"`
+	Weekly  bool `json:"weekly"`
+	Monthly bool `json:"monthly"`
 }
 
 func (h *SubscriptionHandler) List(c *gin.Context) {
@@ -57,7 +79,16 @@ func (h *SubscriptionHandler) List(c *gin.Context) {
 		}
 		groupID = &id
 	}
-	items, result, err := h.subscriptionService.List(c.Request.Context(), page, pageSize, userID, groupID, c.Query("status"), c.Query("platform"), c.DefaultQuery("sort_by", "created_at"), c.DefaultQuery("sort_order", "desc"))
+	var planID *int64
+	if raw := c.Query("plan_id"); raw != "" {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			response.BadRequest(c, "Invalid plan ID")
+			return
+		}
+		planID = &id
+	}
+	items, result, err := h.subscriptionService.ListWithPlan(c.Request.Context(), page, pageSize, userID, groupID, planID, c.Query("status"), c.Query("platform"), c.DefaultQuery("sort_by", "created_at"), c.DefaultQuery("sort_order", "desc"))
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -101,15 +132,79 @@ func (h *SubscriptionHandler) GetProgress(c *gin.Context) {
 	response.Success(c, progress)
 }
 
+func (h *SubscriptionHandler) Create(c *gin.Context) {
+	var req CreateSubscriptionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if req.PlanID <= 0 {
+		response.BadRequest(c, "plan_id is required")
+		return
+	}
+	sub, err := h.subscriptionService.AssignSubscription(c.Request.Context(), &service.AssignSubscriptionInput{
+		UserID:       req.UserID,
+		PlanID:       &req.PlanID,
+		ValidityDays: req.ValidityDays,
+		AssignedBy:   adminIDFromContext(c),
+		Notes:        req.Notes,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Created(c, dto.UserSubscriptionFromServiceAdmin(sub))
+}
+
+func (h *SubscriptionHandler) BulkCreate(c *gin.Context) {
+	var req BulkCreateSubscriptionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if req.PlanID <= 0 {
+		response.BadRequest(c, "plan_id is required")
+		return
+	}
+	result, err := h.subscriptionService.BulkAssignSubscription(c.Request.Context(), &service.BulkAssignSubscriptionInput{
+		UserIDs:      req.UserIDs,
+		PlanID:       &req.PlanID,
+		ValidityDays: req.ValidityDays,
+		AssignedBy:   adminIDFromContext(c),
+		Notes:        req.Notes,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	out := make([]dto.AdminUserSubscription, 0, len(result.Subscriptions))
+	for i := range result.Subscriptions {
+		out = append(out, *dto.UserSubscriptionFromServiceAdmin(&result.Subscriptions[i]))
+	}
+	response.Created(c, gin.H{
+		"success_count": result.SuccessCount,
+		"created_count": result.CreatedCount,
+		"reused_count":  result.ReusedCount,
+		"failed_count":  result.FailedCount,
+		"subscriptions": out,
+		"errors":        result.Errors,
+	})
+}
+
 func (h *SubscriptionHandler) Assign(c *gin.Context) {
 	var req AssignSubscriptionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	if req.GroupID == nil && req.PlanID == nil {
+		response.BadRequest(c, "group_id or plan_id is required")
+		return
+	}
 	sub, err := h.subscriptionService.AssignSubscription(c.Request.Context(), &service.AssignSubscriptionInput{
 		UserID:       req.UserID,
-		GroupID:      req.GroupID,
+		GroupID:      int64Value(req.GroupID),
+		PlanID:       req.PlanID,
 		ValidityDays: req.ValidityDays,
 		AssignedBy:   adminIDFromContext(c),
 		Notes:        req.Notes,
@@ -127,9 +222,14 @@ func (h *SubscriptionHandler) BulkAssign(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	if req.GroupID == nil && req.PlanID == nil {
+		response.BadRequest(c, "group_id or plan_id is required")
+		return
+	}
 	result, err := h.subscriptionService.BulkAssignSubscription(c.Request.Context(), &service.BulkAssignSubscriptionInput{
 		UserIDs:      req.UserIDs,
-		GroupID:      req.GroupID,
+		GroupID:      int64Value(req.GroupID),
+		PlanID:       req.PlanID,
 		ValidityDays: req.ValidityDays,
 		AssignedBy:   adminIDFromContext(c),
 		Notes:        req.Notes,
@@ -177,11 +277,17 @@ func (h *SubscriptionHandler) ResetQuota(c *gin.Context) {
 		response.BadRequest(c, "Invalid subscription ID")
 		return
 	}
-	if err := h.subscriptionService.ResetSubscriptionQuota(c.Request.Context(), id); err != nil {
+	var req ResetSubscriptionQuotaRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	sub, err := h.subscriptionService.AdminResetQuota(c.Request.Context(), id, req.Daily, req.Weekly, req.Monthly)
+	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, gin.H{"message": "Subscription quota reset successfully"})
+	response.Success(c, dto.UserSubscriptionFromServiceAdmin(sub))
 }
 
 func (h *SubscriptionHandler) Revoke(c *gin.Context) {
@@ -203,7 +309,8 @@ func (h *SubscriptionHandler) ListByUser(c *gin.Context) {
 		response.BadRequest(c, "Invalid user ID")
 		return
 	}
-	items, err := h.subscriptionService.ListByUser(c.Request.Context(), userID)
+	page, pageSize := response.ParsePagination(c)
+	items, result, err := h.subscriptionService.List(c.Request.Context(), page, pageSize, &userID, nil, c.Query("status"), c.Query("platform"), c.DefaultQuery("sort_by", "created_at"), c.DefaultQuery("sort_order", "desc"))
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -212,7 +319,34 @@ func (h *SubscriptionHandler) ListByUser(c *gin.Context) {
 	for i := range items {
 		out = append(out, *dto.UserSubscriptionFromServiceAdmin(&items[i]))
 	}
-	response.Success(c, out)
+	if result == nil {
+		response.Paginated(c, out, int64(len(out)), page, pageSize)
+		return
+	}
+	response.Paginated(c, out, result.Total, page, pageSize)
+}
+
+func (h *SubscriptionHandler) ListByGroup(c *gin.Context) {
+	groupID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid group ID")
+		return
+	}
+	page, pageSize := response.ParsePagination(c)
+	items, result, err := h.subscriptionService.List(c.Request.Context(), page, pageSize, nil, &groupID, c.Query("status"), c.Query("platform"), c.DefaultQuery("sort_by", "created_at"), c.DefaultQuery("sort_order", "desc"))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	out := make([]dto.AdminUserSubscription, 0, len(items))
+	for i := range items {
+		out = append(out, *dto.UserSubscriptionFromServiceAdmin(&items[i]))
+	}
+	if result == nil {
+		response.Paginated(c, out, int64(len(out)), page, pageSize)
+		return
+	}
+	response.Paginated(c, out, result.Total, page, pageSize)
 }
 
 func adminIDFromContext(c *gin.Context) int64 {
@@ -221,4 +355,11 @@ func adminIDFromContext(c *gin.Context) int64 {
 		return 0
 	}
 	return subject.UserID
+}
+
+func int64Value(value *int64) int64 {
+	if value == nil {
+		return 0
+	}
+	return *value
 }

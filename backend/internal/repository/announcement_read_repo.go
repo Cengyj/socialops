@@ -37,7 +37,8 @@ func (r *announcementReadRepository) GetReadMapByUser(ctx context.Context, userI
 		return map[int64]time.Time{}, nil
 	}
 
-	rows, err := r.client.AnnouncementRead.Query().
+	client := clientFromContext(ctx, r.client)
+	rows, err := client.AnnouncementRead.Query().
 		Where(
 			announcementread.UserIDEQ(userID),
 			announcementread.AnnouncementIDIn(announcementIDs...),
@@ -59,7 +60,8 @@ func (r *announcementReadRepository) GetReadMapByUsers(ctx context.Context, anno
 		return map[int64]time.Time{}, nil
 	}
 
-	rows, err := r.client.AnnouncementRead.Query().
+	client := clientFromContext(ctx, r.client)
+	rows, err := client.AnnouncementRead.Query().
 		Where(
 			announcementread.AnnouncementIDEQ(announcementID),
 			announcementread.UserIDIn(userIDs...),
@@ -77,7 +79,8 @@ func (r *announcementReadRepository) GetReadMapByUsers(ctx context.Context, anno
 }
 
 func (r *announcementReadRepository) CountByAnnouncementID(ctx context.Context, announcementID int64) (int64, error) {
-	count, err := r.client.AnnouncementRead.Query().
+	client := clientFromContext(ctx, r.client)
+	count, err := client.AnnouncementRead.Query().
 		Where(announcementread.AnnouncementIDEQ(announcementID)).
 		Count(ctx)
 	if err != nil {

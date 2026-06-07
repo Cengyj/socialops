@@ -97,7 +97,7 @@
                 <!-- Header: platform badge + plan name -->
                 <div class="mb-3 flex flex-wrap items-center gap-2">
                   <span :class="['rounded-md border px-2 py-0.5 text-xs font-medium', planBadgeClass]">
-                    {{ platformLabel(selectedPlan.group_platform || '') }}
+                    {{ platformLabel(selectedPlanPlatform) }}
                   </span>
                   <h3 class="text-lg font-bold text-gray-900 dark:text-white">{{ selectedPlan.name }}</h3>
                 </div>
@@ -113,29 +113,19 @@
                 <p v-if="selectedPlan.description" class="mt-2 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
                   {{ selectedPlan.description }}
                 </p>
-                <!-- Rate + Limits grid -->
-                <div class="mt-3 grid grid-cols-2 gap-3">
-                  <div>
-                    <span class="text-xs text-gray-400 dark:text-gray-500">{{ t('payment.planCard.rate') }}</span>
-                    <div class="flex items-baseline">
-                      <span :class="['text-lg font-bold', planTextClass]">×{{ selectedPlan.rate_multiplier ?? 1 }}</span>
-                    </div>
+                <div class="mt-4 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 dark:border-dark-700 dark:bg-dark-800/70">
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ selectedPlanQuotaLabel }}</span>
+                    <span class="text-lg font-semibold text-gray-900 dark:text-white">{{ selectedPlanQuotaDisplay }}</span>
                   </div>
-                  <div v-if="selectedPlan.daily_limit_usd != null">
-                    <span class="text-xs text-gray-400 dark:text-gray-500">{{ t('payment.planCard.dailyLimit') }}</span>
-                    <div class="text-lg font-semibold text-gray-800 dark:text-gray-200">${{ selectedPlan.daily_limit_usd }}</div>
-                  </div>
-                  <div v-if="selectedPlan.weekly_limit_usd != null">
-                    <span class="text-xs text-gray-400 dark:text-gray-500">{{ t('payment.planCard.weeklyLimit') }}</span>
-                    <div class="text-lg font-semibold text-gray-800 dark:text-gray-200">${{ selectedPlan.weekly_limit_usd }}</div>
-                  </div>
-                  <div v-if="selectedPlan.monthly_limit_usd != null">
-                    <span class="text-xs text-gray-400 dark:text-gray-500">{{ t('payment.planCard.monthlyLimit') }}</span>
-                    <div class="text-lg font-semibold text-gray-800 dark:text-gray-200">${{ selectedPlan.monthly_limit_usd }}</div>
-                  </div>
-                  <div v-if="selectedPlan.daily_limit_usd == null && selectedPlan.weekly_limit_usd == null && selectedPlan.monthly_limit_usd == null">
-                    <span class="text-xs text-gray-400 dark:text-gray-500">{{ t('payment.planCard.quota') }}</span>
-                    <div class="text-lg font-semibold text-gray-800 dark:text-gray-200">{{ t('payment.planCard.unlimited') }}</div>
+                  <div v-if="selectedPlanGuardrails.length > 0" class="mt-2 flex flex-wrap gap-1.5">
+                    <span
+                      v-for="guardrail in selectedPlanGuardrails"
+                      :key="guardrail.period"
+                      class="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-gray-500 dark:bg-dark-900 dark:text-gray-300"
+                    >
+                      {{ guardrailLabel(guardrail.period) }} ${{ guardrail.amount.toFixed(2) }}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -173,36 +163,12 @@
             </template>
             <!-- Plan list -->
             <template v-else>
-              <div v-if="checkout.plans.length === 0" class="card py-16 text-center">
-                <Icon name="gift" size="xl" class="mx-auto mb-3 text-gray-300 dark:text-dark-600" />
-                <p class="text-gray-500 dark:text-gray-400">{{ t('payment.noPlans') }}</p>
-              </div>
-              <div v-else :class="planGridClass">
-                <SubscriptionPlanCard v-for="plan in checkout.plans" :key="plan.id" :plan="plan" :active-subscriptions="activeSubscriptions" @select="selectPlan" />
-              </div>
-              <!-- Active subscriptions (compact, below plan list) -->
-              <div v-if="activeSubscriptions.length > 0">
-                <p class="mb-2 text-xs font-medium text-gray-400 dark:text-gray-500">{{ t('payment.activeSubscription') }}</p>
-                <div class="space-y-2">
-                  <div v-for="sub in activeSubscriptions" :key="sub.id"
-                    class="flex items-center gap-3 rounded-xl border border-gray-100 bg-white px-3 py-2 dark:border-dark-700 dark:bg-dark-800">
-                    <div :class="['h-6 w-1 shrink-0 rounded-full', platformAccentBarClass(sub.group?.platform || '')]" />
-                    <div class="min-w-0 flex-1">
-                      <div class="flex items-center gap-1.5">
-                        <span class="truncate text-xs font-semibold text-gray-900 dark:text-white">{{ sub.group?.name || t('payment.groupFallback', { id: sub.group_id }) }}</span>
-                        <span :class="['shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium', platformBadgeLightClass(sub.group?.platform || '')]">{{ platformLabel(sub.group?.platform || '') }}</span>
-                      </div>
-                      <div class="flex flex-wrap gap-x-3 text-[11px] text-gray-400 dark:text-gray-500">
-                        <span>{{ t('payment.planCard.rate') }}: ×{{ sub.group?.rate_multiplier ?? 1 }}</span>
-                        <span v-if="sub.group?.daily_limit_usd == null && sub.group?.weekly_limit_usd == null && sub.group?.monthly_limit_usd == null">{{ t('payment.planCard.quota') }}: {{ t('payment.planCard.unlimited') }}</span>
-                        <span v-if="sub.expires_at">{{ t('userSubscriptions.daysRemaining', { days: getDaysRemaining(sub.expires_at) }) }}</span>
-                        <span v-else>{{ t('userSubscriptions.noExpiration') }}</span>
-                      </div>
-                    </div>
-                    <span class="badge badge-success shrink-0 text-[10px]">{{ t('userSubscriptions.status.active') }}</span>
-                  </div>
-                </div>
-              </div>
+              <SubscriptionPlanPicker
+                :plans="checkout.plans"
+                :active-subscriptions="activeSubscriptions"
+                :format-amount="formatSelectedPaymentAmount"
+                @select="selectPlan"
+              />
             </template>
           </template>
         </template>
@@ -220,15 +186,19 @@
     <Teleport to="body">
       <Transition name="modal">
         <div v-if="showRenewalModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" @click.self="closeRenewalModal">
-          <div class="relative w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-dark-700 dark:bg-dark-900">
-            <!-- Close button -->
+          <div class="relative w-full max-w-2xl rounded-lg border border-gray-200 bg-white p-5 shadow-xl dark:border-dark-700 dark:bg-dark-900">
             <button class="absolute right-4 top-4 rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-dark-700 dark:hover:text-gray-200" @click="closeRenewalModal">
-              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              <Icon name="x" size="md" />
             </button>
             <h3 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">{{ t('payment.selectPlan') }}</h3>
-            <div class="space-y-4">
-              <SubscriptionPlanCard v-for="plan in renewalPlans" :key="plan.id" :plan="plan" :active-subscriptions="activeSubscriptions" @select="selectPlanFromModal" />
-            </div>
+            <SubscriptionPlanPicker
+              :plans="renewalPlans"
+              :active-subscriptions="activeSubscriptions"
+              :format-amount="formatSelectedPaymentAmount"
+              :show-active-subscriptions="false"
+              :initial-selected-plan-ids="renewInitialPlanId ? [renewInitialPlanId] : []"
+              @select="selectPlanFromModal"
+            />
           </div>
         </div>
       </Transition>
@@ -245,7 +215,6 @@
 </template>
 
 <script setup lang="ts">
-// @ts-nocheck
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -254,7 +223,8 @@ import { usePaymentStore } from '@/stores/payment'
 import { useSubscriptionStore } from '@/stores/subscriptions'
 import { useAppStore } from '@/stores'
 import { paymentAPI } from '@/api/payment'
-import { extractApiErrorMessage, extractI18nErrorMessage } from '@/utils/apiError'
+import { extractSafeI18nErrorMessage } from '@/utils/apiError'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 import { isMobileDevice } from '@/utils/device'
 import type { SubscriptionPlan, CheckoutInfoResponse, CreateOrderResult, OrderType } from '@/types/payment'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -272,12 +242,24 @@ import {
   type PaymentRecoverySnapshot,
   writePaymentRecoverySnapshot,
 } from '@/components/payment/paymentFlow'
-import SubscriptionPlanCard from '@/components/payment/SubscriptionPlanCard.vue'
+import SubscriptionPlanPicker from '@/components/payment/SubscriptionPlanPicker.vue'
 import PaymentStatusPanel from '@/components/payment/PaymentStatusPanel.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { formatPaymentAmount, normalizePaymentCurrency } from '@/components/payment/currency'
 import type { PaymentMethodOption } from '@/components/payment/PaymentMethodSelector.vue'
 import { getPlatformColor } from '@/utils/platformColors'
+import { getPlanPlatform } from '@/utils/subscriptionPackages'
+import {
+  getPlanGuardrails,
+  getPlanQuotaAmount,
+  getPlanQuotaPeriod,
+  type QuotaGuardrailPeriod,
+} from '@/utils/subscriptionQuotaPlans'
+import {
+  formatSubscriptionPlanValiditySuffix,
+  formatSubscriptionQuotaAmount,
+  getSubscriptionPlatformLabel,
+} from '@/utils/subscriptionPlanDisplay'
 import { buildPaymentErrorToastMessage, describePaymentScenarioError } from './paymentUx'
 import { hasWechatResumeQuery, parseWechatResumeRoute, stripWechatResumeQuery } from './paymentWechatResume'
 
@@ -292,11 +274,6 @@ const appStore = useAppStore()
 
 const user = computed(() => authStore.user)
 const activeSubscriptions = computed(() => subscriptionStore.activeSubscriptions)
-
-function getDaysRemaining(expiresAt: string): number {
-  const diff = new Date(expiresAt).getTime() - Date.now()
-  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
-}
 
 const loading = ref(true)
 const submitting = ref(false)
@@ -324,6 +301,12 @@ interface WeixinJSBridgeLike {
     payload: Record<string, unknown>,
     callback: (result: Record<string, unknown>) => void,
   ): void
+}
+
+class PaymentScenarioSignal extends Error {
+  constructor(public readonly reason: string) {
+    super(reason)
+  }
 }
 
 function emptyPaymentState(): PaymentRecoverySnapshot {
@@ -376,7 +359,7 @@ function waitForWeixinJSBridge(timeoutMs = 4000): Promise<WeixinJSBridgeLike | n
 async function invokeWechatJsapiPayment(payload: Record<string, unknown>): Promise<Record<string, unknown>> {
   const bridge = await waitForWeixinJSBridge()
   if (!bridge) {
-    throw new Error('WECHAT_JSAPI_UNAVAILABLE')
+    throw new PaymentScenarioSignal('WECHAT_JSAPI_UNAVAILABLE')
   }
   return new Promise((resolve) => {
     bridge.invoke('getBrandWCPayRequest', payload, (result) => resolve(result || {}))
@@ -497,13 +480,6 @@ const balanceRechargeMultiplier = computed(() => {
   return multiplier > 0 ? multiplier : 1
 })
 const creditedAmount = computed(() => Math.round((validAmount.value * balanceRechargeMultiplier.value) * 100) / 100)
-
-// Adaptive grid: center single card, 2-col for 2 plans, 3-col for 3+
-const planGridClass = computed(() => {
-  const n = checkout.value.plans.length
-  if (n <= 2) return 'grid grid-cols-1 gap-5 sm:grid-cols-2'
-  return 'grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3'
-})
 
 // Check if an amount fits a method's [min, max]. 0 = no limit.
 function amountFitsMethod(amt: number, methodType: string): boolean {
@@ -639,48 +615,37 @@ const paymentButtonClass = computed(() => {
 })
 
 // Subscription confirm: platform accent colors (clean card, no gradient)
-const platformLabel = (platform: string) => {
-  const labels: Record<string, string> = {
-    x_twitter: 'X / Twitter',
-    instagram: 'Instagram',
-    tiktok: 'TikTok',
-    facebook: 'Facebook',
-  }
-  return labels[platform] || 'Social'
-}
+const platformLabel = (platform: string) => getSubscriptionPlatformLabel(platform, t('payment.platformFallback'))
 
 const platformBadgeClass = (platform: string) => {
   const colors = getPlatformColor(platform)
   return `${colors.bg} ${colors.text} ${colors.border}`
 }
 
-const platformBadgeLightClass = (platform: string) => {
-  const colors = getPlatformColor(platform)
-  return `${colors.bg} ${colors.text}`
-}
-
 const platformTextClass = (platform: string) => getPlatformColor(platform).text
 
-const platformAccentBarClass = (platform: string) => {
-  switch (platform) {
-    case 'instagram':
-      return 'bg-pink-500'
-    case 'tiktok':
-      return 'bg-gray-900 dark:bg-gray-100'
-    case 'facebook':
-      return 'bg-blue-500'
-    case 'x_twitter':
-    default:
-      return 'bg-gray-500'
-  }
-}
-
-const planBadgeClass = computed(() => platformBadgeClass(selectedPlan.value?.group_platform || ''))
-const planTextClass = computed(() => platformTextClass(selectedPlan.value?.group_platform || ''))
+const selectedPlanPlatform = computed(() => (
+  selectedPlan.value ? getPlanPlatform(selectedPlan.value) : 'social'
+))
+const planBadgeClass = computed(() => platformBadgeClass(selectedPlanPlatform.value))
+const planTextClass = computed(() => platformTextClass(selectedPlanPlatform.value))
+const selectedPlanQuotaAmount = computed(() => selectedPlan.value ? getPlanQuotaAmount(selectedPlan.value) : null)
+const selectedPlanQuotaDisplay = computed(() => (
+  formatSubscriptionQuotaAmount(selectedPlanQuotaAmount.value, t('payment.planCard.unlimited'))
+))
+const selectedPlanQuotaLabel = computed(() => {
+  const period = selectedPlan.value ? getPlanQuotaPeriod(selectedPlan.value) : null
+  if (period === 'daily') return t('payment.planCard.todayQuota')
+  if (period === 'weekly') return t('payment.planCard.thisWeekQuota')
+  if (period === 'monthly') return t('payment.planCard.thisMonthQuota')
+  return t('payment.planCard.periodQuota')
+})
+const selectedPlanGuardrails = computed(() => selectedPlan.value ? getPlanGuardrails(selectedPlan.value) : [])
 
 // Renewal modal state
 const showRenewalModal = ref(false)
 const renewGroupId = ref<number | null>(null)
+const renewInitialPlanId = ref<number | null>(null)
 const renewalPlans = computed(() => {
   if (renewGroupId.value == null) return []
   return checkout.value.plans.filter(p => p.group_id === renewGroupId.value)
@@ -688,11 +653,12 @@ const renewalPlans = computed(() => {
 
 const planValiditySuffix = computed(() => {
   if (!selectedPlan.value) return ''
-  const u = selectedPlan.value.validity_unit || 'day'
-  if (u === 'month') return t('payment.perMonth')
-  if (u === 'year') return t('payment.perYear')
-  return `${selectedPlan.value.validity_days}${t('payment.days')}`
+  return formatSubscriptionPlanValiditySuffix(selectedPlan.value, t, i18n.locale.value)
 })
+
+function guardrailLabel(period: QuotaGuardrailPeriod): string {
+  return period === 'daily' ? t('payment.planCard.dailyLimit') : t('payment.planCard.weeklyLimit')
+}
 
 function selectPlan(plan: SubscriptionPlan) {
   selectedPlan.value = plan
@@ -702,6 +668,7 @@ function selectPlan(plan: SubscriptionPlan) {
 function selectPlanFromModal(plan: SubscriptionPlan) {
   showRenewalModal.value = false
   renewGroupId.value = null
+  renewInitialPlanId.value = null
   selectedPlan.value = plan
   errorMessage.value = ''
 }
@@ -709,6 +676,7 @@ function selectPlanFromModal(plan: SubscriptionPlan) {
 function closeRenewalModal() {
   showRenewalModal.value = false
   renewGroupId.value = null
+  renewInitialPlanId.value = null
 }
 
 async function handleSubmitRecharge() {
@@ -870,6 +838,7 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
       openWindow(decision.paymentState.payUrl)
     }
   } catch (err: unknown) {
+    recordClientDiagnostic('payment.create_order', err)
     const apiErr = err as Record<string, unknown>
     if (apiErr.reason === 'TOO_MANY_PENDING') {
       const metadata = apiErr.metadata as Record<string, unknown> | undefined
@@ -892,7 +861,7 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
         normalizeVisibleMethod(options.paymentType || selectedMethod.value) || selectedMethod.value,
       )
       if (!handled) {
-        errorMessage.value = extractI18nErrorMessage(err, t, 'payment.errors', extractApiErrorMessage(err, t('payment.result.failed')))
+        errorMessage.value = extractSafeI18nErrorMessage(err, t, 'payment.errors', t('payment.result.failed'))
         errorHintMessage.value = ''
       }
       if (handled) {
@@ -922,21 +891,14 @@ function shouldFallbackToDesktopQr(err: unknown, paymentMethod: string, attempte
   const reason = typeof err === 'object' && err && 'reason' in err && typeof err.reason === 'string'
     ? err.reason
     : ''
-  const message = err instanceof Error
-    ? err.message
-    : (typeof err === 'object' && err && 'message' in err && typeof err.message === 'string'
-      ? err.message
-      : '')
-  const normalizedMessage = message.toLowerCase()
 
   if (normalizedMethod === 'wxpay') {
     return reason === 'WECHAT_H5_NOT_AUTHORIZED'
       || reason === 'WECHAT_PAYMENT_MP_NOT_CONFIGURED'
+      || reason === 'WECHAT_JSAPI_UNAVAILABLE'
       || reason === 'WECHAT_JSAPI_FAILED'
       || reason === 'PAYMENT_GATEWAY_ERROR'
       || reason === 'UNHANDLED_PAYMENT_SCENARIO'
-      || normalizedMessage.includes('weixinjsbridge is unavailable')
-      || normalizedMessage.includes('wechat_jsapi_unavailable')
   }
 
   if (normalizedMethod === 'alipay') {
@@ -1092,21 +1054,38 @@ onMounted(async () => {
     if (checkout.value.balance_disabled) {
       activeTab.value = 'subscription'
     }
-    // Handle renewal navigation: ?tab=subscription&group=123
+    // Handle renewal navigation: ?tab=subscription&plan_id=123 or ?tab=subscription&group=123
     if (route.query.tab === 'subscription') {
       activeTab.value = 'subscription'
-      if (route.query.group) {
+      const planId = Number(route.query.plan_id)
+      if (Number.isFinite(planId) && planId > 0) {
+        const plan = checkout.value.plans.find(item => item.id === planId) || null
+        if (plan) {
+          const renewalCandidates = checkout.value.plans.filter(item => item.group_id === plan.group_id)
+          if (renewalCandidates.length > 1) {
+            renewGroupId.value = plan.group_id
+            renewInitialPlanId.value = plan.id
+            showRenewalModal.value = true
+          } else {
+            selectedPlan.value = plan
+          }
+        }
+      } else if (route.query.group) {
         const groupId = Number(route.query.group)
         const groupPlans = checkout.value.plans.filter(p => p.group_id === groupId)
         if (groupPlans.length === 1) {
           selectedPlan.value = groupPlans[0]
         } else if (groupPlans.length > 1) {
           renewGroupId.value = groupId
+          renewInitialPlanId.value = null
           showRenewalModal.value = true
         }
       }
     }
-  } catch (err: unknown) { appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error'))) }
+  } catch (err: unknown) {
+    recordClientDiagnostic('payment.checkout_info', err)
+    appStore.showError(extractSafeI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
+  }
   finally { loading.value = false }
   // Fetch active subscriptions (uses cache, non-blocking)
   subscriptionStore.fetchActiveSubscriptions().catch(() => {})

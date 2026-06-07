@@ -293,6 +293,80 @@ describe('useAppStore', () => {
 
       expect(store.publicSettingsLoaded).toBe(false)
       expect(store.cachedPublicSettings).toBeNull()
+      expect(windowAny.__APP_CONFIG__).toBeUndefined()
+    })
+
+    it('clearPublicSettingsCache 后普通加载不会复用旧注入配置', async () => {
+      const windowAny = window as any
+      windowAny.__APP_CONFIG__ = {
+        site_name: 'Stale Site',
+        site_logo: '',
+        version: '0.9.0',
+        contact_info: '',
+        api_base_url: '',
+        doc_url: '',
+      }
+
+      const store = useAppStore()
+      store.initFromInjectedConfig()
+      store.clearPublicSettingsCache()
+
+      vi.mocked(getPublicSettings).mockResolvedValue({
+        registration_enabled: false,
+        email_verify_enabled: false,
+        force_email_on_third_party_signup: false,
+        registration_email_suffix_whitelist: [],
+        promo_code_enabled: true,
+        password_reset_enabled: false,
+        invitation_code_enabled: false,
+        totp_enabled: false,
+        login_agreement_enabled: false,
+        login_agreement_mode: 'modal',
+        login_agreement_updated_at: '',
+        login_agreement_revision: '',
+        login_agreement_documents: [],
+        turnstile_enabled: false,
+        turnstile_site_key: '',
+        site_name: 'Fresh Site',
+        site_logo: '',
+        site_subtitle: '',
+        api_base_url: '',
+        contact_info: '',
+        doc_url: '',
+        home_content: '',
+        purchase_subscription_enabled: false,
+        purchase_subscription_url: '',
+        table_default_page_size: 20,
+        table_page_size_options: [10, 20, 50, 100],
+        custom_menu_items: [],
+        custom_endpoints: [],
+        linuxdo_oauth_enabled: false,
+        dingtalk_oauth_enabled: false,
+        wechat_oauth_enabled: false,
+        wechat_oauth_open_enabled: false,
+        wechat_oauth_mp_enabled: false,
+        wechat_oauth_mobile_enabled: false,
+        oidc_oauth_enabled: false,
+        oidc_oauth_provider_name: 'OIDC',
+        github_oauth_enabled: false,
+        google_oauth_enabled: false,
+        backend_mode_enabled: false,
+        version: '1.0.0',
+        payment_enabled: false,
+        risk_control_enabled: false,
+        balance_low_notify_enabled: false,
+        account_quota_notify_enabled: false,
+        balance_low_notify_threshold: 0,
+        balance_low_notify_recharge_url: '',
+        affiliate_enabled: false,
+      })
+
+      const settings = await store.fetchPublicSettings()
+
+      expect(getPublicSettings).toHaveBeenCalledTimes(1)
+      expect(settings?.site_name).toBe('Fresh Site')
+      expect(store.siteName).toBe('Fresh Site')
+      expect(windowAny.__APP_CONFIG__.site_name).toBe('Fresh Site')
     })
 
     it('fetchPublicSettings(force) 会同步更新运行时注入配置', async () => {
@@ -303,6 +377,12 @@ describe('useAppStore', () => {
         promo_code_enabled: true,
         password_reset_enabled: false,
         invitation_code_enabled: false,
+        totp_enabled: false,
+        login_agreement_enabled: false,
+        login_agreement_mode: 'modal',
+        login_agreement_updated_at: '',
+        login_agreement_revision: '',
+        login_agreement_documents: [],
         turnstile_enabled: false,
         turnstile_site_key: '',
         site_name: 'Updated Site',
@@ -312,7 +392,6 @@ describe('useAppStore', () => {
         contact_info: '',
         doc_url: '',
         home_content: '',
-        hide_ccs_import_button: false,
         purchase_subscription_enabled: false,
         purchase_subscription_url: '',
         table_default_page_size: 1000,
@@ -320,8 +399,24 @@ describe('useAppStore', () => {
         custom_menu_items: [],
         custom_endpoints: [],
         linuxdo_oauth_enabled: false,
+        dingtalk_oauth_enabled: false,
+        wechat_oauth_enabled: false,
+        wechat_oauth_open_enabled: false,
+        wechat_oauth_mp_enabled: false,
+        wechat_oauth_mobile_enabled: false,
+        oidc_oauth_enabled: false,
+        oidc_oauth_provider_name: 'OIDC',
+        github_oauth_enabled: false,
+        google_oauth_enabled: false,
         backend_mode_enabled: false,
-        version: '1.0.0'
+        version: '1.0.0',
+        payment_enabled: false,
+        risk_control_enabled: false,
+        balance_low_notify_enabled: false,
+        account_quota_notify_enabled: false,
+        balance_low_notify_threshold: 0,
+        balance_low_notify_recharge_url: '',
+        affiliate_enabled: false,
       })
 
       const store = useAppStore()
@@ -331,6 +426,26 @@ describe('useAppStore', () => {
       expect((window as any).__APP_CONFIG__.table_page_size_options).toEqual([20, 100, 1000])
       expect(localStorage.getItem('table-page-size')).toBeNull()
       expect(localStorage.getItem('table-page-size-source')).toBeNull()
+    })
+
+    it('缓存兜底公开设置保持后端公开契约字段完整', async () => {
+      const store = useAppStore()
+      store.publicSettingsLoaded = true
+
+      const settings = await store.fetchPublicSettings()
+
+      expect(settings).toMatchObject({
+        totp_enabled: false,
+        login_agreement_enabled: false,
+        login_agreement_mode: 'modal',
+        login_agreement_updated_at: '',
+        login_agreement_revision: '',
+        login_agreement_documents: [],
+        purchase_subscription_enabled: false,
+        purchase_subscription_url: '',
+        dingtalk_oauth_enabled: false,
+        balance_low_notify_recharge_url: '',
+      })
     })
   })
 })

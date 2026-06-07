@@ -95,6 +95,34 @@ func TestUserRepositoryCreateRejectsNormalizedEmailDuplicate(t *testing.T) {
 	require.ErrorIs(t, err, service.ErrEmailExists)
 }
 
+func TestUserRepositoryCreateUsesExistingTxContext(t *testing.T) {
+	repo, client := newUserEntRepo(t)
+	ctx := context.Background()
+	tx, err := client.Tx(ctx)
+	require.NoError(t, err)
+	defer func() {
+		if tx != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	user := &service.User{
+		Email:        "tx-create@example.com",
+		Username:     "tx-create-user",
+		PasswordHash: "hash",
+		Role:         service.RoleUser,
+		Status:       service.StatusActive,
+	}
+	require.NoError(t, repo.Create(dbent.NewTxContext(ctx, tx), user))
+	require.NotZero(t, user.ID)
+
+	require.NoError(t, tx.Rollback())
+	tx = nil
+
+	_, err = repo.GetByID(ctx, user.ID)
+	require.ErrorIs(t, err, service.ErrUserNotFound)
+}
+
 func TestUserRepositoryUpdateRejectsNormalizedEmailDuplicate(t *testing.T) {
 	repo, _ := newUserEntRepo(t)
 	ctx := context.Background()

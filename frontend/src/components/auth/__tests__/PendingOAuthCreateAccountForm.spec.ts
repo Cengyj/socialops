@@ -40,6 +40,7 @@ describe('PendingOAuthCreateAccountForm', () => {
     sendPendingOAuthVerifyCode.mockReset()
     getPublicSettings.mockReset()
     showError.mockReset()
+    window.__SOCIALOPS_CLIENT_DIAGNOSTICS__ = []
     getPublicSettings.mockResolvedValue({
       turnstile_enabled: false,
       turnstile_site_key: ''
@@ -158,8 +159,11 @@ describe('PendingOAuthCreateAccountForm', () => {
     await wrapper.get('[data-testid="linuxdo-create-account-send-code"]').trigger('click')
     await flushPromises()
 
-    expect(showError).toHaveBeenCalledWith('send failed')
+    expect(showError).toHaveBeenCalledWith('auth.sendCodeFailed')
     expect(wrapper.text()).not.toContain('send failed')
+    expect(window.__SOCIALOPS_CLIENT_DIAGNOSTICS__?.at(-1)?.context).toBe(
+      'auth.oauth.create_account.send_code'
+    )
   })
 
   it('requires a turnstile token before sending a verify code when turnstile is enabled', async () => {

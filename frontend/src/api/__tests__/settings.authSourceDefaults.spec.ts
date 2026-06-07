@@ -12,14 +12,14 @@ describe("admin settings auth source defaults helpers", () => {
       auth_source_default_email_balance: 9.5,
       auth_source_default_email_concurrency: 3,
       auth_source_default_email_subscriptions: [
-        { group_id: 1, validity_days: 30 },
+        { plan_id: 101, group_id: 1, validity_days: 30 },
       ],
       auth_source_default_email_grant_on_signup: false,
       auth_source_default_email_grant_on_first_bind: true,
       auth_source_default_linuxdo_balance: 6,
       auth_source_default_linuxdo_concurrency: 8,
       auth_source_default_linuxdo_subscriptions: [
-        { group_id: 2, validity_days: 60 },
+        { plan_id: 102, group_id: 2, validity_days: 60 },
       ],
       auth_source_default_linuxdo_grant_on_signup: true,
       auth_source_default_linuxdo_grant_on_first_bind: false,
@@ -28,14 +28,14 @@ describe("admin settings auth source defaults helpers", () => {
     expect(state.email).toEqual({
       balance: 9.5,
       concurrency: 3,
-      subscriptions: [{ group_id: 1, validity_days: 30 }],
+      subscriptions: [{ plan_id: 101, validity_days: 30 }],
       grant_on_signup: false,
       grant_on_first_bind: true,
     });
     expect(state.linuxdo).toEqual({
       balance: 6,
       concurrency: 8,
-      subscriptions: [{ group_id: 2, validity_days: 60 }],
+      subscriptions: [{ plan_id: 102, validity_days: 60 }],
       grant_on_signup: true,
       grant_on_first_bind: false,
     });
@@ -64,6 +64,18 @@ describe("admin settings auth source defaults helpers", () => {
     expect(state.wechat.grant_on_signup).toBe(false);
   });
 
+  it("keeps legacy group-only default subscriptions compatible", () => {
+    const state = buildAuthSourceDefaultsState({
+      auth_source_default_email_subscriptions: [
+        { group_id: 1, validity_days: 30 },
+      ],
+    });
+
+    expect(state.email.subscriptions).toEqual([
+      { group_id: 1, validity_days: 30 },
+    ]);
+  });
+
   it("appends auth source defaults back onto update payload", () => {
     const payload: UpdateSettingsRequest = {
       site_name: "SocialOps",
@@ -73,7 +85,7 @@ describe("admin settings auth source defaults helpers", () => {
       email: {
         balance: 1.25,
         concurrency: 2,
-        subscriptions: [{ group_id: 3, validity_days: 7 }],
+        subscriptions: [{ plan_id: 103, group_id: 3, validity_days: 7 }],
         grant_on_signup: true,
         grant_on_first_bind: false,
       },
@@ -87,7 +99,7 @@ describe("admin settings auth source defaults helpers", () => {
       oidc: {
         balance: 4,
         concurrency: 9,
-        subscriptions: [{ group_id: 9, validity_days: 90 }],
+        subscriptions: [{ plan_id: 109, group_id: 9, validity_days: 90 }],
         grant_on_signup: true,
         grant_on_first_bind: true,
       },
@@ -105,7 +117,7 @@ describe("admin settings auth source defaults helpers", () => {
       auth_source_default_email_balance: 1.25,
       auth_source_default_email_concurrency: 2,
       auth_source_default_email_subscriptions: [
-        { group_id: 3, validity_days: 7 },
+        { plan_id: 103, validity_days: 7 },
       ],
       auth_source_default_email_grant_on_signup: true,
       auth_source_default_email_grant_on_first_bind: false,
@@ -117,7 +129,7 @@ describe("admin settings auth source defaults helpers", () => {
       auth_source_default_oidc_balance: 4,
       auth_source_default_oidc_concurrency: 9,
       auth_source_default_oidc_subscriptions: [
-        { group_id: 9, validity_days: 90 },
+        { plan_id: 109, validity_days: 90 },
       ],
       auth_source_default_oidc_grant_on_signup: true,
       auth_source_default_oidc_grant_on_first_bind: true,

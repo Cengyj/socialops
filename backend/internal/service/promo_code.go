@@ -64,10 +64,11 @@ type CreatePromoCodeInput struct {
 
 // UpdatePromoCodeInput 更新优惠码输入
 type UpdatePromoCodeInput struct {
-	Code        *string
-	BonusAmount *float64
-	MaxUses     *int
-	Status      *string
-	ExpiresAt   *time.Time
-	Notes       *string
+	Code         *string
+	BonusAmount  *float64
+	MaxUses      *int
+	Status       *string
+	ExpiresAtSet bool
+	ExpiresAt    *time.Time
+	Notes        *string
 }

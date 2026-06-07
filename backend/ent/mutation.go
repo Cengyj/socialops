@@ -16306,6 +16306,8 @@ type RedeemCodeMutation struct {
 	notes            *string
 	created_at       *time.Time
 	expires_at       *time.Time
+	plan_id          *int64
+	addplan_id       *int64
 	validity_days    *int
 	addvalidity_days *int
 	clearedFields    map[string]struct{}
@@ -16861,6 +16863,76 @@ func (m *RedeemCodeMutation) ResetGroupID() {
 	delete(m.clearedFields, redeemcode.FieldGroupID)
 }
 
+// SetPlanID sets the "plan_id" field.
+func (m *RedeemCodeMutation) SetPlanID(i int64) {
+	m.plan_id = &i
+	m.addplan_id = nil
+}
+
+// PlanID returns the value of the "plan_id" field in the mutation.
+func (m *RedeemCodeMutation) PlanID() (r int64, exists bool) {
+	v := m.plan_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPlanID returns the old "plan_id" field's value of the RedeemCode entity.
+// If the RedeemCode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RedeemCodeMutation) OldPlanID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPlanID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPlanID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPlanID: %w", err)
+	}
+	return oldValue.PlanID, nil
+}
+
+// AddPlanID adds i to the "plan_id" field.
+func (m *RedeemCodeMutation) AddPlanID(i int64) {
+	if m.addplan_id != nil {
+		*m.addplan_id += i
+	} else {
+		m.addplan_id = &i
+	}
+}
+
+// AddedPlanID returns the value that was added to the "plan_id" field in this mutation.
+func (m *RedeemCodeMutation) AddedPlanID() (r int64, exists bool) {
+	v := m.addplan_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearPlanID clears the value of the "plan_id" field.
+func (m *RedeemCodeMutation) ClearPlanID() {
+	m.plan_id = nil
+	m.addplan_id = nil
+	m.clearedFields[redeemcode.FieldPlanID] = struct{}{}
+}
+
+// PlanIDCleared returns if the "plan_id" field was cleared in this mutation.
+func (m *RedeemCodeMutation) PlanIDCleared() bool {
+	_, ok := m.clearedFields[redeemcode.FieldPlanID]
+	return ok
+}
+
+// ResetPlanID resets all changes to the "plan_id" field.
+func (m *RedeemCodeMutation) ResetPlanID() {
+	m.plan_id = nil
+	m.addplan_id = nil
+	delete(m.clearedFields, redeemcode.FieldPlanID)
+}
+
 // SetValidityDays sets the "validity_days" field.
 func (m *RedeemCodeMutation) SetValidityDays(i int) {
 	m.validity_days = &i
@@ -17018,7 +17090,7 @@ func (m *RedeemCodeMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *RedeemCodeMutation) Fields() []string {
-	fields := make([]string, 0, 11)
+	fields := make([]string, 0, 12)
 	if m.code != nil {
 		fields = append(fields, redeemcode.FieldCode)
 	}
@@ -17048,6 +17120,9 @@ func (m *RedeemCodeMutation) Fields() []string {
 	}
 	if m.group != nil {
 		fields = append(fields, redeemcode.FieldGroupID)
+	}
+	if m.plan_id != nil {
+		fields = append(fields, redeemcode.FieldPlanID)
 	}
 	if m.validity_days != nil {
 		fields = append(fields, redeemcode.FieldValidityDays)
@@ -17080,6 +17155,8 @@ func (m *RedeemCodeMutation) Field(name string) (ent.Value, bool) {
 		return m.ExpiresAt()
 	case redeemcode.FieldGroupID:
 		return m.GroupID()
+	case redeemcode.FieldPlanID:
+		return m.PlanID()
 	case redeemcode.FieldValidityDays:
 		return m.ValidityDays()
 	}
@@ -17111,6 +17188,8 @@ func (m *RedeemCodeMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldExpiresAt(ctx)
 	case redeemcode.FieldGroupID:
 		return m.OldGroupID(ctx)
+	case redeemcode.FieldPlanID:
+		return m.OldPlanID(ctx)
 	case redeemcode.FieldValidityDays:
 		return m.OldValidityDays(ctx)
 	}
@@ -17192,6 +17271,13 @@ func (m *RedeemCodeMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetGroupID(v)
 		return nil
+	case redeemcode.FieldPlanID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPlanID(v)
+		return nil
 	case redeemcode.FieldValidityDays:
 		v, ok := value.(int)
 		if !ok {
@@ -17210,6 +17296,9 @@ func (m *RedeemCodeMutation) AddedFields() []string {
 	if m.addvalue != nil {
 		fields = append(fields, redeemcode.FieldValue)
 	}
+	if m.addplan_id != nil {
+		fields = append(fields, redeemcode.FieldPlanID)
+	}
 	if m.addvalidity_days != nil {
 		fields = append(fields, redeemcode.FieldValidityDays)
 	}
@@ -17223,6 +17312,8 @@ func (m *RedeemCodeMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case redeemcode.FieldValue:
 		return m.AddedValue()
+	case redeemcode.FieldPlanID:
+		return m.AddedPlanID()
 	case redeemcode.FieldValidityDays:
 		return m.AddedValidityDays()
 	}
@@ -17240,6 +17331,13 @@ func (m *RedeemCodeMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddValue(v)
+		return nil
+	case redeemcode.FieldPlanID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPlanID(v)
 		return nil
 	case redeemcode.FieldValidityDays:
 		v, ok := value.(int)
@@ -17271,6 +17369,9 @@ func (m *RedeemCodeMutation) ClearedFields() []string {
 	if m.FieldCleared(redeemcode.FieldGroupID) {
 		fields = append(fields, redeemcode.FieldGroupID)
 	}
+	if m.FieldCleared(redeemcode.FieldPlanID) {
+		fields = append(fields, redeemcode.FieldPlanID)
+	}
 	return fields
 }
 
@@ -17299,6 +17400,9 @@ func (m *RedeemCodeMutation) ClearField(name string) error {
 		return nil
 	case redeemcode.FieldGroupID:
 		m.ClearGroupID()
+		return nil
+	case redeemcode.FieldPlanID:
+		m.ClearPlanID()
 		return nil
 	}
 	return fmt.Errorf("unknown RedeemCode nullable field %s", name)
@@ -17337,6 +17441,9 @@ func (m *RedeemCodeMutation) ResetField(name string) error {
 		return nil
 	case redeemcode.FieldGroupID:
 		m.ResetGroupID()
+		return nil
+	case redeemcode.FieldPlanID:
+		m.ResetPlanID()
 		return nil
 	case redeemcode.FieldValidityDays:
 		m.ResetValidityDays()
@@ -18362,36 +18469,45 @@ func (m *SettingMutation) ResetEdge(name string) error {
 // SocialAccountMutation represents an operation that mutates the SocialAccount nodes in the graph.
 type SocialAccountMutation struct {
 	config
-	op                   Op
-	typ                  string
-	id                   *int64
-	created_at           *time.Time
-	updated_at           *time.Time
-	deleted_at           *time.Time
-	name                 *string
-	platform             *string
-	platform_key         *string
-	name_key             *string
-	account_id           *string
-	password             *string
-	phone                *string
-	email                *string
-	email_password       *string
-	account_status       *string
-	task_status          *string
-	task_message         *string
-	source               *string
-	bound_ip             *string
-	remark               *string
-	clearedFields        map[string]struct{}
-	assigned_user        *int64
-	clearedassigned_user bool
-	task_logs            map[int64]struct{}
-	removedtask_logs     map[int64]struct{}
-	clearedtask_logs     bool
-	done                 bool
-	oldValue             func(context.Context) (*SocialAccount, error)
-	predicates           []predicate.SocialAccount
+	op                        Op
+	typ                       string
+	id                        *int64
+	created_at                *time.Time
+	updated_at                *time.Time
+	deleted_at                *time.Time
+	name                      *string
+	platform                  *string
+	platform_key              *string
+	name_key                  *string
+	identity_kind             *string
+	identity_key              *string
+	platform_user_id          *string
+	password                  *string
+	phone                     *string
+	email                     *string
+	email_password            *string
+	two_factor                *string
+	backup_code               *string
+	email_client_id           *string
+	email_token               *string
+	registration_ip           *string
+	auth_cookie               *string
+	execution_auth            *string
+	account_status            *string
+	task_status               *string
+	task_message              *string
+	default_proxy_snapshot    *string
+	user_workbench_deleted_at *time.Time
+	remark                    *string
+	clearedFields             map[string]struct{}
+	assigned_user             *int64
+	clearedassigned_user      bool
+	task_logs                 map[int64]struct{}
+	removedtask_logs          map[int64]struct{}
+	clearedtask_logs          bool
+	done                      bool
+	oldValue                  func(context.Context) (*SocialAccount, error)
+	predicates                []predicate.SocialAccount
 }
 
 var _ ent.Mutation = (*SocialAccountMutation)(nil)
@@ -18757,53 +18873,125 @@ func (m *SocialAccountMutation) ResetNameKey() {
 	m.name_key = nil
 }
 
-// SetAccountID sets the "account_id" field.
-func (m *SocialAccountMutation) SetAccountID(s string) {
-	m.account_id = &s
+// SetIdentityKind sets the "identity_kind" field.
+func (m *SocialAccountMutation) SetIdentityKind(s string) {
+	m.identity_kind = &s
 }
 
-// AccountID returns the value of the "account_id" field in the mutation.
-func (m *SocialAccountMutation) AccountID() (r string, exists bool) {
-	v := m.account_id
+// IdentityKind returns the value of the "identity_kind" field in the mutation.
+func (m *SocialAccountMutation) IdentityKind() (r string, exists bool) {
+	v := m.identity_kind
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldAccountID returns the old "account_id" field's value of the SocialAccount entity.
+// OldIdentityKind returns the old "identity_kind" field's value of the SocialAccount entity.
 // If the SocialAccount object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SocialAccountMutation) OldAccountID(ctx context.Context) (v *string, err error) {
+func (m *SocialAccountMutation) OldIdentityKind(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldAccountID is only allowed on UpdateOne operations")
+		return v, errors.New("OldIdentityKind is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldAccountID requires an ID field in the mutation")
+		return v, errors.New("OldIdentityKind requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldAccountID: %w", err)
+		return v, fmt.Errorf("querying old value for OldIdentityKind: %w", err)
 	}
-	return oldValue.AccountID, nil
+	return oldValue.IdentityKind, nil
 }
 
-// ClearAccountID clears the value of the "account_id" field.
-func (m *SocialAccountMutation) ClearAccountID() {
-	m.account_id = nil
-	m.clearedFields[socialaccount.FieldAccountID] = struct{}{}
+// ResetIdentityKind resets all changes to the "identity_kind" field.
+func (m *SocialAccountMutation) ResetIdentityKind() {
+	m.identity_kind = nil
 }
 
-// AccountIDCleared returns if the "account_id" field was cleared in this mutation.
-func (m *SocialAccountMutation) AccountIDCleared() bool {
-	_, ok := m.clearedFields[socialaccount.FieldAccountID]
+// SetIdentityKey sets the "identity_key" field.
+func (m *SocialAccountMutation) SetIdentityKey(s string) {
+	m.identity_key = &s
+}
+
+// IdentityKey returns the value of the "identity_key" field in the mutation.
+func (m *SocialAccountMutation) IdentityKey() (r string, exists bool) {
+	v := m.identity_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIdentityKey returns the old "identity_key" field's value of the SocialAccount entity.
+// If the SocialAccount object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SocialAccountMutation) OldIdentityKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIdentityKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIdentityKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIdentityKey: %w", err)
+	}
+	return oldValue.IdentityKey, nil
+}
+
+// ResetIdentityKey resets all changes to the "identity_key" field.
+func (m *SocialAccountMutation) ResetIdentityKey() {
+	m.identity_key = nil
+}
+
+// SetPlatformUserID sets the "platform_user_id" field.
+func (m *SocialAccountMutation) SetPlatformUserID(s string) {
+	m.platform_user_id = &s
+}
+
+// PlatformUserID returns the value of the "platform_user_id" field in the mutation.
+func (m *SocialAccountMutation) PlatformUserID() (r string, exists bool) {
+	v := m.platform_user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPlatformUserID returns the old "platform_user_id" field's value of the SocialAccount entity.
+// If the SocialAccount object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SocialAccountMutation) OldPlatformUserID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPlatformUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPlatformUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPlatformUserID: %w", err)
+	}
+	return oldValue.PlatformUserID, nil
+}
+
+// ClearPlatformUserID clears the value of the "platform_user_id" field.
+func (m *SocialAccountMutation) ClearPlatformUserID() {
+	m.platform_user_id = nil
+	m.clearedFields[socialaccount.FieldPlatformUserID] = struct{}{}
+}
+
+// PlatformUserIDCleared returns if the "platform_user_id" field was cleared in this mutation.
+func (m *SocialAccountMutation) PlatformUserIDCleared() bool {
+	_, ok := m.clearedFields[socialaccount.FieldPlatformUserID]
 	return ok
 }
 
-// ResetAccountID resets all changes to the "account_id" field.
-func (m *SocialAccountMutation) ResetAccountID() {
-	m.account_id = nil
-	delete(m.clearedFields, socialaccount.FieldAccountID)
+// ResetPlatformUserID resets all changes to the "platform_user_id" field.
+func (m *SocialAccountMutation) ResetPlatformUserID() {
+	m.platform_user_id = nil
+	delete(m.clearedFields, socialaccount.FieldPlatformUserID)
 }
 
 // SetPassword sets the "password" field.
@@ -19002,6 +19190,349 @@ func (m *SocialAccountMutation) ResetEmailPassword() {
 	delete(m.clearedFields, socialaccount.FieldEmailPassword)
 }
 
+// SetTwoFactor sets the "two_factor" field.
+func (m *SocialAccountMutation) SetTwoFactor(s string) {
+	m.two_factor = &s
+}
+
+// TwoFactor returns the value of the "two_factor" field in the mutation.
+func (m *SocialAccountMutation) TwoFactor() (r string, exists bool) {
+	v := m.two_factor
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTwoFactor returns the old "two_factor" field's value of the SocialAccount entity.
+// If the SocialAccount object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SocialAccountMutation) OldTwoFactor(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTwoFactor is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTwoFactor requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTwoFactor: %w", err)
+	}
+	return oldValue.TwoFactor, nil
+}
+
+// ClearTwoFactor clears the value of the "two_factor" field.
+func (m *SocialAccountMutation) ClearTwoFactor() {
+	m.two_factor = nil
+	m.clearedFields[socialaccount.FieldTwoFactor] = struct{}{}
+}
+
+// TwoFactorCleared returns if the "two_factor" field was cleared in this mutation.
+func (m *SocialAccountMutation) TwoFactorCleared() bool {
+	_, ok := m.clearedFields[socialaccount.FieldTwoFactor]
+	return ok
+}
+
+// ResetTwoFactor resets all changes to the "two_factor" field.
+func (m *SocialAccountMutation) ResetTwoFactor() {
+	m.two_factor = nil
+	delete(m.clearedFields, socialaccount.FieldTwoFactor)
+}
+
+// SetBackupCode sets the "backup_code" field.
+func (m *SocialAccountMutation) SetBackupCode(s string) {
+	m.backup_code = &s
+}
+
+// BackupCode returns the value of the "backup_code" field in the mutation.
+func (m *SocialAccountMutation) BackupCode() (r string, exists bool) {
+	v := m.backup_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBackupCode returns the old "backup_code" field's value of the SocialAccount entity.
+// If the SocialAccount object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SocialAccountMutation) OldBackupCode(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBackupCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBackupCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBackupCode: %w", err)
+	}
+	return oldValue.BackupCode, nil
+}
+
+// ClearBackupCode clears the value of the "backup_code" field.
+func (m *SocialAccountMutation) ClearBackupCode() {
+	m.backup_code = nil
+	m.clearedFields[socialaccount.FieldBackupCode] = struct{}{}
+}
+
+// BackupCodeCleared returns if the "backup_code" field was cleared in this mutation.
+func (m *SocialAccountMutation) BackupCodeCleared() bool {
+	_, ok := m.clearedFields[socialaccount.FieldBackupCode]
+	return ok
+}
+
+// ResetBackupCode resets all changes to the "backup_code" field.
+func (m *SocialAccountMutation) ResetBackupCode() {
+	m.backup_code = nil
+	delete(m.clearedFields, socialaccount.FieldBackupCode)
+}
+
+// SetEmailClientID sets the "email_client_id" field.
+func (m *SocialAccountMutation) SetEmailClientID(s string) {
+	m.email_client_id = &s
+}
+
+// EmailClientID returns the value of the "email_client_id" field in the mutation.
+func (m *SocialAccountMutation) EmailClientID() (r string, exists bool) {
+	v := m.email_client_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEmailClientID returns the old "email_client_id" field's value of the SocialAccount entity.
+// If the SocialAccount object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SocialAccountMutation) OldEmailClientID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEmailClientID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEmailClientID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEmailClientID: %w", err)
+	}
+	return oldValue.EmailClientID, nil
+}
+
+// ClearEmailClientID clears the value of the "email_client_id" field.
+func (m *SocialAccountMutation) ClearEmailClientID() {
+	m.email_client_id = nil
+	m.clearedFields[socialaccount.FieldEmailClientID] = struct{}{}
+}
+
+// EmailClientIDCleared returns if the "email_client_id" field was cleared in this mutation.
+func (m *SocialAccountMutation) EmailClientIDCleared() bool {
+	_, ok := m.clearedFields[socialaccount.FieldEmailClientID]
+	return ok
+}
+
+// ResetEmailClientID resets all changes to the "email_client_id" field.
+func (m *SocialAccountMutation) ResetEmailClientID() {
+	m.email_client_id = nil
+	delete(m.clearedFields, socialaccount.FieldEmailClientID)
+}
+
+// SetEmailToken sets the "email_token" field.
+func (m *SocialAccountMutation) SetEmailToken(s string) {
+	m.email_token = &s
+}
+
+// EmailToken returns the value of the "email_token" field in the mutation.
+func (m *SocialAccountMutation) EmailToken() (r string, exists bool) {
+	v := m.email_token
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEmailToken returns the old "email_token" field's value of the SocialAccount entity.
+// If the SocialAccount object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SocialAccountMutation) OldEmailToken(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEmailToken is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEmailToken requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEmailToken: %w", err)
+	}
+	return oldValue.EmailToken, nil
+}
+
+// ClearEmailToken clears the value of the "email_token" field.
+func (m *SocialAccountMutation) ClearEmailToken() {
+	m.email_token = nil
+	m.clearedFields[socialaccount.FieldEmailToken] = struct{}{}
+}
+
+// EmailTokenCleared returns if the "email_token" field was cleared in this mutation.
+func (m *SocialAccountMutation) EmailTokenCleared() bool {
+	_, ok := m.clearedFields[socialaccount.FieldEmailToken]
+	return ok
+}
+
+// ResetEmailToken resets all changes to the "email_token" field.
+func (m *SocialAccountMutation) ResetEmailToken() {
+	m.email_token = nil
+	delete(m.clearedFields, socialaccount.FieldEmailToken)
+}
+
+// SetRegistrationIP sets the "registration_ip" field.
+func (m *SocialAccountMutation) SetRegistrationIP(s string) {
+	m.registration_ip = &s
+}
+
+// RegistrationIP returns the value of the "registration_ip" field in the mutation.
+func (m *SocialAccountMutation) RegistrationIP() (r string, exists bool) {
+	v := m.registration_ip
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRegistrationIP returns the old "registration_ip" field's value of the SocialAccount entity.
+// If the SocialAccount object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SocialAccountMutation) OldRegistrationIP(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRegistrationIP is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRegistrationIP requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRegistrationIP: %w", err)
+	}
+	return oldValue.RegistrationIP, nil
+}
+
+// ClearRegistrationIP clears the value of the "registration_ip" field.
+func (m *SocialAccountMutation) ClearRegistrationIP() {
+	m.registration_ip = nil
+	m.clearedFields[socialaccount.FieldRegistrationIP] = struct{}{}
+}
+
+// RegistrationIPCleared returns if the "registration_ip" field was cleared in this mutation.
+func (m *SocialAccountMutation) RegistrationIPCleared() bool {
+	_, ok := m.clearedFields[socialaccount.FieldRegistrationIP]
+	return ok
+}
+
+// ResetRegistrationIP resets all changes to the "registration_ip" field.
+func (m *SocialAccountMutation) ResetRegistrationIP() {
+	m.registration_ip = nil
+	delete(m.clearedFields, socialaccount.FieldRegistrationIP)
+}
+
+// SetAuthCookie sets the "auth_cookie" field.
+func (m *SocialAccountMutation) SetAuthCookie(s string) {
+	m.auth_cookie = &s
+}
+
+// AuthCookie returns the value of the "auth_cookie" field in the mutation.
+func (m *SocialAccountMutation) AuthCookie() (r string, exists bool) {
+	v := m.auth_cookie
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAuthCookie returns the old "auth_cookie" field's value of the SocialAccount entity.
+// If the SocialAccount object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SocialAccountMutation) OldAuthCookie(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAuthCookie is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAuthCookie requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAuthCookie: %w", err)
+	}
+	return oldValue.AuthCookie, nil
+}
+
+// ClearAuthCookie clears the value of the "auth_cookie" field.
+func (m *SocialAccountMutation) ClearAuthCookie() {
+	m.auth_cookie = nil
+	m.clearedFields[socialaccount.FieldAuthCookie] = struct{}{}
+}
+
+// AuthCookieCleared returns if the "auth_cookie" field was cleared in this mutation.
+func (m *SocialAccountMutation) AuthCookieCleared() bool {
+	_, ok := m.clearedFields[socialaccount.FieldAuthCookie]
+	return ok
+}
+
+// ResetAuthCookie resets all changes to the "auth_cookie" field.
+func (m *SocialAccountMutation) ResetAuthCookie() {
+	m.auth_cookie = nil
+	delete(m.clearedFields, socialaccount.FieldAuthCookie)
+}
+
+// SetExecutionAuth sets the "execution_auth" field.
+func (m *SocialAccountMutation) SetExecutionAuth(s string) {
+	m.execution_auth = &s
+}
+
+// ExecutionAuth returns the value of the "execution_auth" field in the mutation.
+func (m *SocialAccountMutation) ExecutionAuth() (r string, exists bool) {
+	v := m.execution_auth
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExecutionAuth returns the old "execution_auth" field's value of the SocialAccount entity.
+// If the SocialAccount object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SocialAccountMutation) OldExecutionAuth(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExecutionAuth is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExecutionAuth requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExecutionAuth: %w", err)
+	}
+	return oldValue.ExecutionAuth, nil
+}
+
+// ClearExecutionAuth clears the value of the "execution_auth" field.
+func (m *SocialAccountMutation) ClearExecutionAuth() {
+	m.execution_auth = nil
+	m.clearedFields[socialaccount.FieldExecutionAuth] = struct{}{}
+}
+
+// ExecutionAuthCleared returns if the "execution_auth" field was cleared in this mutation.
+func (m *SocialAccountMutation) ExecutionAuthCleared() bool {
+	_, ok := m.clearedFields[socialaccount.FieldExecutionAuth]
+	return ok
+}
+
+// ResetExecutionAuth resets all changes to the "execution_auth" field.
+func (m *SocialAccountMutation) ResetExecutionAuth() {
+	m.execution_auth = nil
+	delete(m.clearedFields, socialaccount.FieldExecutionAuth)
+}
+
 // SetAccountStatus sets the "account_status" field.
 func (m *SocialAccountMutation) SetAccountStatus(s string) {
 	m.account_status = &s
@@ -19123,89 +19654,53 @@ func (m *SocialAccountMutation) ResetTaskMessage() {
 	delete(m.clearedFields, socialaccount.FieldTaskMessage)
 }
 
-// SetSource sets the "source" field.
-func (m *SocialAccountMutation) SetSource(s string) {
-	m.source = &s
+// SetDefaultProxySnapshot sets the "default_proxy_snapshot" field.
+func (m *SocialAccountMutation) SetDefaultProxySnapshot(s string) {
+	m.default_proxy_snapshot = &s
 }
 
-// Source returns the value of the "source" field in the mutation.
-func (m *SocialAccountMutation) Source() (r string, exists bool) {
-	v := m.source
+// DefaultProxySnapshot returns the value of the "default_proxy_snapshot" field in the mutation.
+func (m *SocialAccountMutation) DefaultProxySnapshot() (r string, exists bool) {
+	v := m.default_proxy_snapshot
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldSource returns the old "source" field's value of the SocialAccount entity.
+// OldDefaultProxySnapshot returns the old "default_proxy_snapshot" field's value of the SocialAccount entity.
 // If the SocialAccount object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SocialAccountMutation) OldSource(ctx context.Context) (v string, err error) {
+func (m *SocialAccountMutation) OldDefaultProxySnapshot(ctx context.Context) (v *string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldSource is only allowed on UpdateOne operations")
+		return v, errors.New("OldDefaultProxySnapshot is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldSource requires an ID field in the mutation")
+		return v, errors.New("OldDefaultProxySnapshot requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldSource: %w", err)
+		return v, fmt.Errorf("querying old value for OldDefaultProxySnapshot: %w", err)
 	}
-	return oldValue.Source, nil
+	return oldValue.DefaultProxySnapshot, nil
 }
 
-// ResetSource resets all changes to the "source" field.
-func (m *SocialAccountMutation) ResetSource() {
-	m.source = nil
+// ClearDefaultProxySnapshot clears the value of the "default_proxy_snapshot" field.
+func (m *SocialAccountMutation) ClearDefaultProxySnapshot() {
+	m.default_proxy_snapshot = nil
+	m.clearedFields[socialaccount.FieldDefaultProxySnapshot] = struct{}{}
 }
 
-// SetBoundIP sets the "bound_ip" field.
-func (m *SocialAccountMutation) SetBoundIP(s string) {
-	m.bound_ip = &s
-}
-
-// BoundIP returns the value of the "bound_ip" field in the mutation.
-func (m *SocialAccountMutation) BoundIP() (r string, exists bool) {
-	v := m.bound_ip
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldBoundIP returns the old "bound_ip" field's value of the SocialAccount entity.
-// If the SocialAccount object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SocialAccountMutation) OldBoundIP(ctx context.Context) (v *string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldBoundIP is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldBoundIP requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldBoundIP: %w", err)
-	}
-	return oldValue.BoundIP, nil
-}
-
-// ClearBoundIP clears the value of the "bound_ip" field.
-func (m *SocialAccountMutation) ClearBoundIP() {
-	m.bound_ip = nil
-	m.clearedFields[socialaccount.FieldBoundIP] = struct{}{}
-}
-
-// BoundIPCleared returns if the "bound_ip" field was cleared in this mutation.
-func (m *SocialAccountMutation) BoundIPCleared() bool {
-	_, ok := m.clearedFields[socialaccount.FieldBoundIP]
+// DefaultProxySnapshotCleared returns if the "default_proxy_snapshot" field was cleared in this mutation.
+func (m *SocialAccountMutation) DefaultProxySnapshotCleared() bool {
+	_, ok := m.clearedFields[socialaccount.FieldDefaultProxySnapshot]
 	return ok
 }
 
-// ResetBoundIP resets all changes to the "bound_ip" field.
-func (m *SocialAccountMutation) ResetBoundIP() {
-	m.bound_ip = nil
-	delete(m.clearedFields, socialaccount.FieldBoundIP)
+// ResetDefaultProxySnapshot resets all changes to the "default_proxy_snapshot" field.
+func (m *SocialAccountMutation) ResetDefaultProxySnapshot() {
+	m.default_proxy_snapshot = nil
+	delete(m.clearedFields, socialaccount.FieldDefaultProxySnapshot)
 }
 
 // SetAssignedUserID sets the "assigned_user_id" field.
@@ -19255,6 +19750,55 @@ func (m *SocialAccountMutation) AssignedUserIDCleared() bool {
 func (m *SocialAccountMutation) ResetAssignedUserID() {
 	m.assigned_user = nil
 	delete(m.clearedFields, socialaccount.FieldAssignedUserID)
+}
+
+// SetUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field.
+func (m *SocialAccountMutation) SetUserWorkbenchDeletedAt(t time.Time) {
+	m.user_workbench_deleted_at = &t
+}
+
+// UserWorkbenchDeletedAt returns the value of the "user_workbench_deleted_at" field in the mutation.
+func (m *SocialAccountMutation) UserWorkbenchDeletedAt() (r time.Time, exists bool) {
+	v := m.user_workbench_deleted_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserWorkbenchDeletedAt returns the old "user_workbench_deleted_at" field's value of the SocialAccount entity.
+// If the SocialAccount object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SocialAccountMutation) OldUserWorkbenchDeletedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserWorkbenchDeletedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserWorkbenchDeletedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserWorkbenchDeletedAt: %w", err)
+	}
+	return oldValue.UserWorkbenchDeletedAt, nil
+}
+
+// ClearUserWorkbenchDeletedAt clears the value of the "user_workbench_deleted_at" field.
+func (m *SocialAccountMutation) ClearUserWorkbenchDeletedAt() {
+	m.user_workbench_deleted_at = nil
+	m.clearedFields[socialaccount.FieldUserWorkbenchDeletedAt] = struct{}{}
+}
+
+// UserWorkbenchDeletedAtCleared returns if the "user_workbench_deleted_at" field was cleared in this mutation.
+func (m *SocialAccountMutation) UserWorkbenchDeletedAtCleared() bool {
+	_, ok := m.clearedFields[socialaccount.FieldUserWorkbenchDeletedAt]
+	return ok
+}
+
+// ResetUserWorkbenchDeletedAt resets all changes to the "user_workbench_deleted_at" field.
+func (m *SocialAccountMutation) ResetUserWorkbenchDeletedAt() {
+	m.user_workbench_deleted_at = nil
+	delete(m.clearedFields, socialaccount.FieldUserWorkbenchDeletedAt)
 }
 
 // SetRemark sets the "remark" field.
@@ -19421,7 +19965,7 @@ func (m *SocialAccountMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SocialAccountMutation) Fields() []string {
-	fields := make([]string, 0, 19)
+	fields := make([]string, 0, 28)
 	if m.created_at != nil {
 		fields = append(fields, socialaccount.FieldCreatedAt)
 	}
@@ -19443,8 +19987,14 @@ func (m *SocialAccountMutation) Fields() []string {
 	if m.name_key != nil {
 		fields = append(fields, socialaccount.FieldNameKey)
 	}
-	if m.account_id != nil {
-		fields = append(fields, socialaccount.FieldAccountID)
+	if m.identity_kind != nil {
+		fields = append(fields, socialaccount.FieldIdentityKind)
+	}
+	if m.identity_key != nil {
+		fields = append(fields, socialaccount.FieldIdentityKey)
+	}
+	if m.platform_user_id != nil {
+		fields = append(fields, socialaccount.FieldPlatformUserID)
 	}
 	if m.password != nil {
 		fields = append(fields, socialaccount.FieldPassword)
@@ -19458,6 +20008,27 @@ func (m *SocialAccountMutation) Fields() []string {
 	if m.email_password != nil {
 		fields = append(fields, socialaccount.FieldEmailPassword)
 	}
+	if m.two_factor != nil {
+		fields = append(fields, socialaccount.FieldTwoFactor)
+	}
+	if m.backup_code != nil {
+		fields = append(fields, socialaccount.FieldBackupCode)
+	}
+	if m.email_client_id != nil {
+		fields = append(fields, socialaccount.FieldEmailClientID)
+	}
+	if m.email_token != nil {
+		fields = append(fields, socialaccount.FieldEmailToken)
+	}
+	if m.registration_ip != nil {
+		fields = append(fields, socialaccount.FieldRegistrationIP)
+	}
+	if m.auth_cookie != nil {
+		fields = append(fields, socialaccount.FieldAuthCookie)
+	}
+	if m.execution_auth != nil {
+		fields = append(fields, socialaccount.FieldExecutionAuth)
+	}
 	if m.account_status != nil {
 		fields = append(fields, socialaccount.FieldAccountStatus)
 	}
@@ -19467,14 +20038,14 @@ func (m *SocialAccountMutation) Fields() []string {
 	if m.task_message != nil {
 		fields = append(fields, socialaccount.FieldTaskMessage)
 	}
-	if m.source != nil {
-		fields = append(fields, socialaccount.FieldSource)
-	}
-	if m.bound_ip != nil {
-		fields = append(fields, socialaccount.FieldBoundIP)
+	if m.default_proxy_snapshot != nil {
+		fields = append(fields, socialaccount.FieldDefaultProxySnapshot)
 	}
 	if m.assigned_user != nil {
 		fields = append(fields, socialaccount.FieldAssignedUserID)
+	}
+	if m.user_workbench_deleted_at != nil {
+		fields = append(fields, socialaccount.FieldUserWorkbenchDeletedAt)
 	}
 	if m.remark != nil {
 		fields = append(fields, socialaccount.FieldRemark)
@@ -19501,8 +20072,12 @@ func (m *SocialAccountMutation) Field(name string) (ent.Value, bool) {
 		return m.PlatformKey()
 	case socialaccount.FieldNameKey:
 		return m.NameKey()
-	case socialaccount.FieldAccountID:
-		return m.AccountID()
+	case socialaccount.FieldIdentityKind:
+		return m.IdentityKind()
+	case socialaccount.FieldIdentityKey:
+		return m.IdentityKey()
+	case socialaccount.FieldPlatformUserID:
+		return m.PlatformUserID()
 	case socialaccount.FieldPassword:
 		return m.Password()
 	case socialaccount.FieldPhone:
@@ -19511,18 +20086,32 @@ func (m *SocialAccountMutation) Field(name string) (ent.Value, bool) {
 		return m.Email()
 	case socialaccount.FieldEmailPassword:
 		return m.EmailPassword()
+	case socialaccount.FieldTwoFactor:
+		return m.TwoFactor()
+	case socialaccount.FieldBackupCode:
+		return m.BackupCode()
+	case socialaccount.FieldEmailClientID:
+		return m.EmailClientID()
+	case socialaccount.FieldEmailToken:
+		return m.EmailToken()
+	case socialaccount.FieldRegistrationIP:
+		return m.RegistrationIP()
+	case socialaccount.FieldAuthCookie:
+		return m.AuthCookie()
+	case socialaccount.FieldExecutionAuth:
+		return m.ExecutionAuth()
 	case socialaccount.FieldAccountStatus:
 		return m.AccountStatus()
 	case socialaccount.FieldTaskStatus:
 		return m.TaskStatus()
 	case socialaccount.FieldTaskMessage:
 		return m.TaskMessage()
-	case socialaccount.FieldSource:
-		return m.Source()
-	case socialaccount.FieldBoundIP:
-		return m.BoundIP()
+	case socialaccount.FieldDefaultProxySnapshot:
+		return m.DefaultProxySnapshot()
 	case socialaccount.FieldAssignedUserID:
 		return m.AssignedUserID()
+	case socialaccount.FieldUserWorkbenchDeletedAt:
+		return m.UserWorkbenchDeletedAt()
 	case socialaccount.FieldRemark:
 		return m.Remark()
 	}
@@ -19548,8 +20137,12 @@ func (m *SocialAccountMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldPlatformKey(ctx)
 	case socialaccount.FieldNameKey:
 		return m.OldNameKey(ctx)
-	case socialaccount.FieldAccountID:
-		return m.OldAccountID(ctx)
+	case socialaccount.FieldIdentityKind:
+		return m.OldIdentityKind(ctx)
+	case socialaccount.FieldIdentityKey:
+		return m.OldIdentityKey(ctx)
+	case socialaccount.FieldPlatformUserID:
+		return m.OldPlatformUserID(ctx)
 	case socialaccount.FieldPassword:
 		return m.OldPassword(ctx)
 	case socialaccount.FieldPhone:
@@ -19558,18 +20151,32 @@ func (m *SocialAccountMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldEmail(ctx)
 	case socialaccount.FieldEmailPassword:
 		return m.OldEmailPassword(ctx)
+	case socialaccount.FieldTwoFactor:
+		return m.OldTwoFactor(ctx)
+	case socialaccount.FieldBackupCode:
+		return m.OldBackupCode(ctx)
+	case socialaccount.FieldEmailClientID:
+		return m.OldEmailClientID(ctx)
+	case socialaccount.FieldEmailToken:
+		return m.OldEmailToken(ctx)
+	case socialaccount.FieldRegistrationIP:
+		return m.OldRegistrationIP(ctx)
+	case socialaccount.FieldAuthCookie:
+		return m.OldAuthCookie(ctx)
+	case socialaccount.FieldExecutionAuth:
+		return m.OldExecutionAuth(ctx)
 	case socialaccount.FieldAccountStatus:
 		return m.OldAccountStatus(ctx)
 	case socialaccount.FieldTaskStatus:
 		return m.OldTaskStatus(ctx)
 	case socialaccount.FieldTaskMessage:
 		return m.OldTaskMessage(ctx)
-	case socialaccount.FieldSource:
-		return m.OldSource(ctx)
-	case socialaccount.FieldBoundIP:
-		return m.OldBoundIP(ctx)
+	case socialaccount.FieldDefaultProxySnapshot:
+		return m.OldDefaultProxySnapshot(ctx)
 	case socialaccount.FieldAssignedUserID:
 		return m.OldAssignedUserID(ctx)
+	case socialaccount.FieldUserWorkbenchDeletedAt:
+		return m.OldUserWorkbenchDeletedAt(ctx)
 	case socialaccount.FieldRemark:
 		return m.OldRemark(ctx)
 	}
@@ -19630,12 +20237,26 @@ func (m *SocialAccountMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetNameKey(v)
 		return nil
-	case socialaccount.FieldAccountID:
+	case socialaccount.FieldIdentityKind:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetAccountID(v)
+		m.SetIdentityKind(v)
+		return nil
+	case socialaccount.FieldIdentityKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIdentityKey(v)
+		return nil
+	case socialaccount.FieldPlatformUserID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPlatformUserID(v)
 		return nil
 	case socialaccount.FieldPassword:
 		v, ok := value.(string)
@@ -19665,6 +20286,55 @@ func (m *SocialAccountMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetEmailPassword(v)
 		return nil
+	case socialaccount.FieldTwoFactor:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTwoFactor(v)
+		return nil
+	case socialaccount.FieldBackupCode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBackupCode(v)
+		return nil
+	case socialaccount.FieldEmailClientID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEmailClientID(v)
+		return nil
+	case socialaccount.FieldEmailToken:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEmailToken(v)
+		return nil
+	case socialaccount.FieldRegistrationIP:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRegistrationIP(v)
+		return nil
+	case socialaccount.FieldAuthCookie:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAuthCookie(v)
+		return nil
+	case socialaccount.FieldExecutionAuth:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExecutionAuth(v)
+		return nil
 	case socialaccount.FieldAccountStatus:
 		v, ok := value.(string)
 		if !ok {
@@ -19686,19 +20356,12 @@ func (m *SocialAccountMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetTaskMessage(v)
 		return nil
-	case socialaccount.FieldSource:
+	case socialaccount.FieldDefaultProxySnapshot:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetSource(v)
-		return nil
-	case socialaccount.FieldBoundIP:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetBoundIP(v)
+		m.SetDefaultProxySnapshot(v)
 		return nil
 	case socialaccount.FieldAssignedUserID:
 		v, ok := value.(int64)
@@ -19706,6 +20369,13 @@ func (m *SocialAccountMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetAssignedUserID(v)
+		return nil
+	case socialaccount.FieldUserWorkbenchDeletedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserWorkbenchDeletedAt(v)
 		return nil
 	case socialaccount.FieldRemark:
 		v, ok := value.(string)
@@ -19750,8 +20420,8 @@ func (m *SocialAccountMutation) ClearedFields() []string {
 	if m.FieldCleared(socialaccount.FieldDeletedAt) {
 		fields = append(fields, socialaccount.FieldDeletedAt)
 	}
-	if m.FieldCleared(socialaccount.FieldAccountID) {
-		fields = append(fields, socialaccount.FieldAccountID)
+	if m.FieldCleared(socialaccount.FieldPlatformUserID) {
+		fields = append(fields, socialaccount.FieldPlatformUserID)
 	}
 	if m.FieldCleared(socialaccount.FieldPassword) {
 		fields = append(fields, socialaccount.FieldPassword)
@@ -19765,14 +20435,38 @@ func (m *SocialAccountMutation) ClearedFields() []string {
 	if m.FieldCleared(socialaccount.FieldEmailPassword) {
 		fields = append(fields, socialaccount.FieldEmailPassword)
 	}
+	if m.FieldCleared(socialaccount.FieldTwoFactor) {
+		fields = append(fields, socialaccount.FieldTwoFactor)
+	}
+	if m.FieldCleared(socialaccount.FieldBackupCode) {
+		fields = append(fields, socialaccount.FieldBackupCode)
+	}
+	if m.FieldCleared(socialaccount.FieldEmailClientID) {
+		fields = append(fields, socialaccount.FieldEmailClientID)
+	}
+	if m.FieldCleared(socialaccount.FieldEmailToken) {
+		fields = append(fields, socialaccount.FieldEmailToken)
+	}
+	if m.FieldCleared(socialaccount.FieldRegistrationIP) {
+		fields = append(fields, socialaccount.FieldRegistrationIP)
+	}
+	if m.FieldCleared(socialaccount.FieldAuthCookie) {
+		fields = append(fields, socialaccount.FieldAuthCookie)
+	}
+	if m.FieldCleared(socialaccount.FieldExecutionAuth) {
+		fields = append(fields, socialaccount.FieldExecutionAuth)
+	}
 	if m.FieldCleared(socialaccount.FieldTaskMessage) {
 		fields = append(fields, socialaccount.FieldTaskMessage)
 	}
-	if m.FieldCleared(socialaccount.FieldBoundIP) {
-		fields = append(fields, socialaccount.FieldBoundIP)
+	if m.FieldCleared(socialaccount.FieldDefaultProxySnapshot) {
+		fields = append(fields, socialaccount.FieldDefaultProxySnapshot)
 	}
 	if m.FieldCleared(socialaccount.FieldAssignedUserID) {
 		fields = append(fields, socialaccount.FieldAssignedUserID)
+	}
+	if m.FieldCleared(socialaccount.FieldUserWorkbenchDeletedAt) {
+		fields = append(fields, socialaccount.FieldUserWorkbenchDeletedAt)
 	}
 	if m.FieldCleared(socialaccount.FieldRemark) {
 		fields = append(fields, socialaccount.FieldRemark)
@@ -19794,8 +20488,8 @@ func (m *SocialAccountMutation) ClearField(name string) error {
 	case socialaccount.FieldDeletedAt:
 		m.ClearDeletedAt()
 		return nil
-	case socialaccount.FieldAccountID:
-		m.ClearAccountID()
+	case socialaccount.FieldPlatformUserID:
+		m.ClearPlatformUserID()
 		return nil
 	case socialaccount.FieldPassword:
 		m.ClearPassword()
@@ -19809,14 +20503,38 @@ func (m *SocialAccountMutation) ClearField(name string) error {
 	case socialaccount.FieldEmailPassword:
 		m.ClearEmailPassword()
 		return nil
+	case socialaccount.FieldTwoFactor:
+		m.ClearTwoFactor()
+		return nil
+	case socialaccount.FieldBackupCode:
+		m.ClearBackupCode()
+		return nil
+	case socialaccount.FieldEmailClientID:
+		m.ClearEmailClientID()
+		return nil
+	case socialaccount.FieldEmailToken:
+		m.ClearEmailToken()
+		return nil
+	case socialaccount.FieldRegistrationIP:
+		m.ClearRegistrationIP()
+		return nil
+	case socialaccount.FieldAuthCookie:
+		m.ClearAuthCookie()
+		return nil
+	case socialaccount.FieldExecutionAuth:
+		m.ClearExecutionAuth()
+		return nil
 	case socialaccount.FieldTaskMessage:
 		m.ClearTaskMessage()
 		return nil
-	case socialaccount.FieldBoundIP:
-		m.ClearBoundIP()
+	case socialaccount.FieldDefaultProxySnapshot:
+		m.ClearDefaultProxySnapshot()
 		return nil
 	case socialaccount.FieldAssignedUserID:
 		m.ClearAssignedUserID()
+		return nil
+	case socialaccount.FieldUserWorkbenchDeletedAt:
+		m.ClearUserWorkbenchDeletedAt()
 		return nil
 	case socialaccount.FieldRemark:
 		m.ClearRemark()
@@ -19850,8 +20568,14 @@ func (m *SocialAccountMutation) ResetField(name string) error {
 	case socialaccount.FieldNameKey:
 		m.ResetNameKey()
 		return nil
-	case socialaccount.FieldAccountID:
-		m.ResetAccountID()
+	case socialaccount.FieldIdentityKind:
+		m.ResetIdentityKind()
+		return nil
+	case socialaccount.FieldIdentityKey:
+		m.ResetIdentityKey()
+		return nil
+	case socialaccount.FieldPlatformUserID:
+		m.ResetPlatformUserID()
 		return nil
 	case socialaccount.FieldPassword:
 		m.ResetPassword()
@@ -19865,6 +20589,27 @@ func (m *SocialAccountMutation) ResetField(name string) error {
 	case socialaccount.FieldEmailPassword:
 		m.ResetEmailPassword()
 		return nil
+	case socialaccount.FieldTwoFactor:
+		m.ResetTwoFactor()
+		return nil
+	case socialaccount.FieldBackupCode:
+		m.ResetBackupCode()
+		return nil
+	case socialaccount.FieldEmailClientID:
+		m.ResetEmailClientID()
+		return nil
+	case socialaccount.FieldEmailToken:
+		m.ResetEmailToken()
+		return nil
+	case socialaccount.FieldRegistrationIP:
+		m.ResetRegistrationIP()
+		return nil
+	case socialaccount.FieldAuthCookie:
+		m.ResetAuthCookie()
+		return nil
+	case socialaccount.FieldExecutionAuth:
+		m.ResetExecutionAuth()
+		return nil
 	case socialaccount.FieldAccountStatus:
 		m.ResetAccountStatus()
 		return nil
@@ -19874,14 +20619,14 @@ func (m *SocialAccountMutation) ResetField(name string) error {
 	case socialaccount.FieldTaskMessage:
 		m.ResetTaskMessage()
 		return nil
-	case socialaccount.FieldSource:
-		m.ResetSource()
-		return nil
-	case socialaccount.FieldBoundIP:
-		m.ResetBoundIP()
+	case socialaccount.FieldDefaultProxySnapshot:
+		m.ResetDefaultProxySnapshot()
 		return nil
 	case socialaccount.FieldAssignedUserID:
 		m.ResetAssignedUserID()
+		return nil
+	case socialaccount.FieldUserWorkbenchDeletedAt:
+		m.ResetUserWorkbenchDeletedAt()
 		return nil
 	case socialaccount.FieldRemark:
 		m.ResetRemark()
@@ -21165,6 +21910,8 @@ type SocialTaskLogMutation struct {
 	action                *string
 	target                *string
 	content               *string
+	payload               *domain.SocialTaskPayload
+	template_snapshot     *domain.SocialTaskTemplateSnapshot
 	status                *string
 	result_message        *string
 	price                 *float64
@@ -21563,6 +22310,104 @@ func (m *SocialTaskLogMutation) ContentCleared() bool {
 func (m *SocialTaskLogMutation) ResetContent() {
 	m.content = nil
 	delete(m.clearedFields, socialtasklog.FieldContent)
+}
+
+// SetPayload sets the "payload" field.
+func (m *SocialTaskLogMutation) SetPayload(dtp domain.SocialTaskPayload) {
+	m.payload = &dtp
+}
+
+// Payload returns the value of the "payload" field in the mutation.
+func (m *SocialTaskLogMutation) Payload() (r domain.SocialTaskPayload, exists bool) {
+	v := m.payload
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPayload returns the old "payload" field's value of the SocialTaskLog entity.
+// If the SocialTaskLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SocialTaskLogMutation) OldPayload(ctx context.Context) (v domain.SocialTaskPayload, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPayload is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPayload requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPayload: %w", err)
+	}
+	return oldValue.Payload, nil
+}
+
+// ClearPayload clears the value of the "payload" field.
+func (m *SocialTaskLogMutation) ClearPayload() {
+	m.payload = nil
+	m.clearedFields[socialtasklog.FieldPayload] = struct{}{}
+}
+
+// PayloadCleared returns if the "payload" field was cleared in this mutation.
+func (m *SocialTaskLogMutation) PayloadCleared() bool {
+	_, ok := m.clearedFields[socialtasklog.FieldPayload]
+	return ok
+}
+
+// ResetPayload resets all changes to the "payload" field.
+func (m *SocialTaskLogMutation) ResetPayload() {
+	m.payload = nil
+	delete(m.clearedFields, socialtasklog.FieldPayload)
+}
+
+// SetTemplateSnapshot sets the "template_snapshot" field.
+func (m *SocialTaskLogMutation) SetTemplateSnapshot(dtts domain.SocialTaskTemplateSnapshot) {
+	m.template_snapshot = &dtts
+}
+
+// TemplateSnapshot returns the value of the "template_snapshot" field in the mutation.
+func (m *SocialTaskLogMutation) TemplateSnapshot() (r domain.SocialTaskTemplateSnapshot, exists bool) {
+	v := m.template_snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTemplateSnapshot returns the old "template_snapshot" field's value of the SocialTaskLog entity.
+// If the SocialTaskLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SocialTaskLogMutation) OldTemplateSnapshot(ctx context.Context) (v domain.SocialTaskTemplateSnapshot, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTemplateSnapshot is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTemplateSnapshot requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTemplateSnapshot: %w", err)
+	}
+	return oldValue.TemplateSnapshot, nil
+}
+
+// ClearTemplateSnapshot clears the value of the "template_snapshot" field.
+func (m *SocialTaskLogMutation) ClearTemplateSnapshot() {
+	m.template_snapshot = nil
+	m.clearedFields[socialtasklog.FieldTemplateSnapshot] = struct{}{}
+}
+
+// TemplateSnapshotCleared returns if the "template_snapshot" field was cleared in this mutation.
+func (m *SocialTaskLogMutation) TemplateSnapshotCleared() bool {
+	_, ok := m.clearedFields[socialtasklog.FieldTemplateSnapshot]
+	return ok
+}
+
+// ResetTemplateSnapshot resets all changes to the "template_snapshot" field.
+func (m *SocialTaskLogMutation) ResetTemplateSnapshot() {
+	m.template_snapshot = nil
+	delete(m.clearedFields, socialtasklog.FieldTemplateSnapshot)
 }
 
 // SetStatus sets the "status" field.
@@ -22201,7 +23046,7 @@ func (m *SocialTaskLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SocialTaskLogMutation) Fields() []string {
-	fields := make([]string, 0, 18)
+	fields := make([]string, 0, 20)
 	if m.created_at != nil {
 		fields = append(fields, socialtasklog.FieldCreatedAt)
 	}
@@ -22222,6 +23067,12 @@ func (m *SocialTaskLogMutation) Fields() []string {
 	}
 	if m.content != nil {
 		fields = append(fields, socialtasklog.FieldContent)
+	}
+	if m.payload != nil {
+		fields = append(fields, socialtasklog.FieldPayload)
+	}
+	if m.template_snapshot != nil {
+		fields = append(fields, socialtasklog.FieldTemplateSnapshot)
 	}
 	if m.status != nil {
 		fields = append(fields, socialtasklog.FieldStatus)
@@ -22278,6 +23129,10 @@ func (m *SocialTaskLogMutation) Field(name string) (ent.Value, bool) {
 		return m.Target()
 	case socialtasklog.FieldContent:
 		return m.Content()
+	case socialtasklog.FieldPayload:
+		return m.Payload()
+	case socialtasklog.FieldTemplateSnapshot:
+		return m.TemplateSnapshot()
 	case socialtasklog.FieldStatus:
 		return m.Status()
 	case socialtasklog.FieldResultMessage:
@@ -22323,6 +23178,10 @@ func (m *SocialTaskLogMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldTarget(ctx)
 	case socialtasklog.FieldContent:
 		return m.OldContent(ctx)
+	case socialtasklog.FieldPayload:
+		return m.OldPayload(ctx)
+	case socialtasklog.FieldTemplateSnapshot:
+		return m.OldTemplateSnapshot(ctx)
 	case socialtasklog.FieldStatus:
 		return m.OldStatus(ctx)
 	case socialtasklog.FieldResultMessage:
@@ -22402,6 +23261,20 @@ func (m *SocialTaskLogMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetContent(v)
+		return nil
+	case socialtasklog.FieldPayload:
+		v, ok := value.(domain.SocialTaskPayload)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPayload(v)
+		return nil
+	case socialtasklog.FieldTemplateSnapshot:
+		v, ok := value.(domain.SocialTaskTemplateSnapshot)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTemplateSnapshot(v)
 		return nil
 	case socialtasklog.FieldStatus:
 		v, ok := value.(string)
@@ -22555,6 +23428,12 @@ func (m *SocialTaskLogMutation) ClearedFields() []string {
 	if m.FieldCleared(socialtasklog.FieldContent) {
 		fields = append(fields, socialtasklog.FieldContent)
 	}
+	if m.FieldCleared(socialtasklog.FieldPayload) {
+		fields = append(fields, socialtasklog.FieldPayload)
+	}
+	if m.FieldCleared(socialtasklog.FieldTemplateSnapshot) {
+		fields = append(fields, socialtasklog.FieldTemplateSnapshot)
+	}
 	if m.FieldCleared(socialtasklog.FieldResultMessage) {
 		fields = append(fields, socialtasklog.FieldResultMessage)
 	}
@@ -22595,6 +23474,12 @@ func (m *SocialTaskLogMutation) ClearField(name string) error {
 		return nil
 	case socialtasklog.FieldContent:
 		m.ClearContent()
+		return nil
+	case socialtasklog.FieldPayload:
+		m.ClearPayload()
+		return nil
+	case socialtasklog.FieldTemplateSnapshot:
+		m.ClearTemplateSnapshot()
 		return nil
 	case socialtasklog.FieldResultMessage:
 		m.ClearResultMessage()
@@ -22645,6 +23530,12 @@ func (m *SocialTaskLogMutation) ResetField(name string) error {
 		return nil
 	case socialtasklog.FieldContent:
 		m.ResetContent()
+		return nil
+	case socialtasklog.FieldPayload:
+		m.ResetPayload()
+		return nil
+	case socialtasklog.FieldTemplateSnapshot:
+		m.ResetTemplateSnapshot()
 		return nil
 	case socialtasklog.FieldStatus:
 		m.ResetStatus()
@@ -22778,31 +23669,38 @@ func (m *SocialTaskLogMutation) ResetEdge(name string) error {
 // SubscriptionPlanMutation represents an operation that mutates the SubscriptionPlan nodes in the graph.
 type SubscriptionPlanMutation struct {
 	config
-	op                Op
-	typ               string
-	id                *int64
-	group_id          *int64
-	addgroup_id       *int64
-	name              *string
-	description       *string
-	price             *float64
-	addprice          *float64
-	original_price    *float64
-	addoriginal_price *float64
-	validity_days     *int
-	addvalidity_days  *int
-	validity_unit     *string
-	features          *string
-	product_name      *string
-	for_sale          *bool
-	sort_order        *int
-	addsort_order     *int
-	created_at        *time.Time
-	updated_at        *time.Time
-	clearedFields     map[string]struct{}
-	done              bool
-	oldValue          func(context.Context) (*SubscriptionPlan, error)
-	predicates        []predicate.SubscriptionPlan
+	op                   Op
+	typ                  string
+	id                   *int64
+	group_id             *int64
+	addgroup_id          *int64
+	platform             *string
+	name                 *string
+	description          *string
+	price                *float64
+	addprice             *float64
+	original_price       *float64
+	addoriginal_price    *float64
+	validity_days        *int
+	addvalidity_days     *int
+	validity_unit        *string
+	features             *string
+	product_name         *string
+	for_sale             *bool
+	sort_order           *int
+	addsort_order        *int
+	daily_limit_usd      *float64
+	adddaily_limit_usd   *float64
+	weekly_limit_usd     *float64
+	addweekly_limit_usd  *float64
+	monthly_limit_usd    *float64
+	addmonthly_limit_usd *float64
+	created_at           *time.Time
+	updated_at           *time.Time
+	clearedFields        map[string]struct{}
+	done                 bool
+	oldValue             func(context.Context) (*SubscriptionPlan, error)
+	predicates           []predicate.SubscriptionPlan
 }
 
 var _ ent.Mutation = (*SubscriptionPlanMutation)(nil)
@@ -22957,6 +23855,42 @@ func (m *SubscriptionPlanMutation) AddedGroupID() (r int64, exists bool) {
 func (m *SubscriptionPlanMutation) ResetGroupID() {
 	m.group_id = nil
 	m.addgroup_id = nil
+}
+
+// SetPlatform sets the "platform" field.
+func (m *SubscriptionPlanMutation) SetPlatform(s string) {
+	m.platform = &s
+}
+
+// Platform returns the value of the "platform" field in the mutation.
+func (m *SubscriptionPlanMutation) Platform() (r string, exists bool) {
+	v := m.platform
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPlatform returns the old "platform" field's value of the SubscriptionPlan entity.
+// If the SubscriptionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubscriptionPlanMutation) OldPlatform(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPlatform is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPlatform requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPlatform: %w", err)
+	}
+	return oldValue.Platform, nil
+}
+
+// ResetPlatform resets all changes to the "platform" field.
+func (m *SubscriptionPlanMutation) ResetPlatform() {
+	m.platform = nil
 }
 
 // SetName sets the "name" field.
@@ -23413,6 +24347,216 @@ func (m *SubscriptionPlanMutation) ResetSortOrder() {
 	m.addsort_order = nil
 }
 
+// SetDailyLimitUsd sets the "daily_limit_usd" field.
+func (m *SubscriptionPlanMutation) SetDailyLimitUsd(f float64) {
+	m.daily_limit_usd = &f
+	m.adddaily_limit_usd = nil
+}
+
+// DailyLimitUsd returns the value of the "daily_limit_usd" field in the mutation.
+func (m *SubscriptionPlanMutation) DailyLimitUsd() (r float64, exists bool) {
+	v := m.daily_limit_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDailyLimitUsd returns the old "daily_limit_usd" field's value of the SubscriptionPlan entity.
+// If the SubscriptionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubscriptionPlanMutation) OldDailyLimitUsd(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDailyLimitUsd is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDailyLimitUsd requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDailyLimitUsd: %w", err)
+	}
+	return oldValue.DailyLimitUsd, nil
+}
+
+// AddDailyLimitUsd adds f to the "daily_limit_usd" field.
+func (m *SubscriptionPlanMutation) AddDailyLimitUsd(f float64) {
+	if m.adddaily_limit_usd != nil {
+		*m.adddaily_limit_usd += f
+	} else {
+		m.adddaily_limit_usd = &f
+	}
+}
+
+// AddedDailyLimitUsd returns the value that was added to the "daily_limit_usd" field in this mutation.
+func (m *SubscriptionPlanMutation) AddedDailyLimitUsd() (r float64, exists bool) {
+	v := m.adddaily_limit_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearDailyLimitUsd clears the value of the "daily_limit_usd" field.
+func (m *SubscriptionPlanMutation) ClearDailyLimitUsd() {
+	m.daily_limit_usd = nil
+	m.adddaily_limit_usd = nil
+	m.clearedFields[subscriptionplan.FieldDailyLimitUsd] = struct{}{}
+}
+
+// DailyLimitUsdCleared returns if the "daily_limit_usd" field was cleared in this mutation.
+func (m *SubscriptionPlanMutation) DailyLimitUsdCleared() bool {
+	_, ok := m.clearedFields[subscriptionplan.FieldDailyLimitUsd]
+	return ok
+}
+
+// ResetDailyLimitUsd resets all changes to the "daily_limit_usd" field.
+func (m *SubscriptionPlanMutation) ResetDailyLimitUsd() {
+	m.daily_limit_usd = nil
+	m.adddaily_limit_usd = nil
+	delete(m.clearedFields, subscriptionplan.FieldDailyLimitUsd)
+}
+
+// SetWeeklyLimitUsd sets the "weekly_limit_usd" field.
+func (m *SubscriptionPlanMutation) SetWeeklyLimitUsd(f float64) {
+	m.weekly_limit_usd = &f
+	m.addweekly_limit_usd = nil
+}
+
+// WeeklyLimitUsd returns the value of the "weekly_limit_usd" field in the mutation.
+func (m *SubscriptionPlanMutation) WeeklyLimitUsd() (r float64, exists bool) {
+	v := m.weekly_limit_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWeeklyLimitUsd returns the old "weekly_limit_usd" field's value of the SubscriptionPlan entity.
+// If the SubscriptionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubscriptionPlanMutation) OldWeeklyLimitUsd(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWeeklyLimitUsd is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWeeklyLimitUsd requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWeeklyLimitUsd: %w", err)
+	}
+	return oldValue.WeeklyLimitUsd, nil
+}
+
+// AddWeeklyLimitUsd adds f to the "weekly_limit_usd" field.
+func (m *SubscriptionPlanMutation) AddWeeklyLimitUsd(f float64) {
+	if m.addweekly_limit_usd != nil {
+		*m.addweekly_limit_usd += f
+	} else {
+		m.addweekly_limit_usd = &f
+	}
+}
+
+// AddedWeeklyLimitUsd returns the value that was added to the "weekly_limit_usd" field in this mutation.
+func (m *SubscriptionPlanMutation) AddedWeeklyLimitUsd() (r float64, exists bool) {
+	v := m.addweekly_limit_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearWeeklyLimitUsd clears the value of the "weekly_limit_usd" field.
+func (m *SubscriptionPlanMutation) ClearWeeklyLimitUsd() {
+	m.weekly_limit_usd = nil
+	m.addweekly_limit_usd = nil
+	m.clearedFields[subscriptionplan.FieldWeeklyLimitUsd] = struct{}{}
+}
+
+// WeeklyLimitUsdCleared returns if the "weekly_limit_usd" field was cleared in this mutation.
+func (m *SubscriptionPlanMutation) WeeklyLimitUsdCleared() bool {
+	_, ok := m.clearedFields[subscriptionplan.FieldWeeklyLimitUsd]
+	return ok
+}
+
+// ResetWeeklyLimitUsd resets all changes to the "weekly_limit_usd" field.
+func (m *SubscriptionPlanMutation) ResetWeeklyLimitUsd() {
+	m.weekly_limit_usd = nil
+	m.addweekly_limit_usd = nil
+	delete(m.clearedFields, subscriptionplan.FieldWeeklyLimitUsd)
+}
+
+// SetMonthlyLimitUsd sets the "monthly_limit_usd" field.
+func (m *SubscriptionPlanMutation) SetMonthlyLimitUsd(f float64) {
+	m.monthly_limit_usd = &f
+	m.addmonthly_limit_usd = nil
+}
+
+// MonthlyLimitUsd returns the value of the "monthly_limit_usd" field in the mutation.
+func (m *SubscriptionPlanMutation) MonthlyLimitUsd() (r float64, exists bool) {
+	v := m.monthly_limit_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMonthlyLimitUsd returns the old "monthly_limit_usd" field's value of the SubscriptionPlan entity.
+// If the SubscriptionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubscriptionPlanMutation) OldMonthlyLimitUsd(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMonthlyLimitUsd is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMonthlyLimitUsd requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMonthlyLimitUsd: %w", err)
+	}
+	return oldValue.MonthlyLimitUsd, nil
+}
+
+// AddMonthlyLimitUsd adds f to the "monthly_limit_usd" field.
+func (m *SubscriptionPlanMutation) AddMonthlyLimitUsd(f float64) {
+	if m.addmonthly_limit_usd != nil {
+		*m.addmonthly_limit_usd += f
+	} else {
+		m.addmonthly_limit_usd = &f
+	}
+}
+
+// AddedMonthlyLimitUsd returns the value that was added to the "monthly_limit_usd" field in this mutation.
+func (m *SubscriptionPlanMutation) AddedMonthlyLimitUsd() (r float64, exists bool) {
+	v := m.addmonthly_limit_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearMonthlyLimitUsd clears the value of the "monthly_limit_usd" field.
+func (m *SubscriptionPlanMutation) ClearMonthlyLimitUsd() {
+	m.monthly_limit_usd = nil
+	m.addmonthly_limit_usd = nil
+	m.clearedFields[subscriptionplan.FieldMonthlyLimitUsd] = struct{}{}
+}
+
+// MonthlyLimitUsdCleared returns if the "monthly_limit_usd" field was cleared in this mutation.
+func (m *SubscriptionPlanMutation) MonthlyLimitUsdCleared() bool {
+	_, ok := m.clearedFields[subscriptionplan.FieldMonthlyLimitUsd]
+	return ok
+}
+
+// ResetMonthlyLimitUsd resets all changes to the "monthly_limit_usd" field.
+func (m *SubscriptionPlanMutation) ResetMonthlyLimitUsd() {
+	m.monthly_limit_usd = nil
+	m.addmonthly_limit_usd = nil
+	delete(m.clearedFields, subscriptionplan.FieldMonthlyLimitUsd)
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *SubscriptionPlanMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -23519,9 +24663,12 @@ func (m *SubscriptionPlanMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SubscriptionPlanMutation) Fields() []string {
-	fields := make([]string, 0, 13)
+	fields := make([]string, 0, 17)
 	if m.group_id != nil {
 		fields = append(fields, subscriptionplan.FieldGroupID)
+	}
+	if m.platform != nil {
+		fields = append(fields, subscriptionplan.FieldPlatform)
 	}
 	if m.name != nil {
 		fields = append(fields, subscriptionplan.FieldName)
@@ -23553,6 +24700,15 @@ func (m *SubscriptionPlanMutation) Fields() []string {
 	if m.sort_order != nil {
 		fields = append(fields, subscriptionplan.FieldSortOrder)
 	}
+	if m.daily_limit_usd != nil {
+		fields = append(fields, subscriptionplan.FieldDailyLimitUsd)
+	}
+	if m.weekly_limit_usd != nil {
+		fields = append(fields, subscriptionplan.FieldWeeklyLimitUsd)
+	}
+	if m.monthly_limit_usd != nil {
+		fields = append(fields, subscriptionplan.FieldMonthlyLimitUsd)
+	}
 	if m.created_at != nil {
 		fields = append(fields, subscriptionplan.FieldCreatedAt)
 	}
@@ -23569,6 +24725,8 @@ func (m *SubscriptionPlanMutation) Field(name string) (ent.Value, bool) {
 	switch name {
 	case subscriptionplan.FieldGroupID:
 		return m.GroupID()
+	case subscriptionplan.FieldPlatform:
+		return m.Platform()
 	case subscriptionplan.FieldName:
 		return m.Name()
 	case subscriptionplan.FieldDescription:
@@ -23589,6 +24747,12 @@ func (m *SubscriptionPlanMutation) Field(name string) (ent.Value, bool) {
 		return m.ForSale()
 	case subscriptionplan.FieldSortOrder:
 		return m.SortOrder()
+	case subscriptionplan.FieldDailyLimitUsd:
+		return m.DailyLimitUsd()
+	case subscriptionplan.FieldWeeklyLimitUsd:
+		return m.WeeklyLimitUsd()
+	case subscriptionplan.FieldMonthlyLimitUsd:
+		return m.MonthlyLimitUsd()
 	case subscriptionplan.FieldCreatedAt:
 		return m.CreatedAt()
 	case subscriptionplan.FieldUpdatedAt:
@@ -23604,6 +24768,8 @@ func (m *SubscriptionPlanMutation) OldField(ctx context.Context, name string) (e
 	switch name {
 	case subscriptionplan.FieldGroupID:
 		return m.OldGroupID(ctx)
+	case subscriptionplan.FieldPlatform:
+		return m.OldPlatform(ctx)
 	case subscriptionplan.FieldName:
 		return m.OldName(ctx)
 	case subscriptionplan.FieldDescription:
@@ -23624,6 +24790,12 @@ func (m *SubscriptionPlanMutation) OldField(ctx context.Context, name string) (e
 		return m.OldForSale(ctx)
 	case subscriptionplan.FieldSortOrder:
 		return m.OldSortOrder(ctx)
+	case subscriptionplan.FieldDailyLimitUsd:
+		return m.OldDailyLimitUsd(ctx)
+	case subscriptionplan.FieldWeeklyLimitUsd:
+		return m.OldWeeklyLimitUsd(ctx)
+	case subscriptionplan.FieldMonthlyLimitUsd:
+		return m.OldMonthlyLimitUsd(ctx)
 	case subscriptionplan.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case subscriptionplan.FieldUpdatedAt:
@@ -23643,6 +24815,13 @@ func (m *SubscriptionPlanMutation) SetField(name string, value ent.Value) error 
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetGroupID(v)
+		return nil
+	case subscriptionplan.FieldPlatform:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPlatform(v)
 		return nil
 	case subscriptionplan.FieldName:
 		v, ok := value.(string)
@@ -23714,6 +24893,27 @@ func (m *SubscriptionPlanMutation) SetField(name string, value ent.Value) error 
 		}
 		m.SetSortOrder(v)
 		return nil
+	case subscriptionplan.FieldDailyLimitUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDailyLimitUsd(v)
+		return nil
+	case subscriptionplan.FieldWeeklyLimitUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWeeklyLimitUsd(v)
+		return nil
+	case subscriptionplan.FieldMonthlyLimitUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMonthlyLimitUsd(v)
+		return nil
 	case subscriptionplan.FieldCreatedAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -23751,6 +24951,15 @@ func (m *SubscriptionPlanMutation) AddedFields() []string {
 	if m.addsort_order != nil {
 		fields = append(fields, subscriptionplan.FieldSortOrder)
 	}
+	if m.adddaily_limit_usd != nil {
+		fields = append(fields, subscriptionplan.FieldDailyLimitUsd)
+	}
+	if m.addweekly_limit_usd != nil {
+		fields = append(fields, subscriptionplan.FieldWeeklyLimitUsd)
+	}
+	if m.addmonthly_limit_usd != nil {
+		fields = append(fields, subscriptionplan.FieldMonthlyLimitUsd)
+	}
 	return fields
 }
 
@@ -23769,6 +24978,12 @@ func (m *SubscriptionPlanMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedValidityDays()
 	case subscriptionplan.FieldSortOrder:
 		return m.AddedSortOrder()
+	case subscriptionplan.FieldDailyLimitUsd:
+		return m.AddedDailyLimitUsd()
+	case subscriptionplan.FieldWeeklyLimitUsd:
+		return m.AddedWeeklyLimitUsd()
+	case subscriptionplan.FieldMonthlyLimitUsd:
+		return m.AddedMonthlyLimitUsd()
 	}
 	return nil, false
 }
@@ -23813,6 +25028,27 @@ func (m *SubscriptionPlanMutation) AddField(name string, value ent.Value) error 
 		}
 		m.AddSortOrder(v)
 		return nil
+	case subscriptionplan.FieldDailyLimitUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDailyLimitUsd(v)
+		return nil
+	case subscriptionplan.FieldWeeklyLimitUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWeeklyLimitUsd(v)
+		return nil
+	case subscriptionplan.FieldMonthlyLimitUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddMonthlyLimitUsd(v)
+		return nil
 	}
 	return fmt.Errorf("unknown SubscriptionPlan numeric field %s", name)
 }
@@ -23823,6 +25059,15 @@ func (m *SubscriptionPlanMutation) ClearedFields() []string {
 	var fields []string
 	if m.FieldCleared(subscriptionplan.FieldOriginalPrice) {
 		fields = append(fields, subscriptionplan.FieldOriginalPrice)
+	}
+	if m.FieldCleared(subscriptionplan.FieldDailyLimitUsd) {
+		fields = append(fields, subscriptionplan.FieldDailyLimitUsd)
+	}
+	if m.FieldCleared(subscriptionplan.FieldWeeklyLimitUsd) {
+		fields = append(fields, subscriptionplan.FieldWeeklyLimitUsd)
+	}
+	if m.FieldCleared(subscriptionplan.FieldMonthlyLimitUsd) {
+		fields = append(fields, subscriptionplan.FieldMonthlyLimitUsd)
 	}
 	return fields
 }
@@ -23841,6 +25086,15 @@ func (m *SubscriptionPlanMutation) ClearField(name string) error {
 	case subscriptionplan.FieldOriginalPrice:
 		m.ClearOriginalPrice()
 		return nil
+	case subscriptionplan.FieldDailyLimitUsd:
+		m.ClearDailyLimitUsd()
+		return nil
+	case subscriptionplan.FieldWeeklyLimitUsd:
+		m.ClearWeeklyLimitUsd()
+		return nil
+	case subscriptionplan.FieldMonthlyLimitUsd:
+		m.ClearMonthlyLimitUsd()
+		return nil
 	}
 	return fmt.Errorf("unknown SubscriptionPlan nullable field %s", name)
 }
@@ -23851,6 +25105,9 @@ func (m *SubscriptionPlanMutation) ResetField(name string) error {
 	switch name {
 	case subscriptionplan.FieldGroupID:
 		m.ResetGroupID()
+		return nil
+	case subscriptionplan.FieldPlatform:
+		m.ResetPlatform()
 		return nil
 	case subscriptionplan.FieldName:
 		m.ResetName()
@@ -23881,6 +25138,15 @@ func (m *SubscriptionPlanMutation) ResetField(name string) error {
 		return nil
 	case subscriptionplan.FieldSortOrder:
 		m.ResetSortOrder()
+		return nil
+	case subscriptionplan.FieldDailyLimitUsd:
+		m.ResetDailyLimitUsd()
+		return nil
+	case subscriptionplan.FieldWeeklyLimitUsd:
+		m.ResetWeeklyLimitUsd()
+		return nil
+	case subscriptionplan.FieldMonthlyLimitUsd:
+		m.ResetMonthlyLimitUsd()
 		return nil
 	case subscriptionplan.FieldCreatedAt:
 		m.ResetCreatedAt()
@@ -27703,6 +28969,8 @@ type UserMutation struct {
 	concurrency                   *int
 	addconcurrency                *int
 	status                        *string
+	token_version                 *int64
+	addtoken_version              *int64
 	username                      *string
 	notes                         *string
 	totp_secret_encrypted         *string
@@ -28244,6 +29512,62 @@ func (m *UserMutation) OldStatus(ctx context.Context) (v string, err error) {
 // ResetStatus resets all changes to the "status" field.
 func (m *UserMutation) ResetStatus() {
 	m.status = nil
+}
+
+// SetTokenVersion sets the "token_version" field.
+func (m *UserMutation) SetTokenVersion(i int64) {
+	m.token_version = &i
+	m.addtoken_version = nil
+}
+
+// TokenVersion returns the value of the "token_version" field in the mutation.
+func (m *UserMutation) TokenVersion() (r int64, exists bool) {
+	v := m.token_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTokenVersion returns the old "token_version" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldTokenVersion(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTokenVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTokenVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTokenVersion: %w", err)
+	}
+	return oldValue.TokenVersion, nil
+}
+
+// AddTokenVersion adds i to the "token_version" field.
+func (m *UserMutation) AddTokenVersion(i int64) {
+	if m.addtoken_version != nil {
+		*m.addtoken_version += i
+	} else {
+		m.addtoken_version = &i
+	}
+}
+
+// AddedTokenVersion returns the value that was added to the "token_version" field in this mutation.
+func (m *UserMutation) AddedTokenVersion() (r int64, exists bool) {
+	v := m.addtoken_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTokenVersion resets all changes to the "token_version" field.
+func (m *UserMutation) ResetTokenVersion() {
+	m.token_version = nil
+	m.addtoken_version = nil
 }
 
 // SetUsername sets the "username" field.
@@ -29720,7 +31044,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 23)
+	fields := make([]string, 0, 24)
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
 	}
@@ -29747,6 +31071,9 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.status != nil {
 		fields = append(fields, user.FieldStatus)
+	}
+	if m.token_version != nil {
+		fields = append(fields, user.FieldTokenVersion)
 	}
 	if m.username != nil {
 		fields = append(fields, user.FieldUsername)
@@ -29816,6 +31143,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.Concurrency()
 	case user.FieldStatus:
 		return m.Status()
+	case user.FieldTokenVersion:
+		return m.TokenVersion()
 	case user.FieldUsername:
 		return m.Username()
 	case user.FieldNotes:
@@ -29871,6 +31200,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldConcurrency(ctx)
 	case user.FieldStatus:
 		return m.OldStatus(ctx)
+	case user.FieldTokenVersion:
+		return m.OldTokenVersion(ctx)
 	case user.FieldUsername:
 		return m.OldUsername(ctx)
 	case user.FieldNotes:
@@ -29970,6 +31301,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStatus(v)
+		return nil
+	case user.FieldTokenVersion:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTokenVersion(v)
 		return nil
 	case user.FieldUsername:
 		v, ok := value.(string)
@@ -30083,6 +31421,9 @@ func (m *UserMutation) AddedFields() []string {
 	if m.addconcurrency != nil {
 		fields = append(fields, user.FieldConcurrency)
 	}
+	if m.addtoken_version != nil {
+		fields = append(fields, user.FieldTokenVersion)
+	}
 	if m.addbalance_notify_threshold != nil {
 		fields = append(fields, user.FieldBalanceNotifyThreshold)
 	}
@@ -30104,6 +31445,8 @@ func (m *UserMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedBalance()
 	case user.FieldConcurrency:
 		return m.AddedConcurrency()
+	case user.FieldTokenVersion:
+		return m.AddedTokenVersion()
 	case user.FieldBalanceNotifyThreshold:
 		return m.AddedBalanceNotifyThreshold()
 	case user.FieldTotalRecharged:
@@ -30132,6 +31475,13 @@ func (m *UserMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddConcurrency(v)
+		return nil
+	case user.FieldTokenVersion:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTokenVersion(v)
 		return nil
 	case user.FieldBalanceNotifyThreshold:
 		v, ok := value.(float64)
@@ -30246,6 +31596,9 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldStatus:
 		m.ResetStatus()
+		return nil
+	case user.FieldTokenVersion:
+		m.ResetTokenVersion()
 		return nil
 	case user.FieldUsername:
 		m.ResetUsername()
@@ -32966,6 +34319,16 @@ type UserSubscriptionMutation struct {
 	created_at              *time.Time
 	updated_at              *time.Time
 	deleted_at              *time.Time
+	plan_id                 *int64
+	addplan_id              *int64
+	plan_name               *string
+	plan_platform           *string
+	daily_limit_usd         *float64
+	adddaily_limit_usd      *float64
+	weekly_limit_usd        *float64
+	addweekly_limit_usd     *float64
+	monthly_limit_usd       *float64
+	addmonthly_limit_usd    *float64
 	starts_at               *time.Time
 	expires_at              *time.Time
 	status                  *string
@@ -33284,6 +34647,358 @@ func (m *UserSubscriptionMutation) OldGroupID(ctx context.Context) (v int64, err
 // ResetGroupID resets all changes to the "group_id" field.
 func (m *UserSubscriptionMutation) ResetGroupID() {
 	m.group = nil
+}
+
+// SetPlanID sets the "plan_id" field.
+func (m *UserSubscriptionMutation) SetPlanID(i int64) {
+	m.plan_id = &i
+	m.addplan_id = nil
+}
+
+// PlanID returns the value of the "plan_id" field in the mutation.
+func (m *UserSubscriptionMutation) PlanID() (r int64, exists bool) {
+	v := m.plan_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPlanID returns the old "plan_id" field's value of the UserSubscription entity.
+// If the UserSubscription object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSubscriptionMutation) OldPlanID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPlanID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPlanID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPlanID: %w", err)
+	}
+	return oldValue.PlanID, nil
+}
+
+// AddPlanID adds i to the "plan_id" field.
+func (m *UserSubscriptionMutation) AddPlanID(i int64) {
+	if m.addplan_id != nil {
+		*m.addplan_id += i
+	} else {
+		m.addplan_id = &i
+	}
+}
+
+// AddedPlanID returns the value that was added to the "plan_id" field in this mutation.
+func (m *UserSubscriptionMutation) AddedPlanID() (r int64, exists bool) {
+	v := m.addplan_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearPlanID clears the value of the "plan_id" field.
+func (m *UserSubscriptionMutation) ClearPlanID() {
+	m.plan_id = nil
+	m.addplan_id = nil
+	m.clearedFields[usersubscription.FieldPlanID] = struct{}{}
+}
+
+// PlanIDCleared returns if the "plan_id" field was cleared in this mutation.
+func (m *UserSubscriptionMutation) PlanIDCleared() bool {
+	_, ok := m.clearedFields[usersubscription.FieldPlanID]
+	return ok
+}
+
+// ResetPlanID resets all changes to the "plan_id" field.
+func (m *UserSubscriptionMutation) ResetPlanID() {
+	m.plan_id = nil
+	m.addplan_id = nil
+	delete(m.clearedFields, usersubscription.FieldPlanID)
+}
+
+// SetPlanName sets the "plan_name" field.
+func (m *UserSubscriptionMutation) SetPlanName(s string) {
+	m.plan_name = &s
+}
+
+// PlanName returns the value of the "plan_name" field in the mutation.
+func (m *UserSubscriptionMutation) PlanName() (r string, exists bool) {
+	v := m.plan_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPlanName returns the old "plan_name" field's value of the UserSubscription entity.
+// If the UserSubscription object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSubscriptionMutation) OldPlanName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPlanName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPlanName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPlanName: %w", err)
+	}
+	return oldValue.PlanName, nil
+}
+
+// ResetPlanName resets all changes to the "plan_name" field.
+func (m *UserSubscriptionMutation) ResetPlanName() {
+	m.plan_name = nil
+}
+
+// SetPlanPlatform sets the "plan_platform" field.
+func (m *UserSubscriptionMutation) SetPlanPlatform(s string) {
+	m.plan_platform = &s
+}
+
+// PlanPlatform returns the value of the "plan_platform" field in the mutation.
+func (m *UserSubscriptionMutation) PlanPlatform() (r string, exists bool) {
+	v := m.plan_platform
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPlanPlatform returns the old "plan_platform" field's value of the UserSubscription entity.
+// If the UserSubscription object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSubscriptionMutation) OldPlanPlatform(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPlanPlatform is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPlanPlatform requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPlanPlatform: %w", err)
+	}
+	return oldValue.PlanPlatform, nil
+}
+
+// ResetPlanPlatform resets all changes to the "plan_platform" field.
+func (m *UserSubscriptionMutation) ResetPlanPlatform() {
+	m.plan_platform = nil
+}
+
+// SetDailyLimitUsd sets the "daily_limit_usd" field.
+func (m *UserSubscriptionMutation) SetDailyLimitUsd(f float64) {
+	m.daily_limit_usd = &f
+	m.adddaily_limit_usd = nil
+}
+
+// DailyLimitUsd returns the value of the "daily_limit_usd" field in the mutation.
+func (m *UserSubscriptionMutation) DailyLimitUsd() (r float64, exists bool) {
+	v := m.daily_limit_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDailyLimitUsd returns the old "daily_limit_usd" field's value of the UserSubscription entity.
+// If the UserSubscription object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSubscriptionMutation) OldDailyLimitUsd(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDailyLimitUsd is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDailyLimitUsd requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDailyLimitUsd: %w", err)
+	}
+	return oldValue.DailyLimitUsd, nil
+}
+
+// AddDailyLimitUsd adds f to the "daily_limit_usd" field.
+func (m *UserSubscriptionMutation) AddDailyLimitUsd(f float64) {
+	if m.adddaily_limit_usd != nil {
+		*m.adddaily_limit_usd += f
+	} else {
+		m.adddaily_limit_usd = &f
+	}
+}
+
+// AddedDailyLimitUsd returns the value that was added to the "daily_limit_usd" field in this mutation.
+func (m *UserSubscriptionMutation) AddedDailyLimitUsd() (r float64, exists bool) {
+	v := m.adddaily_limit_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearDailyLimitUsd clears the value of the "daily_limit_usd" field.
+func (m *UserSubscriptionMutation) ClearDailyLimitUsd() {
+	m.daily_limit_usd = nil
+	m.adddaily_limit_usd = nil
+	m.clearedFields[usersubscription.FieldDailyLimitUsd] = struct{}{}
+}
+
+// DailyLimitUsdCleared returns if the "daily_limit_usd" field was cleared in this mutation.
+func (m *UserSubscriptionMutation) DailyLimitUsdCleared() bool {
+	_, ok := m.clearedFields[usersubscription.FieldDailyLimitUsd]
+	return ok
+}
+
+// ResetDailyLimitUsd resets all changes to the "daily_limit_usd" field.
+func (m *UserSubscriptionMutation) ResetDailyLimitUsd() {
+	m.daily_limit_usd = nil
+	m.adddaily_limit_usd = nil
+	delete(m.clearedFields, usersubscription.FieldDailyLimitUsd)
+}
+
+// SetWeeklyLimitUsd sets the "weekly_limit_usd" field.
+func (m *UserSubscriptionMutation) SetWeeklyLimitUsd(f float64) {
+	m.weekly_limit_usd = &f
+	m.addweekly_limit_usd = nil
+}
+
+// WeeklyLimitUsd returns the value of the "weekly_limit_usd" field in the mutation.
+func (m *UserSubscriptionMutation) WeeklyLimitUsd() (r float64, exists bool) {
+	v := m.weekly_limit_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWeeklyLimitUsd returns the old "weekly_limit_usd" field's value of the UserSubscription entity.
+// If the UserSubscription object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSubscriptionMutation) OldWeeklyLimitUsd(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWeeklyLimitUsd is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWeeklyLimitUsd requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWeeklyLimitUsd: %w", err)
+	}
+	return oldValue.WeeklyLimitUsd, nil
+}
+
+// AddWeeklyLimitUsd adds f to the "weekly_limit_usd" field.
+func (m *UserSubscriptionMutation) AddWeeklyLimitUsd(f float64) {
+	if m.addweekly_limit_usd != nil {
+		*m.addweekly_limit_usd += f
+	} else {
+		m.addweekly_limit_usd = &f
+	}
+}
+
+// AddedWeeklyLimitUsd returns the value that was added to the "weekly_limit_usd" field in this mutation.
+func (m *UserSubscriptionMutation) AddedWeeklyLimitUsd() (r float64, exists bool) {
+	v := m.addweekly_limit_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearWeeklyLimitUsd clears the value of the "weekly_limit_usd" field.
+func (m *UserSubscriptionMutation) ClearWeeklyLimitUsd() {
+	m.weekly_limit_usd = nil
+	m.addweekly_limit_usd = nil
+	m.clearedFields[usersubscription.FieldWeeklyLimitUsd] = struct{}{}
+}
+
+// WeeklyLimitUsdCleared returns if the "weekly_limit_usd" field was cleared in this mutation.
+func (m *UserSubscriptionMutation) WeeklyLimitUsdCleared() bool {
+	_, ok := m.clearedFields[usersubscription.FieldWeeklyLimitUsd]
+	return ok
+}
+
+// ResetWeeklyLimitUsd resets all changes to the "weekly_limit_usd" field.
+func (m *UserSubscriptionMutation) ResetWeeklyLimitUsd() {
+	m.weekly_limit_usd = nil
+	m.addweekly_limit_usd = nil
+	delete(m.clearedFields, usersubscription.FieldWeeklyLimitUsd)
+}
+
+// SetMonthlyLimitUsd sets the "monthly_limit_usd" field.
+func (m *UserSubscriptionMutation) SetMonthlyLimitUsd(f float64) {
+	m.monthly_limit_usd = &f
+	m.addmonthly_limit_usd = nil
+}
+
+// MonthlyLimitUsd returns the value of the "monthly_limit_usd" field in the mutation.
+func (m *UserSubscriptionMutation) MonthlyLimitUsd() (r float64, exists bool) {
+	v := m.monthly_limit_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMonthlyLimitUsd returns the old "monthly_limit_usd" field's value of the UserSubscription entity.
+// If the UserSubscription object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSubscriptionMutation) OldMonthlyLimitUsd(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMonthlyLimitUsd is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMonthlyLimitUsd requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMonthlyLimitUsd: %w", err)
+	}
+	return oldValue.MonthlyLimitUsd, nil
+}
+
+// AddMonthlyLimitUsd adds f to the "monthly_limit_usd" field.
+func (m *UserSubscriptionMutation) AddMonthlyLimitUsd(f float64) {
+	if m.addmonthly_limit_usd != nil {
+		*m.addmonthly_limit_usd += f
+	} else {
+		m.addmonthly_limit_usd = &f
+	}
+}
+
+// AddedMonthlyLimitUsd returns the value that was added to the "monthly_limit_usd" field in this mutation.
+func (m *UserSubscriptionMutation) AddedMonthlyLimitUsd() (r float64, exists bool) {
+	v := m.addmonthly_limit_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearMonthlyLimitUsd clears the value of the "monthly_limit_usd" field.
+func (m *UserSubscriptionMutation) ClearMonthlyLimitUsd() {
+	m.monthly_limit_usd = nil
+	m.addmonthly_limit_usd = nil
+	m.clearedFields[usersubscription.FieldMonthlyLimitUsd] = struct{}{}
+}
+
+// MonthlyLimitUsdCleared returns if the "monthly_limit_usd" field was cleared in this mutation.
+func (m *UserSubscriptionMutation) MonthlyLimitUsdCleared() bool {
+	_, ok := m.clearedFields[usersubscription.FieldMonthlyLimitUsd]
+	return ok
+}
+
+// ResetMonthlyLimitUsd resets all changes to the "monthly_limit_usd" field.
+func (m *UserSubscriptionMutation) ResetMonthlyLimitUsd() {
+	m.monthly_limit_usd = nil
+	m.addmonthly_limit_usd = nil
+	delete(m.clearedFields, usersubscription.FieldMonthlyLimitUsd)
 }
 
 // SetStartsAt sets the "starts_at" field.
@@ -34025,7 +35740,7 @@ func (m *UserSubscriptionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserSubscriptionMutation) Fields() []string {
-	fields := make([]string, 0, 17)
+	fields := make([]string, 0, 23)
 	if m.created_at != nil {
 		fields = append(fields, usersubscription.FieldCreatedAt)
 	}
@@ -34040,6 +35755,24 @@ func (m *UserSubscriptionMutation) Fields() []string {
 	}
 	if m.group != nil {
 		fields = append(fields, usersubscription.FieldGroupID)
+	}
+	if m.plan_id != nil {
+		fields = append(fields, usersubscription.FieldPlanID)
+	}
+	if m.plan_name != nil {
+		fields = append(fields, usersubscription.FieldPlanName)
+	}
+	if m.plan_platform != nil {
+		fields = append(fields, usersubscription.FieldPlanPlatform)
+	}
+	if m.daily_limit_usd != nil {
+		fields = append(fields, usersubscription.FieldDailyLimitUsd)
+	}
+	if m.weekly_limit_usd != nil {
+		fields = append(fields, usersubscription.FieldWeeklyLimitUsd)
+	}
+	if m.monthly_limit_usd != nil {
+		fields = append(fields, usersubscription.FieldMonthlyLimitUsd)
 	}
 	if m.starts_at != nil {
 		fields = append(fields, usersubscription.FieldStartsAt)
@@ -34095,6 +35828,18 @@ func (m *UserSubscriptionMutation) Field(name string) (ent.Value, bool) {
 		return m.UserID()
 	case usersubscription.FieldGroupID:
 		return m.GroupID()
+	case usersubscription.FieldPlanID:
+		return m.PlanID()
+	case usersubscription.FieldPlanName:
+		return m.PlanName()
+	case usersubscription.FieldPlanPlatform:
+		return m.PlanPlatform()
+	case usersubscription.FieldDailyLimitUsd:
+		return m.DailyLimitUsd()
+	case usersubscription.FieldWeeklyLimitUsd:
+		return m.WeeklyLimitUsd()
+	case usersubscription.FieldMonthlyLimitUsd:
+		return m.MonthlyLimitUsd()
 	case usersubscription.FieldStartsAt:
 		return m.StartsAt()
 	case usersubscription.FieldExpiresAt:
@@ -34138,6 +35883,18 @@ func (m *UserSubscriptionMutation) OldField(ctx context.Context, name string) (e
 		return m.OldUserID(ctx)
 	case usersubscription.FieldGroupID:
 		return m.OldGroupID(ctx)
+	case usersubscription.FieldPlanID:
+		return m.OldPlanID(ctx)
+	case usersubscription.FieldPlanName:
+		return m.OldPlanName(ctx)
+	case usersubscription.FieldPlanPlatform:
+		return m.OldPlanPlatform(ctx)
+	case usersubscription.FieldDailyLimitUsd:
+		return m.OldDailyLimitUsd(ctx)
+	case usersubscription.FieldWeeklyLimitUsd:
+		return m.OldWeeklyLimitUsd(ctx)
+	case usersubscription.FieldMonthlyLimitUsd:
+		return m.OldMonthlyLimitUsd(ctx)
 	case usersubscription.FieldStartsAt:
 		return m.OldStartsAt(ctx)
 	case usersubscription.FieldExpiresAt:
@@ -34205,6 +35962,48 @@ func (m *UserSubscriptionMutation) SetField(name string, value ent.Value) error 
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetGroupID(v)
+		return nil
+	case usersubscription.FieldPlanID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPlanID(v)
+		return nil
+	case usersubscription.FieldPlanName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPlanName(v)
+		return nil
+	case usersubscription.FieldPlanPlatform:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPlanPlatform(v)
+		return nil
+	case usersubscription.FieldDailyLimitUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDailyLimitUsd(v)
+		return nil
+	case usersubscription.FieldWeeklyLimitUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWeeklyLimitUsd(v)
+		return nil
+	case usersubscription.FieldMonthlyLimitUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMonthlyLimitUsd(v)
 		return nil
 	case usersubscription.FieldStartsAt:
 		v, ok := value.(time.Time)
@@ -34298,6 +36097,18 @@ func (m *UserSubscriptionMutation) SetField(name string, value ent.Value) error 
 // this mutation.
 func (m *UserSubscriptionMutation) AddedFields() []string {
 	var fields []string
+	if m.addplan_id != nil {
+		fields = append(fields, usersubscription.FieldPlanID)
+	}
+	if m.adddaily_limit_usd != nil {
+		fields = append(fields, usersubscription.FieldDailyLimitUsd)
+	}
+	if m.addweekly_limit_usd != nil {
+		fields = append(fields, usersubscription.FieldWeeklyLimitUsd)
+	}
+	if m.addmonthly_limit_usd != nil {
+		fields = append(fields, usersubscription.FieldMonthlyLimitUsd)
+	}
 	if m.adddaily_usage_usd != nil {
 		fields = append(fields, usersubscription.FieldDailyUsageUsd)
 	}
@@ -34315,6 +36126,14 @@ func (m *UserSubscriptionMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *UserSubscriptionMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case usersubscription.FieldPlanID:
+		return m.AddedPlanID()
+	case usersubscription.FieldDailyLimitUsd:
+		return m.AddedDailyLimitUsd()
+	case usersubscription.FieldWeeklyLimitUsd:
+		return m.AddedWeeklyLimitUsd()
+	case usersubscription.FieldMonthlyLimitUsd:
+		return m.AddedMonthlyLimitUsd()
 	case usersubscription.FieldDailyUsageUsd:
 		return m.AddedDailyUsageUsd()
 	case usersubscription.FieldWeeklyUsageUsd:
@@ -34330,6 +36149,34 @@ func (m *UserSubscriptionMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *UserSubscriptionMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case usersubscription.FieldPlanID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPlanID(v)
+		return nil
+	case usersubscription.FieldDailyLimitUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDailyLimitUsd(v)
+		return nil
+	case usersubscription.FieldWeeklyLimitUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWeeklyLimitUsd(v)
+		return nil
+	case usersubscription.FieldMonthlyLimitUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddMonthlyLimitUsd(v)
+		return nil
 	case usersubscription.FieldDailyUsageUsd:
 		v, ok := value.(float64)
 		if !ok {
@@ -34362,6 +36209,18 @@ func (m *UserSubscriptionMutation) ClearedFields() []string {
 	if m.FieldCleared(usersubscription.FieldDeletedAt) {
 		fields = append(fields, usersubscription.FieldDeletedAt)
 	}
+	if m.FieldCleared(usersubscription.FieldPlanID) {
+		fields = append(fields, usersubscription.FieldPlanID)
+	}
+	if m.FieldCleared(usersubscription.FieldDailyLimitUsd) {
+		fields = append(fields, usersubscription.FieldDailyLimitUsd)
+	}
+	if m.FieldCleared(usersubscription.FieldWeeklyLimitUsd) {
+		fields = append(fields, usersubscription.FieldWeeklyLimitUsd)
+	}
+	if m.FieldCleared(usersubscription.FieldMonthlyLimitUsd) {
+		fields = append(fields, usersubscription.FieldMonthlyLimitUsd)
+	}
 	if m.FieldCleared(usersubscription.FieldDailyWindowStart) {
 		fields = append(fields, usersubscription.FieldDailyWindowStart)
 	}
@@ -34393,6 +36252,18 @@ func (m *UserSubscriptionMutation) ClearField(name string) error {
 	switch name {
 	case usersubscription.FieldDeletedAt:
 		m.ClearDeletedAt()
+		return nil
+	case usersubscription.FieldPlanID:
+		m.ClearPlanID()
+		return nil
+	case usersubscription.FieldDailyLimitUsd:
+		m.ClearDailyLimitUsd()
+		return nil
+	case usersubscription.FieldWeeklyLimitUsd:
+		m.ClearWeeklyLimitUsd()
+		return nil
+	case usersubscription.FieldMonthlyLimitUsd:
+		m.ClearMonthlyLimitUsd()
 		return nil
 	case usersubscription.FieldDailyWindowStart:
 		m.ClearDailyWindowStart()
@@ -34431,6 +36302,24 @@ func (m *UserSubscriptionMutation) ResetField(name string) error {
 		return nil
 	case usersubscription.FieldGroupID:
 		m.ResetGroupID()
+		return nil
+	case usersubscription.FieldPlanID:
+		m.ResetPlanID()
+		return nil
+	case usersubscription.FieldPlanName:
+		m.ResetPlanName()
+		return nil
+	case usersubscription.FieldPlanPlatform:
+		m.ResetPlanPlatform()
+		return nil
+	case usersubscription.FieldDailyLimitUsd:
+		m.ResetDailyLimitUsd()
+		return nil
+	case usersubscription.FieldWeeklyLimitUsd:
+		m.ResetWeeklyLimitUsd()
+		return nil
+	case usersubscription.FieldMonthlyLimitUsd:
+		m.ResetMonthlyLimitUsd()
 		return nil
 	case usersubscription.FieldStartsAt:
 		m.ResetStartsAt()

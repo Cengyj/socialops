@@ -149,3 +149,41 @@ func TestSettingHandler_GetPublicSettings_DoesNotExposeAIChannelSettings(t *test
 	require.NotContains(t, resp.Data, "available_channels_enabled")
 	require.NotContains(t, resp.Data, "ops_monitoring_enabled")
 }
+
+func TestSettingHandler_GetPublicSettings_OnlyExposesUserCustomMenuItems(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := NewSettingHandler(service.NewSettingService(&settingHandlerPublicRepoStub{
+		values: map[string]string{
+			service.SettingKeyCustomMenuItems: `[
+				{"id":"public-page","label":"Public","url":"md:public","visibility":"user","sort_order":0},
+				{"id":"admin-page","label":"Admin","url":"md:admin","visibility":"admin","sort_order":1},
+				{"id":"invalid-page","label":"Invalid","url":"md:invalid","visibility":"partner","sort_order":2},
+				{"id":"missing-page","label":"Missing","url":"md:missing","sort_order":3}
+			]`,
+		},
+	}, &config.Config{}), "test-version")
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/settings/public", nil)
+
+	h.GetPublicSettings(c)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp struct {
+		Code int `json:"code"`
+		Data struct {
+			CustomMenuItems []struct {
+				ID         string `json:"id"`
+				Visibility string `json:"visibility"`
+			} `json:"custom_menu_items"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, 0, resp.Code)
+	require.Equal(t, []struct {
+		ID         string `json:"id"`
+		Visibility string `json:"visibility"`
+	}{{ID: "public-page", Visibility: "user"}}, resp.Data.CustomMenuItems)
+}

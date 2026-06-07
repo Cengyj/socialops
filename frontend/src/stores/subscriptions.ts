@@ -7,6 +7,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import subscriptionsAPI from '@/api/subscriptions'
 import type { UserSubscription } from '@/types'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 // Cache TTL: 60 seconds
 const CACHE_TTL_MS = 60_000
@@ -67,7 +68,7 @@ export const useSubscriptionStore = defineStore('subscriptions', () => {
         return data
       })
       .catch((error) => {
-        console.error('Failed to fetch active subscriptions:', error)
+        recordClientDiagnostic('subscriptions.fetchActive', error)
         throw error
       })
       .finally(() => {
@@ -90,7 +91,7 @@ export const useSubscriptionStore = defineStore('subscriptions', () => {
 
     pollerInterval = setInterval(() => {
       fetchActiveSubscriptions(true).catch((error) => {
-        console.error('Subscription polling failed:', error)
+        recordClientDiagnostic('subscriptions.poll', error)
       })
     }, 5 * 60 * 1000)
   }

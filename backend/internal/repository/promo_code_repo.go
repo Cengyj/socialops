@@ -47,7 +47,8 @@ func (r *promoCodeRepository) Create(ctx context.Context, code *service.PromoCod
 }
 
 func (r *promoCodeRepository) GetByID(ctx context.Context, id int64) (*service.PromoCode, error) {
-	m, err := r.client.PromoCode.Query().
+	client := clientFromContext(ctx, r.client)
+	m, err := client.PromoCode.Query().
 		Where(promocode.IDEQ(id)).
 		Only(ctx)
 	if err != nil {
@@ -60,7 +61,8 @@ func (r *promoCodeRepository) GetByID(ctx context.Context, id int64) (*service.P
 }
 
 func (r *promoCodeRepository) GetByCode(ctx context.Context, code string) (*service.PromoCode, error) {
-	m, err := r.client.PromoCode.Query().
+	client := clientFromContext(ctx, r.client)
+	m, err := client.PromoCode.Query().
 		Where(promocode.CodeEqualFold(code)).
 		Only(ctx)
 	if err != nil {
@@ -126,7 +128,8 @@ func (r *promoCodeRepository) List(ctx context.Context, params pagination.Pagina
 }
 
 func (r *promoCodeRepository) ListWithFilters(ctx context.Context, params pagination.PaginationParams, status, search string) ([]service.PromoCode, *pagination.PaginationResult, error) {
-	q := r.client.PromoCode.Query()
+	client := clientFromContext(ctx, r.client)
+	q := client.PromoCode.Query()
 
 	if status != "" {
 		q = q.Where(promocode.StatusEQ(status))
@@ -200,7 +203,8 @@ func (r *promoCodeRepository) CreateUsage(ctx context.Context, usage *service.Pr
 }
 
 func (r *promoCodeRepository) GetUsageByPromoCodeAndUser(ctx context.Context, promoCodeID, userID int64) (*service.PromoCodeUsage, error) {
-	m, err := r.client.PromoCodeUsage.Query().
+	client := clientFromContext(ctx, r.client)
+	m, err := client.PromoCodeUsage.Query().
 		Where(
 			promocodeusage.PromoCodeIDEQ(promoCodeID),
 			promocodeusage.UserIDEQ(userID),
@@ -216,7 +220,8 @@ func (r *promoCodeRepository) GetUsageByPromoCodeAndUser(ctx context.Context, pr
 }
 
 func (r *promoCodeRepository) ListUsagesByPromoCode(ctx context.Context, promoCodeID int64, params pagination.PaginationParams) ([]service.PromoCodeUsage, *pagination.PaginationResult, error) {
-	q := r.client.PromoCodeUsage.Query().
+	client := clientFromContext(ctx, r.client)
+	q := client.PromoCodeUsage.Query().
 		Where(promocodeusage.PromoCodeIDEQ(promoCodeID))
 
 	total, err := q.Clone().Count(ctx)

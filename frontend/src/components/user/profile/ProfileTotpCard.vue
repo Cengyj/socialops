@@ -107,6 +107,7 @@ import { totpAPI } from '@/api'
 import type { TotpStatus } from '@/types'
 import TotpSetupModal from './TotpSetupModal.vue'
 import TotpDisableDialog from './TotpDisableDialog.vue'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 const { t } = useI18n()
 
@@ -120,7 +121,7 @@ const loadStatus = async () => {
   try {
     status.value = await totpAPI.getStatus()
   } catch (error) {
-    console.error('Failed to load TOTP status:', error)
+    recordClientDiagnostic('profile.totp.load_status', error)
   } finally {
     loading.value = false
   }

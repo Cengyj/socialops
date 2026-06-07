@@ -173,6 +173,8 @@ import { useAppStore } from '@/stores/app'
 import { totpAPI } from '@/api'
 import type { TotpSetupResponse } from '@/types'
 import QRCode from 'qrcode'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
+import { showSafeProfileError } from './profileError'
 
 const emit = defineEmits<{
   close: []
@@ -235,7 +237,7 @@ watch(
           }
         })
       } catch (err) {
-        console.error('Failed to generate QR code:', err)
+        recordClientDiagnostic('profile.totp.generate_qr_code', err)
       }
     }
   },
@@ -314,8 +316,8 @@ const loadVerificationMethod = async () => {
   try {
     const method = await totpAPI.getVerificationMethod()
     verificationMethod.value = method.method
-  } catch (err: any) {
-    appStore.showError(err.response?.data?.message || t('common.error'))
+  } catch (err: unknown) {
+    showSafeProfileError(appStore, 'profile.totp.load_verification_method', err, t('common.error'))
     emit('close')
   } finally {
     methodLoading.value = false
@@ -342,8 +344,8 @@ const handleSendCode = async () => {
         }
       }
     }, 1000)
-  } catch (err: any) {
-    appStore.showError(err.response?.data?.message || t('profile.totp.sendCodeFailed'))
+  } catch (err: unknown) {
+    showSafeProfileError(appStore, 'profile.totp.setup_send_code', err, t('profile.totp.sendCodeFailed'))
   } finally {
     sendingCode.value = false
   }
@@ -359,8 +361,8 @@ const handleVerifyAndSetup = async () => {
 
     setupData.value = await totpAPI.initiateSetup(request)
     step.value = 1
-  } catch (err: any) {
-    appStore.showError(err.response?.data?.message || t('profile.totp.setupFailed'))
+  } catch (err: unknown) {
+    showSafeProfileError(appStore, 'profile.totp.initiate_setup', err, t('profile.totp.setupFailed'))
   } finally {
     setupLoading.value = false
   }
@@ -379,8 +381,8 @@ const handleVerify = async () => {
     })
     appStore.showSuccess(t('profile.totp.enableSuccess'))
     emit('success')
-  } catch (err: any) {
-    appStore.showError(err.response?.data?.message || t('profile.totp.verifyFailed'))
+  } catch (err: unknown) {
+    showSafeProfileError(appStore, 'profile.totp.verify_setup', err, t('profile.totp.verifyFailed'))
     code.value = ['', '', '', '', '', '']
     nextTick(() => {
       inputRefs.value[0]?.focus()

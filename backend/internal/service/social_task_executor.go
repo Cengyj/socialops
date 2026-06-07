@@ -4,20 +4,28 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	dbent "github.com/Wei-Shaw/socialops/ent"
 	"github.com/Wei-Shaw/socialops/ent/socialtasklog"
+	infraerrors "github.com/Wei-Shaw/socialops/internal/pkg/errors"
 )
 
 // SocialTaskAction constants.
 const (
-	SocialTaskActionLoginCheck = "login_check"
-	SocialTaskActionFollow     = "follow"
-	SocialTaskActionMessage    = "message"
-	SocialTaskActionPost       = "post"
-	SocialTaskActionLike       = "like"
+	SocialTaskActionLogin         = "login"
+	SocialTaskActionLoginCheck    = "login_check"
+	SocialTaskActionFollow        = "follow"
+	SocialTaskActionMessage       = "message"
+	SocialTaskActionPost          = "post"
+	SocialTaskActionLike          = "like"
+	SocialTaskActionRetweet       = "retweet"
+	SocialTaskActionUpdateProfile = "update_profile"
+	SocialTaskActionUpdateAvatar  = "update_avatar"
+	SocialTaskActionUpdateBanner  = "update_banner"
 
 	legacySocialTaskActionDM    = "dm"
 	legacySocialTaskActionTweet = "tweet"
@@ -31,6 +39,8 @@ const (
 	SocialTaskLogStatusFailed  = "failed"
 )
 
+const socialTaskRunningRecoveryTimeout = 2 * time.Minute
+
 // SocialTaskExecutor handles async execution of social tasks.
 type SocialTaskExecutor struct {
 	entClient   *dbent.Client
@@ -39,8 +49,11 @@ type SocialTaskExecutor struct {
 	taskCh      chan int64 // task log IDs to process
 	stopCh      chan struct{}
 	wg          sync.WaitGroup
+	stopOnce    sync.Once
+	stopped     atomic.Bool
 	minInterval time.Duration // minimum interval between operations per account
 	maxRetries  int
+	executors   map[string]SocialPlatformExecutor
 }
 
 // SocialTaskExecutorConfig holds configuration for the task executor.
@@ -73,6 +86,27 @@ func NewSocialTaskExecutor(entClient *dbent.Client, billing *SocialBillingServic
 		stopCh:      make(chan struct{}),
 		minInterval: time.Duration(cfg.MinIntervalMs) * time.Millisecond,
 		maxRetries:  cfg.MaxRetries,
+		executors:   make(map[string]SocialPlatformExecutor),
+	}
+}
+
+// RegisterPlatformExecutor attaches a real platform adapter to the task worker.
+func (e *SocialTaskExecutor) RegisterPlatformExecutor(platform string, executor SocialPlatformExecutor) {
+	if e == nil || executor == nil {
+		return
+	}
+	if e.executors == nil {
+		e.executors = make(map[string]SocialPlatformExecutor)
+	}
+	platform = normalizeSocialPlatform(platform)
+	if platform == "" {
+		return
+	}
+	e.executors[platform] = executor
+	if isTwitterPlatform(platform) {
+		e.executors["x_twitter"] = executor
+		e.executors["twitter"] = executor
+		e.executors["x"] = executor
 	}
 }
 
@@ -82,19 +116,30 @@ func (e *SocialTaskExecutor) Start() {
 		e.wg.Add(1)
 		go e.worker(i)
 	}
+	e.wg.Add(1)
+	go e.pendingRecoveryLoop()
 	slog.Info("social task executor started", "workers", e.workerCount)
 }
 
 // Stop gracefully shuts down the executor.
 func (e *SocialTaskExecutor) Stop() {
-	close(e.stopCh)
-	e.wg.Wait()
-	slog.Info("social task executor stopped")
+	if e == nil {
+		return
+	}
+	e.stopOnce.Do(func() {
+		e.stopped.Store(true)
+		close(e.stopCh)
+		e.wg.Wait()
+		slog.Info("social task executor stopped")
+	})
 }
 
 // Enqueue adds a task log ID to the processing queue.
 // Returns false if the queue is full.
 func (e *SocialTaskExecutor) Enqueue(taskLogID int64) bool {
+	if e == nil || e.stopped.Load() {
+		return false
+	}
 	select {
 	case e.taskCh <- taskLogID:
 		return true
@@ -103,16 +148,27 @@ func (e *SocialTaskExecutor) Enqueue(taskLogID int64) bool {
 	}
 }
 
+func (e *SocialTaskExecutor) isStopped() bool {
+	return e == nil || e.stopped.Load()
+}
+
 // EnqueueBatch enqueues multiple task log IDs.
-// Returns the number successfully enqueued.
-func (e *SocialTaskExecutor) EnqueueBatch(taskLogIDs []int64) int {
+// Returns the number successfully enqueued and the exact IDs that were rejected.
+func (e *SocialTaskExecutor) EnqueueBatch(taskLogIDs []int64) (int, []int64) {
+	return enqueueSocialTaskBatch(taskLogIDs, e.Enqueue)
+}
+
+func enqueueSocialTaskBatch(taskLogIDs []int64, enqueue func(int64) bool) (int, []int64) {
 	enqueued := 0
+	failed := make([]int64, 0)
 	for _, id := range taskLogIDs {
-		if e.Enqueue(id) {
+		if enqueue != nil && enqueue(id) {
 			enqueued++
+			continue
 		}
+		failed = append(failed, id)
 	}
-	return enqueued
+	return enqueued, failed
 }
 
 func (e *SocialTaskExecutor) worker(id int) {
@@ -129,6 +185,67 @@ func (e *SocialTaskExecutor) worker(id int) {
 			time.Sleep(e.minInterval)
 		}
 	}
+}
+
+func (e *SocialTaskExecutor) pendingRecoveryLoop() {
+	defer e.wg.Done()
+	e.recoverPendingTasks()
+
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-e.stopCh:
+			return
+		case <-ticker.C:
+			e.recoverPendingTasks()
+		}
+	}
+}
+
+func (e *SocialTaskExecutor) recoverPendingTasks() {
+	if e == nil || e.isStopped() {
+		return
+	}
+	if failed, err := e.failStaleRunningTasks(context.Background(), time.Now().Add(-socialTaskRunningRecoveryTimeout)); err != nil {
+		slog.Warn("failed to recover stale running social tasks", "error", err)
+	} else if failed > 0 {
+		slog.Warn("failed stale running social tasks without charge", "failed", failed)
+	}
+	limit := cap(e.taskCh)
+	if limit <= 0 {
+		limit = 50
+	}
+	enqueued, err := e.ProcessPendingTasks(context.Background(), limit)
+	if err != nil {
+		slog.Warn("failed to recover pending social tasks", "error", err)
+		return
+	}
+	if enqueued > 0 {
+		slog.Info("recovered pending social tasks", "enqueued", enqueued)
+	}
+}
+
+func (e *SocialTaskExecutor) failStaleRunningTasks(ctx context.Context, staleBefore time.Time) (int, error) {
+	if e == nil || e.entClient == nil {
+		return 0, nil
+	}
+	now := time.Now()
+	message := "任务执行超时，本次未扣费"
+	return e.entClient.SocialTaskLog.Update().
+		Where(
+			socialtasklog.StatusEQ(SocialTaskLogStatusRunning),
+			socialtasklog.ChargeStatusEQ(SocialTaskChargeStatusNotCharged),
+			socialtasklog.UpdatedAtLTE(staleBefore),
+		).
+		SetStatus(SocialTaskLogStatusFailed).
+		SetResultMessage(message).
+		SetExecutedAt(now).
+		SetChargedAmount(0).
+		SetChargeStatus(SocialTaskChargeStatusNotCharged).
+		ClearChargeSource().
+		ClearBillingRequestID().
+		Save(ctx)
 }
 
 func (e *SocialTaskExecutor) processTask(taskLogID int64) {
@@ -157,8 +274,7 @@ func (e *SocialTaskExecutor) processTask(taskLogID int64) {
 		return
 	}
 
-	// Execute the action
-	result, execErr := e.executeAction(ctx, taskLog)
+	result, execErr := e.executeActionSafely(ctx, taskLog)
 
 	// Update status based on result
 	now := time.Now()
@@ -166,17 +282,19 @@ func (e *SocialTaskExecutor) processTask(taskLogID int64) {
 		SetExecutedAt(now)
 
 	if execErr != nil {
-		errMsg := execErr.Error()
+		e.recordAccountExecutionOutcome(ctx, taskLog, result, execErr)
+		errMsg := safeSocialTaskFailureMessage(execErr)
 		update.SetStatus(SocialTaskLogStatusFailed).
 			SetResultMessage(errMsg).
 			SetChargedAmount(0).
 			SetChargeStatus(SocialTaskChargeStatusNotCharged).
-			ClearChargeSource()
+			ClearChargeSource().
+			ClearBillingRequestID()
 		slog.Warn("social task failed", "task_log_id", taskLogID, "action", taskLog.Action, "error", errMsg)
 	} else {
 		charge, chargeErr := e.finalizeSuccessfulTask(ctx, taskLogID, taskLog.UserID, taskLog.Price, result)
 		if chargeErr != nil {
-			errMsg := fmt.Sprintf("execution succeeded but billing failed: %v", chargeErr)
+			errMsg := safeSocialTaskFailureMessage(fmt.Errorf("execution succeeded but billing failed: %w", chargeErr))
 			update.SetStatus(SocialTaskLogStatusFailed).
 				SetResultMessage(errMsg).
 				SetChargedAmount(0).
@@ -185,6 +303,7 @@ func (e *SocialTaskExecutor) processTask(taskLogID int64) {
 				ClearBillingRequestID()
 			slog.Error("social task billing failed after execution", "task_log_id", taskLogID, "action", taskLog.Action, "error", chargeErr)
 		} else {
+			e.recordAccountExecutionOutcome(ctx, taskLog, result, nil)
 			slog.Info("social task completed", "task_log_id", taskLogID, "action", taskLog.Action, "charged_amount", charge.Amount, "charge_source", charge.Source)
 			return
 		}
@@ -197,6 +316,8 @@ func (e *SocialTaskExecutor) processTask(taskLogID int64) {
 
 func (e *SocialTaskExecutor) executeAction(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
 	switch taskLog.Action {
+	case SocialTaskActionLogin:
+		return e.doLogin(ctx, taskLog)
 	case SocialTaskActionLoginCheck:
 		return e.doLoginCheck(ctx, taskLog)
 	case SocialTaskActionFollow:
@@ -207,9 +328,32 @@ func (e *SocialTaskExecutor) executeAction(ctx context.Context, taskLog *dbent.S
 		return e.doPost(ctx, taskLog)
 	case SocialTaskActionLike:
 		return e.doLike(ctx, taskLog)
+	case SocialTaskActionRetweet:
+		return e.doRetweet(ctx, taskLog)
+	case SocialTaskActionUpdateProfile:
+		return e.doUpdateProfile(ctx, taskLog)
+	case SocialTaskActionUpdateAvatar:
+		return e.doUpdateAvatar(ctx, taskLog)
+	case SocialTaskActionUpdateBanner:
+		return e.doUpdateBanner(ctx, taskLog)
 	default:
 		return "", fmt.Errorf("unsupported action: %s", taskLog.Action)
 	}
+}
+
+func (e *SocialTaskExecutor) executeActionSafely(ctx context.Context, taskLog *dbent.SocialTaskLog) (result string, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			taskLogID := int64(0)
+			if taskLog != nil {
+				taskLogID = taskLog.ID
+			}
+			slog.Error("social platform executor panicked", "task_log_id", taskLogID, "panic", fmt.Sprint(recovered))
+			result = ""
+			err = newSocialExecutionError(SocialExecutionFailurePlatform, "social platform executor failed unexpectedly", nil)
+		}
+	}()
+	return e.executeAction(ctx, taskLog)
 }
 
 // --- Action implementations ---
@@ -218,8 +362,124 @@ func unsupportedSocialAction(action string) (string, error) {
 	return "", fmt.Errorf("%s is not configured: social platform executor is not available", action)
 }
 
+func (e *SocialTaskExecutor) executePlatformAction(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
+	if e == nil || e.entClient == nil || taskLog == nil {
+		return unsupportedSocialAction("")
+	}
+	account, err := e.entClient.SocialAccount.Get(ctx, taskLog.SocialAccountID)
+	if err != nil {
+		slog.Warn("social task account load failed", "task_log_id", taskLog.ID, "account_id", taskLog.SocialAccountID, "error", err)
+		return "", fmt.Errorf("social account is unavailable")
+	}
+	if err := validateTaskExecutionAccountScope(taskLog, account); err != nil {
+		return "", err
+	}
+	platform := normalizeSocialPlatform(account.PlatformKey)
+	if platform == "" {
+		platform = normalizeSocialPlatform(account.Platform)
+	}
+	executor := e.executors[platform]
+	if executor == nil {
+		return unsupportedSocialAction(taskLog.Action)
+	}
+	return executor.Execute(ctx, taskLog, account)
+}
+
+func validateTaskExecutionAccountScope(taskLog *dbent.SocialTaskLog, account *dbent.SocialAccount) error {
+	if taskLog == nil || account == nil {
+		return fmt.Errorf("social account is unavailable")
+	}
+	if account.AssignedUserID == nil || int64(*account.AssignedUserID) != taskLog.UserID {
+		return fmt.Errorf("social account is unavailable")
+	}
+	if account.UserWorkbenchDeletedAt != nil {
+		return fmt.Errorf("social account is unavailable")
+	}
+	if account.AccountStatus != SocialAccountStatusAvailable {
+		return fmt.Errorf("social account is unavailable")
+	}
+	return nil
+}
+
 func (e *SocialTaskExecutor) doLoginCheck(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
-	return unsupportedSocialAction(taskLog.Action)
+	return e.executePlatformAction(ctx, taskLog)
+}
+
+// validateLoginAccountScope mirrors validateTaskExecutionAccountScope but omits
+// the "available" requirement: login is the action that acquires credentials and
+// makes a freshly imported account available, so it must run on not-yet-available
+// accounts. Ownership and workbench presence are still enforced.
+func validateLoginAccountScope(taskLog *dbent.SocialTaskLog, account *dbent.SocialAccount) error {
+	if taskLog == nil || account == nil {
+		return fmt.Errorf("social account is unavailable")
+	}
+	if account.AssignedUserID == nil || int64(*account.AssignedUserID) != taskLog.UserID {
+		return fmt.Errorf("social account is unavailable")
+	}
+	if account.UserWorkbenchDeletedAt != nil {
+		return fmt.Errorf("social account is unavailable")
+	}
+	return nil
+}
+
+// doLogin performs a password login through the platform adapter and writes the
+// acquired credentials back to the account before billing. Any failure — login
+// error or credential write-back error — is returned as a fail-closed error so
+// the task is marked failed and never charged.
+func (e *SocialTaskExecutor) doLogin(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
+	if e == nil || e.entClient == nil || taskLog == nil {
+		return unsupportedSocialAction(SocialTaskActionLogin)
+	}
+	account, err := e.entClient.SocialAccount.Get(ctx, taskLog.SocialAccountID)
+	if err != nil {
+		slog.Warn("social login account load failed", "task_log_id", taskLog.ID, "account_id", taskLog.SocialAccountID, "error", err)
+		return "", fmt.Errorf("social account is unavailable")
+	}
+	if err := validateLoginAccountScope(taskLog, account); err != nil {
+		return "", err
+	}
+	platform := normalizeSocialPlatform(account.PlatformKey)
+	if platform == "" {
+		platform = normalizeSocialPlatform(account.Platform)
+	}
+	executor, ok := e.executors[platform].(SocialAccountLoginExecutor)
+	if !ok || executor == nil {
+		return unsupportedSocialAction(SocialTaskActionLogin)
+	}
+	result, err := executor.Login(ctx, taskLog, account)
+	if err != nil {
+		return "", err
+	}
+	if result == nil || strings.TrimSpace(result.ExecutionAuth) == "" {
+		return "", newSocialExecutionError(SocialExecutionFailureAuthInvalid, "login succeeded without usable auth credentials", nil)
+	}
+	if err := e.persistLoginCredentials(ctx, account.ID, result); err != nil {
+		slog.Error("social login credential write-back failed", "task_log_id", taskLog.ID, "account_id", account.ID, "error", err)
+		return "", newSocialExecutionError(SocialExecutionFailurePlatform, "failed to store login credentials", err)
+	}
+	message := strings.TrimSpace(result.Message)
+	if message == "" {
+		message = "login succeeded"
+	}
+	return message, nil
+}
+
+// persistLoginCredentials writes acquired execution credentials back to the
+// account. It runs before the billing finalizer so a write failure fails the
+// task closed without charge.
+func (e *SocialTaskExecutor) persistLoginCredentials(ctx context.Context, accountID int64, result *SocialAccountCredentialResult) error {
+	update := e.entClient.SocialAccount.UpdateOneID(accountID).
+		SetExecutionAuth(strings.TrimSpace(result.ExecutionAuth)).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored)
+	if authCookie := strings.TrimSpace(result.AuthCookie); authCookie != "" {
+		update.SetAuthCookie(authCookie)
+	}
+	if platformUserID := trimPtr(result.PlatformUserID); platformUserID != "" {
+		update.SetPlatformUserID(platformUserID)
+	}
+	_, err := update.Save(ctx)
+	return err
 }
 
 func (e *SocialTaskExecutor) doMessage(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
@@ -229,33 +489,79 @@ func (e *SocialTaskExecutor) doMessage(ctx context.Context, taskLog *dbent.Socia
 	if taskLog.Content == nil || *taskLog.Content == "" {
 		return "", fmt.Errorf("message content is required")
 	}
-	return unsupportedSocialAction(taskLog.Action)
+	return e.executePlatformAction(ctx, taskLog)
 }
 
 func (e *SocialTaskExecutor) doFollow(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
-	if taskLog.Target == nil || *taskLog.Target == "" {
+	if socialTaskLogTarget(taskLog) == "" {
 		return "", fmt.Errorf("follow target is required")
 	}
-	return unsupportedSocialAction(taskLog.Action)
+	return e.executePlatformAction(ctx, taskLog)
 }
 
 func (e *SocialTaskExecutor) doPost(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
-	if taskLog.Content == nil || *taskLog.Content == "" {
-		return "", fmt.Errorf("post content is required")
+	hasContent := taskLog.Content != nil && strings.TrimSpace(*taskLog.Content) != ""
+	hasMedia := taskLog != nil && taskLog.Payload.Post != nil && len(taskLog.Payload.Post.Media) > 0
+	if !hasContent && !hasMedia {
+		return "", fmt.Errorf("post content or media is required")
 	}
-	return unsupportedSocialAction(taskLog.Action)
+	return e.executePlatformAction(ctx, taskLog)
+}
+
+func (e *SocialTaskExecutor) doUpdateProfile(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
+	if taskLog == nil || taskLog.Payload.Profile == nil || taskLog.Payload.Profile.IsZero() {
+		return "", fmt.Errorf("profile payload is required")
+	}
+	return e.executePlatformAction(ctx, taskLog)
+}
+
+func (e *SocialTaskExecutor) doUpdateAvatar(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
+	if taskLog == nil || taskLog.Payload.Avatar == nil || taskLog.Payload.Avatar.IsZero() {
+		return "", fmt.Errorf("avatar media is required")
+	}
+	return e.executePlatformAction(ctx, taskLog)
+}
+
+func (e *SocialTaskExecutor) doUpdateBanner(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
+	if taskLog == nil || taskLog.Payload.Banner == nil || taskLog.Payload.Banner.IsZero() {
+		return "", fmt.Errorf("banner media is required")
+	}
+	return e.executePlatformAction(ctx, taskLog)
 }
 
 func (e *SocialTaskExecutor) doLike(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
-	if taskLog.Target == nil || *taskLog.Target == "" {
+	if socialTaskLogTarget(taskLog) == "" {
 		return "", fmt.Errorf("like target (post URL/ID) is required")
 	}
-	return unsupportedSocialAction(taskLog.Action)
+	return e.executePlatformAction(ctx, taskLog)
+}
+
+func (e *SocialTaskExecutor) doRetweet(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
+	if socialTaskLogTarget(taskLog) == "" {
+		return "", fmt.Errorf("retweet target (post URL/ID) is required")
+	}
+	return e.executePlatformAction(ctx, taskLog)
+}
+
+func socialTaskLogTarget(taskLog *dbent.SocialTaskLog) string {
+	if taskLog == nil {
+		return ""
+	}
+	if target := strings.TrimSpace(taskLog.Payload.Target); target != "" {
+		return target
+	}
+	if taskLog.Target == nil {
+		return ""
+	}
+	return strings.TrimSpace(*taskLog.Target)
 }
 
 // ProcessPendingTasks scans for pending tasks and enqueues them.
 // This can be called periodically or on-demand.
 func (e *SocialTaskExecutor) ProcessPendingTasks(ctx context.Context, limit int) (int, error) {
+	if e == nil || e.entClient == nil {
+		return 0, infraerrors.ServiceUnavailable("SOCIAL_TASK_EXECUTOR_UNAVAILABLE", "social task executor is unavailable")
+	}
 	if limit <= 0 {
 		limit = 50
 	}
@@ -272,7 +578,46 @@ func (e *SocialTaskExecutor) ProcessPendingTasks(ctx context.Context, limit int)
 	for i, t := range tasks {
 		ids[i] = int64(t.ID)
 	}
-	return e.EnqueueBatch(ids), nil
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	if e.taskCh == nil || e.isStopped() {
+		message := "social platform executor queue is not configured; task was not charged"
+		if err := e.markPendingTasksFailedNotCharged(ctx, ids, message); err != nil {
+			return 0, err
+		}
+		return 0, nil
+	}
+	enqueued, failedIDs := e.EnqueueBatch(ids)
+	if len(failedIDs) > 0 {
+		message := "social platform executor queue is full; task was not charged"
+		if err := e.markPendingTasksFailedNotCharged(ctx, failedIDs, message); err != nil {
+			return enqueued, err
+		}
+	}
+	return enqueued, nil
+}
+
+func (e *SocialTaskExecutor) markPendingTasksFailedNotCharged(ctx context.Context, taskLogIDs []int64, message string) error {
+	now := time.Now()
+	for _, taskLogID := range taskLogIDs {
+		if _, err := e.entClient.SocialTaskLog.Update().
+			Where(
+				socialtasklog.IDEQ(taskLogID),
+				socialtasklog.StatusEQ(SocialTaskLogStatusPending),
+			).
+			SetStatus(SocialTaskLogStatusFailed).
+			SetResultMessage(message).
+			SetExecutedAt(now).
+			SetChargedAmount(0).
+			SetChargeStatus(SocialTaskChargeStatusNotCharged).
+			ClearChargeSource().
+			ClearBillingRequestID().
+			Save(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (e *SocialTaskExecutor) finalizeSuccessfulTask(ctx context.Context, taskLogID, userID int64, amount float64, result string) (*SocialBillingChargeResult, error) {
@@ -280,4 +625,161 @@ func (e *SocialTaskExecutor) finalizeSuccessfulTask(ctx context.Context, taskLog
 		return nil, fmt.Errorf("social billing finalizer is unavailable")
 	}
 	return e.billing.FinalizeSuccessfulTask(ctx, e.entClient, taskLogID, userID, amount, result)
+}
+
+func (e *SocialTaskExecutor) recordAccountExecutionOutcome(ctx context.Context, taskLog *dbent.SocialTaskLog, result string, execErr error) {
+	if e == nil || e.entClient == nil || taskLog == nil || taskLog.SocialAccountID <= 0 {
+		return
+	}
+	if execErr == nil {
+		update := e.entClient.SocialAccount.UpdateOneID(taskLog.SocialAccountID).
+			SetAccountStatus(SocialAccountStatusAvailable).
+			SetTaskStatus(SocialTaskStatusStored)
+		if strings.TrimSpace(result) != "" {
+			update.SetTaskMessage(result)
+		} else {
+			update.ClearTaskMessage()
+		}
+		if _, err := update.Save(ctx); err != nil {
+			slog.Warn("failed to update social account success state", "task_log_id", taskLog.ID, "account_id", taskLog.SocialAccountID, "error", err)
+		}
+		return
+	}
+
+	kind, ok := socialExecutionFailureKind(execErr)
+	if !ok {
+		return
+	}
+	update := e.entClient.SocialAccount.UpdateOneID(taskLog.SocialAccountID).
+		SetTaskMessage(safeSocialTaskFailureMessage(execErr))
+	accountStatus, taskStatus, shouldUpdate := socialAccountStateForExecutionFailure(kind)
+	if !shouldUpdate {
+		if _, err := update.Save(ctx); err != nil {
+			slog.Warn(
+				"failed to update social account latest task message",
+				"task_log_id", taskLog.ID,
+				"account_id", taskLog.SocialAccountID,
+				"failure_kind", kind,
+				"error", err,
+			)
+		}
+		return
+	}
+	if accountStatus != "" {
+		update.SetAccountStatus(accountStatus)
+	}
+	if taskStatus != "" {
+		update.SetTaskStatus(taskStatus)
+	}
+	if _, err := update.Save(ctx); err != nil {
+		slog.Warn(
+			"failed to update social account failure state",
+			"task_log_id", taskLog.ID,
+			"account_id", taskLog.SocialAccountID,
+			"failure_kind", kind,
+			"error", err,
+		)
+	}
+}
+
+func safeSocialTaskFailureMessage(err error) string {
+	rawMessage := strings.TrimSpace(fmt.Sprint(err))
+	normalizedMessage := strings.ToLower(rawMessage)
+	switch {
+	case strings.Contains(normalizedMessage, "avatar image must be 400x400 pixels"):
+		return "头像图片尺寸必须为 400x400，本次未扣费"
+	case strings.Contains(normalizedMessage, "banner image must be 1500x500 pixels"):
+		return "背景图图片尺寸必须为 1500x500，本次未扣费"
+	case strings.Contains(normalizedMessage, "media asset is unavailable"):
+		return "任务媒体资源不可用，本次未扣费"
+	case strings.Contains(normalizedMessage, "media source is not supported yet"):
+		return "媒体引用暂未开放，本次未扣费"
+	case strings.Contains(normalizedMessage, "video media is not implemented yet"):
+		return "视频发帖媒体暂未开放，本次未扣费"
+	case strings.Contains(normalizedMessage, "post media content type is not supported"):
+		return "发帖媒体类型暂不支持，本次未扣费"
+	case strings.Contains(normalizedMessage, "twitter media upload returned invalid media id"),
+		strings.Contains(normalizedMessage, "twitter media upload returned invalid response"),
+		strings.Contains(normalizedMessage, "twitter media upload returned no media id"),
+		strings.Contains(normalizedMessage, "twitter media upload returned processing failed"),
+		strings.Contains(normalizedMessage, "twitter media upload returned processing timeout"):
+		return "平台媒体上传失败，本次未扣费"
+	case strings.Contains(normalizedMessage, "target not found"):
+		return "执行目标不存在，本次未扣费"
+	case strings.Contains(normalizedMessage, "content is too long"),
+		strings.Contains(normalizedMessage, "duplicate"),
+		strings.Contains(normalizedMessage, "already"),
+		strings.Contains(normalizedMessage, "restricted"):
+		return "内容或目标状态不符合平台要求，本次未扣费"
+	}
+
+	kind, ok := socialExecutionFailureKind(err)
+	if ok {
+		switch kind {
+		case SocialExecutionFailureAuthMissing, SocialExecutionFailureAuthInvalid:
+			return "账号认证信息不可用，本次未扣费"
+		case SocialExecutionFailureProxyMissing, SocialExecutionFailureProxyInvalid, SocialExecutionFailureProxyUnavailable, SocialExecutionFailureNetwork:
+			return "执行代理不可用，本次未扣费"
+		case SocialExecutionFailureUnsupported:
+			return "该动作暂不支持，本次未扣费"
+		case SocialExecutionFailureActionInput:
+			return "任务参数不完整，本次未扣费"
+		case SocialExecutionFailureChallengeRequired:
+			return "账号需要额外验证，本次未扣费"
+		case SocialExecutionFailureAccountLimited:
+			return "账号状态或频率受限，本次未扣费"
+		case SocialExecutionFailurePlatform:
+			return "该平台动作暂不可用，本次未扣费"
+		}
+	}
+	message := normalizedMessage
+	switch {
+	case strings.Contains(message, "queue is full"):
+		return "任务队列繁忙，本次未扣费"
+	case strings.Contains(message, "billing failed"):
+		return "执行已完成，但扣费确认异常，请联系管理员处理"
+	case strings.Contains(message, "not configured") || strings.Contains(message, "executor is not available") || strings.Contains(message, "executor queue"):
+		return "该平台动作暂不可用，本次未扣费"
+	case strings.Contains(message, "auth cookie") || strings.Contains(message, "authentication failed") || strings.Contains(message, "oauth") || strings.Contains(message, "token"):
+		return "账号认证信息不可用，本次未扣费"
+	case strings.Contains(message, "proxy"):
+		return "执行代理不可用，本次未扣费"
+	case strings.Contains(message, "unsupported action"):
+		return "该动作暂不支持，本次未扣费"
+	case strings.Contains(message, "target is required") || strings.Contains(message, "content is required"):
+		return "任务参数不完整，本次未扣费"
+	case strings.Contains(message, "target not found"):
+		return "执行目标不存在，本次未扣费"
+	case strings.Contains(message, "challenge required") ||
+		strings.Contains(message, "captcha challenge") ||
+		strings.Contains(message, "verification required") ||
+		strings.Contains(message, "additional verification") ||
+		strings.Contains(message, "confirm your identity"):
+		return "账号需要额外验证，本次未扣费"
+	case strings.Contains(message, "rate limit") || strings.Contains(message, "too frequent") || strings.Contains(message, "follow limit") || strings.Contains(message, "suspended") || strings.Contains(message, "locked"):
+		return "账号状态或频率受限，本次未扣费"
+	case strings.Contains(message, "content is too long") || strings.Contains(message, "duplicate") || strings.Contains(message, "already") || strings.Contains(message, "restricted"):
+		return "内容或目标状态不符合平台要求，本次未扣费"
+	case strings.Contains(message, "access denied"):
+		return "平台拒绝执行，本次未扣费"
+	default:
+		return "任务执行失败，本次未扣费"
+	}
+}
+
+func socialAccountStateForExecutionFailure(kind SocialExecutionFailureKind) (accountStatus, taskStatus string, shouldUpdate bool) {
+	switch kind {
+	case SocialExecutionFailureAuthMissing:
+		return SocialAccountStatusNotStored, SocialTaskStatusManualReview, true
+	case SocialExecutionFailureAuthInvalid:
+		return SocialAccountStatusInvalid, SocialTaskStatusManualReview, true
+	case SocialExecutionFailureAccountLimited:
+		return SocialAccountStatusLimited, SocialTaskStatusManualReview, true
+	case SocialExecutionFailureChallengeRequired:
+		return SocialAccountStatusPendingCheck, SocialTaskStatusManualReview, true
+	case SocialExecutionFailureProxyMissing, SocialExecutionFailureProxyInvalid, SocialExecutionFailureProxyUnavailable, SocialExecutionFailureNetwork:
+		return "", SocialTaskStatusIPUnavailable, true
+	default:
+		return "", "", false
+	}
 }

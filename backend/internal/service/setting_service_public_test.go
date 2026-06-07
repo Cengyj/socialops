@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/Wei-Shaw/socialops/internal/config"
@@ -91,6 +92,21 @@ func TestSettingService_GetPublicSettings_ExposesForceEmailOnThirdPartySignup(t 
 	require.True(t, settings.ForceEmailOnThirdPartySignup)
 }
 
+func TestSettingService_GetPublicSettingsForInjection_ExposesForceEmailOnThirdPartySignup(t *testing.T) {
+	repo := &settingPublicRepoStub{
+		values: map[string]string{
+			SettingKeyForceEmailOnThirdPartySignup: "true",
+		},
+	}
+	svc := NewSettingService(repo, &config.Config{})
+
+	payloadAny, err := svc.GetPublicSettingsForInjection(context.Background())
+	require.NoError(t, err)
+	payload, ok := payloadAny.(*PublicSettingsInjectionPayload)
+	require.True(t, ok)
+	require.True(t, payload.ForceEmailOnThirdPartySignup)
+}
+
 func TestSettingService_GetPublicSettings_ExposesWeChatOAuthModeCapabilities(t *testing.T) {
 	svc := NewSettingService(&settingPublicRepoStub{
 		values: map[string]string{
@@ -159,4 +175,47 @@ func TestSettingService_GetPublicSettings_UsesSocialOpsSubtitleDefault(t *testin
 
 	require.NoError(t, err)
 	require.Equal(t, "Website account pool and social execution billing platform", settings.SiteSubtitle)
+}
+
+func TestSettingService_GetPublicSettingsForInjection_OnlyInjectsUserCustomMenuItems(t *testing.T) {
+	svc := NewSettingService(&settingPublicRepoStub{
+		values: map[string]string{
+			SettingKeyCustomMenuItems: `[
+				{"id":"public-page","label":"Public","url":"md:public","visibility":"user","sort_order":0},
+				{"id":"admin-page","label":"Admin","url":"md:admin","visibility":"admin","sort_order":1},
+				{"id":"invalid-page","label":"Invalid","url":"md:invalid","visibility":"partner","sort_order":2},
+				{"id":"missing-page","label":"Missing","url":"md:missing","sort_order":3}
+			]`,
+		},
+	}, &config.Config{})
+
+	payloadAny, err := svc.GetPublicSettingsForInjection(context.Background())
+	require.NoError(t, err)
+	payload, ok := payloadAny.(*PublicSettingsInjectionPayload)
+	require.True(t, ok)
+
+	var items []struct {
+		ID         string `json:"id"`
+		Visibility string `json:"visibility"`
+	}
+	require.NoError(t, json.Unmarshal(payload.CustomMenuItems, &items))
+	require.Equal(t, []struct {
+		ID         string `json:"id"`
+		Visibility string `json:"visibility"`
+	}{{ID: "public-page", Visibility: "user"}}, items)
+}
+
+func TestSettingService_GetPublicSettingsForInjection_InjectsEmptyCustomEndpointsForNonArrayJSON(t *testing.T) {
+	svc := NewSettingService(&settingPublicRepoStub{
+		values: map[string]string{
+			SettingKeyCustomEndpoints: `{"name":"docs","endpoint":"https://docs.example.com"}`,
+		},
+	}, &config.Config{})
+
+	payloadAny, err := svc.GetPublicSettingsForInjection(context.Background())
+	require.NoError(t, err)
+	payload, ok := payloadAny.(*PublicSettingsInjectionPayload)
+	require.True(t, ok)
+
+	require.JSONEq(t, `[]`, string(payload.CustomEndpoints))
 }

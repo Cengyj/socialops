@@ -382,6 +382,30 @@ describe('useAuthStore', () => {
       expect(store.isSimpleMode).toBe(true)
     })
 
+    it('刷新页面后同步恢复已持久化的 simple run_mode', async () => {
+      const simpleResponse = {
+        ...fakeAuthResponse,
+        user: { ...fakeUser, run_mode: 'simple' as const },
+      }
+      mockLogin.mockResolvedValue(simpleResponse)
+
+      const store = useAuthStore()
+      await store.login({ email: 'test@example.com', password: '123456' })
+
+      expect(localStorage.getItem('auth_run_mode')).toBe('simple')
+
+      setActivePinia(createPinia())
+      mockGetCurrentUser.mockResolvedValue({
+        data: { ...fakeUser, run_mode: 'simple' as const },
+      })
+
+      const restoredStore = useAuthStore()
+      restoredStore.checkAuth()
+
+      expect(restoredStore.isAuthenticated).toBe(true)
+      expect(restoredStore.isSimpleMode).toBe(true)
+    })
+
     it('默认为 standard 模式', () => {
       const store = useAuthStore()
       expect(store.isSimpleMode).toBe(false)

@@ -15,13 +15,11 @@ import dataManagementAPI from './dataManagement'
 import backupAPI from './backup'
 import adminPaymentAPI from './payment'
 import affiliatesAPI from './affiliates'
-import socialAccountsAdminAPI from './socialAccounts'
-import adminUsageAPI from './usage'
+import { accountWorkbenchAdminAPI } from '../accountWorkbench'
 import adminRiskControlAPI from './riskControl'
 import dashboardAPI from './dashboard'
 import groupsAPI from './groups'
-import accountsAPI from './accounts'
-import proxiesAPI from './proxies'
+import totalAccountsAPI from './totalAccounts'
 
 /**
  * Unified admin API object for convenient access
@@ -39,13 +37,11 @@ export const adminAPI = {
   backup: backupAPI,
   payment: adminPaymentAPI,
   affiliates: affiliatesAPI,
-  socialAccounts: socialAccountsAdminAPI,
-  usage: adminUsageAPI,
+  accountWorkbench: accountWorkbenchAdminAPI,
   riskControl: adminRiskControlAPI,
   dashboard: dashboardAPI,
   groups: groupsAPI,
-  accounts: accountsAPI,
-  proxies: proxiesAPI,
+  totalAccounts: totalAccountsAPI,
 }
 
 export {
@@ -61,13 +57,11 @@ export {
   backupAPI,
   adminPaymentAPI,
   affiliatesAPI,
-  socialAccountsAdminAPI,
-  adminUsageAPI,
+  accountWorkbenchAdminAPI,
   adminRiskControlAPI,
   dashboardAPI,
   groupsAPI,
-  accountsAPI,
-  proxiesAPI,
+  totalAccountsAPI,
 }
 
 export default adminAPI
@@ -75,5 +69,4 @@ export default adminAPI
 // Re-export types used by components
 export type { BalanceHistoryItem } from './users'
 export type { BackupAgentHealth, DataManagementConfig } from './dataManagement'
-export type { SocialAccount, SocialAccountStats } from './socialAccounts'
-export type { AdminProxy, AdminProxyCheckResult } from './proxies'
+export type { AdminSocialTaskLog, SocialAccount, SocialAccountStats } from '../accountWorkbench'

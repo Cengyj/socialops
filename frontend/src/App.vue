@@ -7,6 +7,7 @@ import { resolveDocumentTitle } from '@/router/title'
 import AnnouncementPopup from '@/components/common/AnnouncementPopup.vue'
 import { useAppStore, useAuthStore, useSubscriptionStore, useAnnouncementStore } from '@/stores'
 import { getSetupStatus } from '@/api/setup'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 const router = useRouter()
 const route = useRoute()
@@ -55,7 +56,7 @@ watch(
     if (isAuthenticated) {
       // User logged in: preload subscriptions and start polling
       subscriptionStore.fetchActiveSubscriptions().catch((error) => {
-        console.error('Failed to preload subscriptions:', error)
+        recordClientDiagnostic('app.preloadSubscriptions', error)
       })
       subscriptionStore.startPolling()
 

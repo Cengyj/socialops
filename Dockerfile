@@ -115,9 +115,8 @@ RUN addgroup -g 1000 socialops && \
 # Set working directory
 WORKDIR /app
 
-# Copy binary/resources with ownership to avoid extra full-layer chown copy
+# Copy binary with ownership to avoid extra full-layer chown copy
 COPY --from=backend-builder --chown=socialops:socialops /app/socialops /app/socialops
-COPY --from=backend-builder --chown=socialops:socialops /app/backend/resources /app/resources
 
 # Create data directory
 RUN mkdir -p /app/data && chown socialops:socialops /app/data

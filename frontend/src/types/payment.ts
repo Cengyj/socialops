@@ -25,7 +25,7 @@ export type OrderType = 'balance' | 'subscription'
 // ==================== Configuration ====================
 
 export interface PaymentConfig {
-  payment_enabled: boolean
+  enabled: boolean
   min_amount: number
   max_amount: number
   daily_limit: number
@@ -33,10 +33,20 @@ export interface PaymentConfig {
   order_timeout_minutes: number
   balance_disabled: boolean
   balance_recharge_multiplier: number
+  recharge_fee_rate: number
+  load_balance_strategy: string
   enabled_payment_types: PaymentType[]
+  product_name_prefix: string
+  product_name_suffix: string
   help_image_url: string
   help_text: string
-  stripe_publishable_key: string
+  stripe_publishable_key?: string
+  cancel_rate_limit_enabled: boolean
+  cancel_rate_limit_max: number
+  cancel_rate_limit_window: number
+  cancel_rate_limit_unit: string
+  cancel_rate_limit_window_mode: string
+  alipay_force_qrcode: boolean
 }
 
 export interface MethodLimit {
@@ -77,7 +87,10 @@ export interface CheckoutInfoResponse {
 
 export interface PaymentOrder {
   id: number
-  user_id: number
+  user_id?: number
+  user_email?: string
+  user_name?: string
+  user_notes?: string | null
   amount: number
   pay_amount: number
   currency?: string
@@ -90,10 +103,12 @@ export interface PaymentOrder {
   expires_at: string
   paid_at?: string
   completed_at?: string
+  failed_at?: string
+  failed_reason?: string
   refund_amount: number
   refund_reason?: string
   refund_requested_at?: string
-  refund_requested_by?: number
+  refund_requested_by?: string
   refund_request_reason?: string
   plan_id?: number
   provider_instance_id?: string
@@ -103,12 +118,18 @@ export interface PaymentOrder {
 
 export interface SubscriptionPlan {
   id: number
+  platform?: string
+  /** Internal execution binding used by the account pool/router; not a user-facing package category. */
   group_id: number
+  /** Admin/compatibility metadata for the internal execution binding. */
   group_platform?: string
   group_name?: string
-  rate_multiplier?: number
+  group_status?: string
+  subscription_type?: string
+  quota_usd?: number | null
   daily_limit_usd?: number | null
   weekly_limit_usd?: number | null
+  /** Compatibility backing field for period quota; prefer quota_usd in new code. */
   monthly_limit_usd?: number | null
   name: string
   description: string
@@ -118,6 +139,7 @@ export interface SubscriptionPlan {
   validity_unit: string
   /** Stored as JSON string in backend; API layer should parse before use */
   features: string[]
+  product_name?: string
   for_sale: boolean
   sort_order: number
 }
@@ -154,7 +176,7 @@ export interface ProviderInstance {
 export interface CreateOrderRequest {
   amount: number
   payment_type: string
-  order_type: string
+  order_type: OrderType
   plan_id?: number
   return_url?: string
   payment_source?: string
@@ -212,6 +234,7 @@ export interface DashboardStats {
   today_count: number
   total_count: number
   avg_amount: number
+  pending_orders: number
   daily_series: { date: string; amount: number; count: number }[]
   payment_methods: { type: string; amount: number; count: number }[]
   top_users: { user_id: number; email: string; amount: number }[]

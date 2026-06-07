@@ -45,8 +45,16 @@ func coerceDeprecatedDingTalkCorpPolicy(policy string) string {
 }
 
 var (
-	ErrRegistrationDisabled   = infraerrors.Forbidden("REGISTRATION_DISABLED", "registration is currently disabled")
-	ErrSettingNotFound        = infraerrors.NotFound("SETTING_NOT_FOUND", "setting not found")
+	ErrRegistrationDisabled  = infraerrors.Forbidden("REGISTRATION_DISABLED", "registration is currently disabled")
+	ErrSettingNotFound       = infraerrors.NotFound("SETTING_NOT_FOUND", "setting not found")
+	ErrDefaultSubPlanInvalid = infraerrors.BadRequest(
+		"DEFAULT_SUBSCRIPTION_PLAN_INVALID",
+		"default subscription plan must exist and be bound to an active subscription group",
+	)
+	ErrDefaultSubPlanDuplicate = infraerrors.BadRequest(
+		"DEFAULT_SUBSCRIPTION_PLAN_DUPLICATE",
+		"default subscription plan cannot be duplicated",
+	)
 	ErrDefaultSubGroupInvalid = infraerrors.BadRequest(
 		"DEFAULT_SUBSCRIPTION_GROUP_INVALID",
 		"default subscription group must exist and be subscription type",
@@ -85,10 +93,21 @@ type DefaultSubscriptionGroupReader interface {
 	GetByID(ctx context.Context, id int64) (*Group, error)
 }
 
+type DefaultSubscriptionPlanBinding struct {
+	ID      int64
+	GroupID int64
+}
+
+// DefaultSubscriptionPlanReader validates plan references used by default subscriptions.
+type DefaultSubscriptionPlanReader interface {
+	GetDefaultSubscriptionPlan(ctx context.Context, id int64) (DefaultSubscriptionPlanBinding, error)
+}
+
 // SettingService 系统设置服务
 type SettingService struct {
 	settingRepo           SettingRepository
 	defaultSubGroupReader DefaultSubscriptionGroupReader
+	defaultSubPlanReader  DefaultSubscriptionPlanReader
 	cfg                   *config.Config
 	onUpdate              func() // Callback when settings are updated (for cache invalidation)
 	version               string // Application version
@@ -521,6 +540,11 @@ func (s *SettingService) SetDefaultSubscriptionGroupReader(reader DefaultSubscri
 	s.defaultSubGroupReader = reader
 }
 
+// SetDefaultSubscriptionPlanReader injects an optional plan reader for default subscription validation.
+func (s *SettingService) SetDefaultSubscriptionPlanReader(reader DefaultSubscriptionPlanReader) {
+	s.defaultSubPlanReader = reader
+}
+
 func (s *SettingService) LoadAPIKeyACLTrustForwardedIPSetting(ctx context.Context) error {
 	if s == nil || s.cfg == nil || s.settingRepo == nil {
 		return nil
@@ -757,6 +781,7 @@ func (s *SettingService) SetVersion(version string) {
 type PublicSettingsInjectionPayload struct {
 	RegistrationEnabled              bool                     `json:"registration_enabled"`
 	EmailVerifyEnabled               bool                     `json:"email_verify_enabled"`
+	ForceEmailOnThirdPartySignup     bool                     `json:"force_email_on_third_party_signup"`
 	RegistrationEmailSuffixWhitelist []string                 `json:"registration_email_suffix_whitelist"`
 	PromoCodeEnabled                 bool                     `json:"promo_code_enabled"`
 	PasswordResetEnabled             bool                     `json:"password_reset_enabled"`
@@ -817,6 +842,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 	return &PublicSettingsInjectionPayload{
 		RegistrationEnabled:              settings.RegistrationEnabled,
 		EmailVerifyEnabled:               settings.EmailVerifyEnabled,
+		ForceEmailOnThirdPartySignup:     settings.ForceEmailOnThirdPartySignup,
 		RegistrationEmailSuffixWhitelist: settings.RegistrationEmailSuffixWhitelist,
 		PromoCodeEnabled:                 settings.PromoCodeEnabled,
 		PasswordResetEnabled:             settings.PasswordResetEnabled,
@@ -1014,8 +1040,7 @@ func (s *SettingService) effectiveEmailOAuthConfig(settings map[string]string, p
 	return cfg
 }
 
-// filterUserVisibleMenuItems filters out admin-only menu items from a raw JSON
-// array string, returning only items with visibility != "admin".
+// filterUserVisibleMenuItems returns only menu items explicitly marked user-visible.
 func filterUserVisibleMenuItems(raw string) json.RawMessage {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || raw == "[]" {
@@ -1036,7 +1061,7 @@ func filterUserVisibleMenuItems(raw string) json.RawMessage {
 
 	var filtered []json.RawMessage
 	for i, item := range items {
-		if item.Visibility != "admin" {
+		if item.Visibility == "user" {
 			filtered = append(filtered, fullItems[i])
 		}
 	}
@@ -1050,13 +1075,14 @@ func filterUserVisibleMenuItems(raw string) json.RawMessage {
 	return result
 }
 
-// safeRawJSONArray returns raw as json.RawMessage if it's valid JSON, otherwise "[]".
+// safeRawJSONArray returns raw as json.RawMessage only when it is a JSON array.
 func safeRawJSONArray(raw string) json.RawMessage {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return json.RawMessage("[]")
 	}
-	if json.Valid([]byte(raw)) {
+	var items []json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &items); err == nil {
 		return json.RawMessage(raw)
 	}
 	return json.RawMessage("[]")
@@ -1198,6 +1224,12 @@ func (s *SettingService) OIDCSecurityWriteDefaults(ctx context.Context) (bool, b
 
 // UpdateSettingsWithAuthSourceDefaults persists system settings and auth-source defaults in a single write.
 func (s *SettingService) UpdateSettingsWithAuthSourceDefaults(ctx context.Context, settings *SystemSettings, authDefaults *AuthSourceDefaultSettings) error {
+	return s.UpdateSettingsWithAuthSourceDefaultsAndExtra(ctx, settings, authDefaults, nil)
+}
+
+// UpdateSettingsWithAuthSourceDefaultsAndExtra persists system settings, auth-source defaults,
+// and additional settings-table updates in one repository write.
+func (s *SettingService) UpdateSettingsWithAuthSourceDefaultsAndExtra(ctx context.Context, settings *SystemSettings, authDefaults *AuthSourceDefaultSettings, extraUpdates map[string]string) error {
 	updates, err := s.buildSystemSettingsUpdates(ctx, settings)
 	if err != nil {
 		return err
@@ -1210,6 +1242,9 @@ func (s *SettingService) UpdateSettingsWithAuthSourceDefaults(ctx context.Contex
 	for key, value := range authSourceUpdates {
 		updates[key] = value
 	}
+	for key, value := range extraUpdates {
+		updates[key] = value
+	}
 
 	err = s.settingRepo.SetMultiple(ctx, updates)
 	if err == nil {
@@ -1219,7 +1254,7 @@ func (s *SettingService) UpdateSettingsWithAuthSourceDefaults(ctx context.Contex
 }
 
 func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, settings *SystemSettings) (map[string]string, error) {
-	if err := s.validateDefaultSubscriptionGroups(ctx, settings.DefaultSubscriptions); err != nil {
+	if err := s.validateDefaultSubscriptionPackages(ctx, settings.DefaultSubscriptions); err != nil {
 		return nil, err
 	}
 	normalizedWhitelist, err := NormalizeRegistrationEmailSuffixWhitelist(settings.RegistrationEmailSuffixWhitelist)
@@ -1507,7 +1542,7 @@ func (s *SettingService) buildAuthSourceDefaultUpdates(ctx context.Context, sett
 		settings.Google.Subscriptions,
 		settings.DingTalk.Subscriptions,
 	} {
-		if err := s.validateDefaultSubscriptionGroups(ctx, subscriptions); err != nil {
+		if err := s.validateDefaultSubscriptionPackages(ctx, subscriptions); err != nil {
 			return nil, err
 		}
 	}
@@ -1542,42 +1577,93 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 	}
 }
 
-func (s *SettingService) validateDefaultSubscriptionGroups(ctx context.Context, items []DefaultSubscriptionSetting) error {
+func (s *SettingService) validateDefaultSubscriptionPackages(ctx context.Context, items []DefaultSubscriptionSetting) error {
 	if len(items) == 0 {
 		return nil
 	}
 
-	checked := make(map[int64]struct{}, len(items))
+	checkedPlans := make(map[int64]struct{}, len(items))
+	checkedGroups := make(map[int64]struct{}, len(items))
 	for _, item := range items {
+		if item.PlanID > 0 {
+			if _, ok := checkedPlans[item.PlanID]; ok {
+				return ErrDefaultSubPlanDuplicate.WithMetadata(map[string]string{
+					"plan_id": strconv.FormatInt(item.PlanID, 10),
+				})
+			}
+			checkedPlans[item.PlanID] = struct{}{}
+			if err := s.validateDefaultSubscriptionPlan(ctx, item); err != nil {
+				return err
+			}
+			continue
+		}
 		if item.GroupID <= 0 {
 			continue
 		}
-		if _, ok := checked[item.GroupID]; ok {
+		if _, ok := checkedGroups[item.GroupID]; ok {
 			return ErrDefaultSubGroupDuplicate.WithMetadata(map[string]string{
 				"group_id": strconv.FormatInt(item.GroupID, 10),
 			})
 		}
-		checked[item.GroupID] = struct{}{}
-		if s.defaultSubGroupReader == nil {
-			continue
-		}
-
-		group, err := s.defaultSubGroupReader.GetByID(ctx, item.GroupID)
-		if err != nil {
-			if errors.Is(err, ErrGroupNotFound) {
-				return ErrDefaultSubGroupInvalid.WithMetadata(map[string]string{
-					"group_id": strconv.FormatInt(item.GroupID, 10),
-				})
-			}
-			return fmt.Errorf("get default subscription group %d: %w", item.GroupID, err)
-		}
-		if !group.IsSubscriptionType() {
-			return ErrDefaultSubGroupInvalid.WithMetadata(map[string]string{
-				"group_id": strconv.FormatInt(item.GroupID, 10),
-			})
+		checkedGroups[item.GroupID] = struct{}{}
+		if err := s.validateDefaultSubscriptionGroup(ctx, item.GroupID); err != nil {
+			return err
 		}
 	}
 
+	return nil
+}
+
+func (s *SettingService) validateDefaultSubscriptionPlan(ctx context.Context, item DefaultSubscriptionSetting) error {
+	if s.defaultSubPlanReader == nil {
+		if item.GroupID > 0 {
+			return s.validateDefaultSubscriptionGroup(ctx, item.GroupID)
+		}
+		return nil
+	}
+
+	binding, err := s.defaultSubPlanReader.GetDefaultSubscriptionPlan(ctx, item.PlanID)
+	if err != nil {
+		if errors.Is(err, ErrDefaultSubPlanInvalid) {
+			return ErrDefaultSubPlanInvalid.WithMetadata(map[string]string{
+				"plan_id": strconv.FormatInt(item.PlanID, 10),
+			})
+		}
+		return fmt.Errorf("get default subscription plan %d: %w", item.PlanID, err)
+	}
+	if binding.GroupID <= 0 {
+		return ErrDefaultSubPlanInvalid.WithMetadata(map[string]string{
+			"plan_id": strconv.FormatInt(item.PlanID, 10),
+		})
+	}
+	if item.GroupID > 0 && item.GroupID != binding.GroupID {
+		return ErrDefaultSubPlanInvalid.WithMetadata(map[string]string{
+			"plan_id":  strconv.FormatInt(item.PlanID, 10),
+			"group_id": strconv.FormatInt(item.GroupID, 10),
+		})
+	}
+	return nil
+}
+
+func (s *SettingService) validateDefaultSubscriptionGroup(ctx context.Context, groupID int64) error {
+	if s.defaultSubGroupReader == nil {
+		return nil
+	}
+
+	group, err := s.defaultSubGroupReader.GetByID(ctx, groupID)
+	if err != nil {
+		if errors.Is(err, ErrGroupNotFound) {
+			return ErrDefaultSubGroupInvalid.WithMetadata(map[string]string{
+				"group_id": strconv.FormatInt(groupID, 10),
+			})
+		}
+		return fmt.Errorf("get default subscription group %d: %w", groupID, err)
+	}
+	if !group.IsSubscriptionType() {
+		return ErrDefaultSubGroupInvalid.WithMetadata(map[string]string{
+			"group_id": strconv.FormatInt(groupID, 10),
+		})
+	}
 	return nil
 }
 
@@ -2669,7 +2755,10 @@ func parseDefaultSubscriptions(raw string) []DefaultSubscriptionSetting {
 
 	normalized := make([]DefaultSubscriptionSetting, 0, len(items))
 	for _, item := range items {
-		if item.GroupID <= 0 || item.ValidityDays <= 0 {
+		if item.PlanID <= 0 && item.GroupID <= 0 {
+			continue
+		}
+		if item.ValidityDays <= 0 {
 			continue
 		}
 		if item.ValidityDays > MaxValidityDays {

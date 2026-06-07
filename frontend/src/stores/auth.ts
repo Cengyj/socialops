@@ -7,16 +7,19 @@ import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
 import { authAPI, isTotp2FARequired, type LoginResponse } from '@/api'
 import type { User, LoginRequest, RegisterRequest, AuthResponse } from '@/types'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 const AUTH_TOKEN_KEY = 'auth_token'
 const AUTH_USER_KEY = 'auth_user'
 const REFRESH_TOKEN_KEY = 'refresh_token'
 const TOKEN_EXPIRES_AT_KEY = 'token_expires_at' // 存储过期时间戳而非有效期
+const AUTH_RUN_MODE_KEY = 'auth_run_mode'
 const PENDING_AUTH_SESSION_KEY = 'pending_auth_session'
 const AUTO_REFRESH_INTERVAL = 60 * 1000 // 60 seconds for user data refresh
 const TOKEN_REFRESH_BUFFER = 120 * 1000 // 120 seconds before expiry to refresh token
 
 type PendingAuthTokenField = 'pending_auth_token' | 'pending_oauth_token'
+type RunMode = 'standard' | 'simple'
 
 interface PendingAuthSessionSummary {
   token: string
@@ -68,6 +71,14 @@ function clearPendingAuthSessionStorage(): void {
   localStorage.removeItem(PENDING_AUTH_SESSION_KEY)
 }
 
+function normalizeRunMode(value: unknown): RunMode {
+  return value === 'simple' ? 'simple' : 'standard'
+}
+
+function persistRunMode(value: RunMode): void {
+  localStorage.setItem(AUTH_RUN_MODE_KEY, value)
+}
+
 export const useAuthStore = defineStore('auth', () => {
   // ==================== State ====================
 
@@ -75,7 +86,7 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(null)
   const refreshTokenValue = ref<string | null>(null)
   const tokenExpiresAt = ref<number | null>(null) // 过期时间戳（毫秒）
-  const runMode = ref<'standard' | 'simple'>('standard')
+  const runMode = ref<RunMode>('standard')
   const pendingAuthSession = ref<PendingAuthSessionSummary | null>(null)
   let refreshIntervalId: ReturnType<typeof setInterval> | null = null
   let tokenRefreshTimeoutId: ReturnType<typeof setTimeout> | null = null
@@ -109,14 +120,17 @@ export const useAuthStore = defineStore('auth', () => {
 
     if (savedToken && savedUser) {
       try {
+        const parsedUser = JSON.parse(savedUser) as User & { run_mode?: RunMode }
         token.value = savedToken
-        user.value = JSON.parse(savedUser)
+        const { run_mode: savedUserRunMode, ...userData } = parsedUser
+        user.value = userData
+        runMode.value = normalizeRunMode(localStorage.getItem(AUTH_RUN_MODE_KEY) ?? savedUserRunMode)
         refreshTokenValue.value = savedRefreshToken
         tokenExpiresAt.value = savedExpiresAt ? parseInt(savedExpiresAt, 10) : null
 
         // Immediately refresh user data from backend (async, don't block)
         refreshUser().catch((error) => {
-          console.error('Failed to refresh user on init:', error)
+          recordClientDiagnostic('auth.refreshUserOnInit', error)
         })
 
         // Start auto-refresh interval for user data
@@ -128,7 +142,7 @@ export const useAuthStore = defineStore('auth', () => {
           scheduleTokenRefreshAt(tokenExpiresAt.value)
         }
       } catch (error) {
-        console.error('Failed to parse saved user data:', error)
+        recordClientDiagnostic('auth.parseSavedUser', error)
         clearAuth({ preservePendingAuthSession: true })
       }
     }
@@ -145,7 +159,7 @@ export const useAuthStore = defineStore('auth', () => {
     refreshIntervalId = setInterval(() => {
       if (token.value) {
         refreshUser().catch((error) => {
-          console.error('Auto-refresh user failed:', error)
+          recordClientDiagnostic('auth.autoRefreshUser', error)
         })
       }
     }, AUTO_REFRESH_INTERVAL)
@@ -216,7 +230,7 @@ export const useAuthStore = defineStore('auth', () => {
       // Schedule next refresh (this also updates tokenExpiresAt and localStorage)
       scheduleTokenRefresh(response.expires_in)
     } catch (error) {
-      console.error('Token refresh failed:', error)
+      recordClientDiagnostic('auth.refreshToken', error)
       // Don't clear auth here - the interceptor will handle 401 errors
     }
   }
@@ -289,16 +303,15 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.setItem(REFRESH_TOKEN_KEY, response.refresh_token)
     }
 
-    // Extract run_mode if present
-    if (response.user.run_mode) {
-      runMode.value = response.user.run_mode
-    }
+    const nextRunMode = normalizeRunMode(response.user.run_mode)
+    runMode.value = nextRunMode
     const { run_mode: _run_mode, ...userData } = response.user
     user.value = userData
 
     // Persist to localStorage
     localStorage.setItem(AUTH_TOKEN_KEY, response.access_token)
     localStorage.setItem(AUTH_USER_KEY, JSON.stringify(userData))
+    persistRunMode(nextRunMode)
     clearPendingAuthSession()
 
     // Start auto-refresh interval for user data
@@ -417,14 +430,14 @@ export const useAuthStore = defineStore('auth', () => {
 
     try {
       const response = await authAPI.getCurrentUser()
-      if (response.data.run_mode) {
-        runMode.value = response.data.run_mode
-      }
+      const nextRunMode = normalizeRunMode(response.data.run_mode)
+      runMode.value = nextRunMode
       const { run_mode: _run_mode, ...userData } = response.data
       user.value = userData
 
       // Update localStorage
       localStorage.setItem(AUTH_USER_KEY, JSON.stringify(userData))
+      persistRunMode(nextRunMode)
 
       return userData
     } catch (error) {
@@ -454,6 +467,8 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem(AUTH_USER_KEY)
     localStorage.removeItem(REFRESH_TOKEN_KEY)
     localStorage.removeItem(TOKEN_EXPIRES_AT_KEY)
+    localStorage.removeItem(AUTH_RUN_MODE_KEY)
+    runMode.value = 'standard'
 
     if (options?.preservePendingAuthSession) {
       pendingAuthSession.value = getPersistedPendingAuthSession()

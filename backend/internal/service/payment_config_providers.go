@@ -58,19 +58,28 @@ func (s *PaymentConfigService) ListProviderInstancesWithConfig(ctx context.Conte
 	}
 	result := make([]ProviderInstanceResponse, 0, len(instances))
 	for _, inst := range instances {
-		resp := ProviderInstanceResponse{
-			ID: int64(inst.ID), ProviderKey: inst.ProviderKey, Name: inst.Name,
-			SupportedTypes: splitTypes(inst.SupportedTypes), Limits: inst.Limits,
-			Enabled: inst.Enabled, RefundEnabled: inst.RefundEnabled, AllowUserRefund: inst.AllowUserRefund,
-			SortOrder: inst.SortOrder, PaymentMode: inst.PaymentMode,
-		}
-		resp.Config, err = s.decryptAndMaskConfig(inst.ProviderKey, inst.Config)
+		resp, err := s.ProviderInstanceToResponse(inst)
 		if err != nil {
 			return nil, fmt.Errorf("decrypt config for instance %d: %w", inst.ID, err)
 		}
 		result = append(result, resp)
 	}
 	return result, nil
+}
+
+func (s *PaymentConfigService) ProviderInstanceToResponse(inst *dbent.PaymentProviderInstance) (ProviderInstanceResponse, error) {
+	resp := ProviderInstanceResponse{
+		ID: int64(inst.ID), ProviderKey: inst.ProviderKey, Name: inst.Name,
+		SupportedTypes: splitTypes(inst.SupportedTypes), Limits: inst.Limits,
+		Enabled: inst.Enabled, RefundEnabled: inst.RefundEnabled, AllowUserRefund: inst.AllowUserRefund,
+		SortOrder: inst.SortOrder, PaymentMode: inst.PaymentMode,
+	}
+	cfg, err := s.decryptAndMaskConfig(inst.ProviderKey, inst.Config)
+	if err != nil {
+		return ProviderInstanceResponse{}, err
+	}
+	resp.Config = cfg
+	return resp, nil
 }
 
 // decryptAndMaskConfig returns the stored config with sensitive fields omitted.

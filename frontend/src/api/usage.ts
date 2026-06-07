@@ -1,15 +1,37 @@
 import { apiClient } from './client'
 import type { PaginatedResponse } from '@/types'
+import type { SocialTaskPayload, SocialTaskTemplateSnapshot } from '@/types/socialTask'
+export type {
+  SocialPostPayload,
+  SocialProfileUpdateParams,
+  SocialTaskMediaRef,
+  SocialTaskPayload,
+  SocialTaskTemplateParams,
+  SocialTaskTemplateSnapshot,
+} from '@/types/socialTask'
 
 export interface UsageLog {
   id: number
   user_id: number
   api_key_id?: number | null
   group_id?: number | null
+  social_account_id: number
+  platform: string
+  account_name: string
   operation: string
   status: string
   quantity: number
   cost: number
+  charge_status: string
+  charge_source?: string | null
+  target?: string | null
+  content?: string | null
+  payload?: SocialTaskPayload | null
+  template_snapshot?: SocialTaskTemplateSnapshot | null
+  result_message?: string | null
+  proxy_snapshot?: string | null
+  billing_request_id?: string | null
+  idempotency_key?: string | null
   created_at: string
   completed_at?: string | null
 }
@@ -18,10 +40,41 @@ export interface UsageStats {
   total_requests?: number
   total_operations?: number
   total_quantity?: number
+  total_tokens?: number
   total_cost?: number
+  total_actual_cost?: number
   success_count?: number
   failed_count?: number
   [key: string]: number | undefined
+}
+
+export interface PlatformDashboardStats {
+  platform: string
+  total_requests?: number
+  total_actual_cost?: number
+  today_requests?: number
+  today_actual_cost?: number
+}
+
+export interface UserDashboardStats {
+  total_requests?: number
+  today_requests?: number
+  total_actual_cost?: number
+  today_actual_cost?: number
+  average_duration_ms?: number
+  rpm?: number
+  by_platform?: PlatformDashboardStats[]
+}
+
+export interface DashboardTrendPoint {
+  date: string
+  requests?: number
+  actual_cost?: number
+  cost?: number
+}
+
+export interface DashboardTrendParams {
+  granularity?: 'day' | 'hour'
 }
 
 export interface UsageQueryParams {
@@ -33,6 +86,22 @@ export interface UsageQueryParams {
   end_date?: string
   operation?: string
   status?: string
+}
+
+export interface UsageTaskMediaPreviewLocator {
+  scope: 'payload' | 'template'
+  section: 'post' | 'avatar' | 'banner'
+  index?: number
+}
+
+const unwrapData = async <T>(request: Promise<{ data: T }>): Promise<T> => {
+  const { data } = await request
+  return data
+}
+
+function normalizeTrend(data: DashboardTrendPoint[] | { trend?: DashboardTrendPoint[] } | null | undefined): DashboardTrendPoint[] {
+  if (Array.isArray(data)) return data
+  return data?.trend ?? []
 }
 
 export const usageAPI = {
@@ -51,6 +120,13 @@ export const usageAPI = {
     return data
   },
 
+  previewTaskMedia(id: number, locator: UsageTaskMediaPreviewLocator): Promise<Blob> {
+    return unwrapData(apiClient.get<Blob>(`/usage/${id}/media`, {
+      params: locator,
+      responseType: 'blob',
+    }))
+  },
+
   async getStats(params?: Pick<UsageQueryParams, 'start_date' | 'end_date' | 'operation' | 'status'>): Promise<UsageStats> {
     const { data } = await apiClient.get<UsageStats>('/usage/stats', { params })
     return data
@@ -64,6 +140,19 @@ export const usageAPI = {
       },
     })
     return data
+  },
+
+  async getDashboardStats(): Promise<UserDashboardStats> {
+    const { data } = await apiClient.get<UserDashboardStats>('/usage/dashboard/stats')
+    return data
+  },
+
+  async getDashboardTrend(params?: DashboardTrendParams): Promise<DashboardTrendPoint[]> {
+    const { data } = await apiClient.get<DashboardTrendPoint[] | { trend?: DashboardTrendPoint[] }>(
+      '/usage/dashboard/trend',
+      { params }
+    )
+    return normalizeTrend(data)
   },
 }
 

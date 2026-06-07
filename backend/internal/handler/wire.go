@@ -20,33 +20,31 @@ func ProvideAdminHandlers(
 	settingHandler *admin.SettingHandler,
 	systemHandler *admin.SystemHandler,
 	subscriptionHandler *admin.SubscriptionHandler,
-	usageHandler *admin.UsageHandler,
 	userAttributeHandler *admin.UserAttributeHandler,
 	apiKeyHandler *admin.AdminAPIKeyHandler,
 	paymentHandler *admin.PaymentHandler,
 	affiliateHandler *admin.AffiliateHandler,
-	socialAccountAdminHandler *admin.SocialAccountAdminHandler,
-	proxyHandler *admin.ProxyHandler,
+	accountWorkbenchAdminHandler *admin.AccountWorkbenchAdminHandler,
+	totalAccountsHandler *admin.TotalAccountsHandler,
 ) *AdminHandlers {
 	return &AdminHandlers{
-		Dashboard:      dashboardHandler,
-		User:           userHandler,
-		Group:          groupHandler,
-		Announcement:   announcementHandler,
-		DataManagement: dataManagementHandler,
-		Backup:         backupHandler,
-		Redeem:         redeemHandler,
-		Promo:          promoHandler,
-		Setting:        settingHandler,
-		System:         systemHandler,
-		Subscription:   subscriptionHandler,
-		Usage:          usageHandler,
-		UserAttribute:  userAttributeHandler,
-		APIKey:         apiKeyHandler,
-		Payment:        paymentHandler,
-		Affiliate:      affiliateHandler,
-		SocialAccount:  socialAccountAdminHandler,
-		Proxy:          proxyHandler,
+		Dashboard:        dashboardHandler,
+		User:             userHandler,
+		Group:            groupHandler,
+		Announcement:     announcementHandler,
+		DataManagement:   dataManagementHandler,
+		Backup:           backupHandler,
+		Redeem:           redeemHandler,
+		Promo:            promoHandler,
+		Setting:          settingHandler,
+		System:           systemHandler,
+		Subscription:     subscriptionHandler,
+		UserAttribute:    userAttributeHandler,
+		APIKey:           apiKeyHandler,
+		Payment:          paymentHandler,
+		Affiliate:        affiliateHandler,
+		AccountWorkbench: accountWorkbenchAdminHandler,
+		TotalAccounts:    totalAccountsHandler,
 	}
 }
 
@@ -75,6 +73,11 @@ func ProvidePaymentHandler(paymentService *service.PaymentService, configService
 	return NewPaymentHandler(paymentService, configService)
 }
 
+// ProvideAccountWorkbenchAdminHandler wires admin account pool dependencies.
+func ProvideAccountWorkbenchAdminHandler(svc *service.SocialAccountService, ipSvc *service.SocialIPService, billing *service.SocialBillingService, executor *service.SocialTaskExecutor) *admin.AccountWorkbenchAdminHandler {
+	return admin.NewAccountWorkbenchAdminHandler(svc, ipSvc, billing, executor)
+}
+
 // ProvideHandlers creates the Handlers struct
 func ProvideHandlers(
 	authHandler *AuthHandler,
@@ -89,24 +92,28 @@ func ProvideHandlers(
 	totpHandler *TotpHandler,
 	paymentHandler *PaymentHandler,
 	paymentWebhookHandler *PaymentWebhookHandler,
-	socialAccountHandler *SocialAccountHandler,
+	accountWorkbenchHandler *AccountWorkbenchHandler,
+	proxyHandler *ProxyHandler,
+	taskSettingsHandler *TaskSettingsHandler,
 	planHandler *PlanHandler,
 ) *Handlers {
 	return &Handlers{
-		Auth:           authHandler,
-		User:           userHandler,
-		APIKey:         apiKeyHandler,
-		Usage:          usageHandler,
-		Redeem:         redeemHandler,
-		Subscription:   subscriptionHandler,
-		Announcement:   announcementHandler,
-		Admin:          adminHandlers,
-		Setting:        settingHandler,
-		Totp:           totpHandler,
-		Payment:        paymentHandler,
-		PaymentWebhook: paymentWebhookHandler,
-		SocialAccount:  socialAccountHandler,
-		Plan:           planHandler,
+		Auth:             authHandler,
+		User:             userHandler,
+		APIKey:           apiKeyHandler,
+		Usage:            usageHandler,
+		Redeem:           redeemHandler,
+		Subscription:     subscriptionHandler,
+		Announcement:     announcementHandler,
+		Admin:            adminHandlers,
+		Setting:          settingHandler,
+		Totp:             totpHandler,
+		Payment:          paymentHandler,
+		PaymentWebhook:   paymentWebhookHandler,
+		AccountWorkbench: accountWorkbenchHandler,
+		Proxy:            proxyHandler,
+		TaskSettings:     taskSettingsHandler,
+		Plan:             planHandler,
 	}
 }
 
@@ -124,7 +131,9 @@ var ProviderSet = wire.NewSet(
 	ProvideSettingHandler,
 	ProvidePaymentHandler,
 	NewPaymentWebhookHandler,
-	NewSocialAccountHandler,
+	NewAccountWorkbenchHandler,
+	NewProxyHandler,
+	NewTaskSettingsHandler,
 	NewPlanHandler,
 
 	// Admin handlers
@@ -139,13 +148,12 @@ var ProviderSet = wire.NewSet(
 	ProvideAdminSettingHandler,
 	ProvideSystemHandler,
 	admin.NewSubscriptionHandler,
-	admin.NewUsageHandler,
 	admin.NewUserAttributeHandler,
 	admin.NewAdminAPIKeyHandler,
 	admin.NewPaymentHandler,
 	admin.NewAffiliateHandler,
-	admin.NewSocialAccountAdminHandler,
-	admin.NewProxyHandler,
+	ProvideAccountWorkbenchAdminHandler,
+	admin.NewTotalAccountsHandler,
 
 	// AdminHandlers and Handlers constructors
 	ProvideAdminHandlers,

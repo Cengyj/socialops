@@ -27,6 +27,22 @@
           </div>
         </div>
 
+        <div v-else-if="isMarkdownMode && markdownError" class="flex h-full items-center justify-center p-10 text-center">
+          <div class="max-w-md">
+            <div
+              class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50 dark:bg-red-900/20"
+            >
+              <Icon name="link" size="lg" class="text-red-400" />
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ markdownErrorTitle }}
+            </h3>
+            <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">
+              {{ markdownErrorDescription }}
+            </p>
+          </div>
+        </div>
+
         <!-- Markdown mode with TOC -->
         <div v-else-if="isMarkdownMode" class="flex h-full overflow-hidden">
           <!-- TOC Sidebar -->
@@ -35,8 +51,8 @@
             class="toc-sidebar"
           >
             <div class="toc-header">
-              <span class="toc-title">目录</span>
-              <button class="toc-close-btn" @click="tocVisible = false">
+              <span class="toc-title">{{ t('customPage.toc') }}</span>
+              <button class="toc-close-btn" :aria-label="t('customPage.closeToc')" @click="tocVisible = false">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
               </button>
             </div>
@@ -61,10 +77,11 @@
           <button
             v-show="!tocVisible && tocItems.length > 0"
             class="toc-toggle-btn"
+            :aria-label="t('customPage.openToc')"
             @click="tocVisible = true"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
-            <span class="ml-1 text-xs">目录</span>
+            <span class="ml-1 text-xs">{{ t('customPage.toc') }}</span>
           </button>
 
           <!-- Content -->
@@ -124,6 +141,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useAdminSettingsStore } from '@/stores/adminSettings'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
+import { apiClient } from '@/api/client'
 import { buildEmbeddedUrl, detectTheme } from '@/utils/embedded-url'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -134,6 +152,8 @@ interface TocItem {
   level: number
 }
 
+type MarkdownError = 'not_found' | 'load_failed'
+
 const { t, locale } = useI18n()
 const route = useRoute()
 const appStore = useAppStore()
@@ -143,6 +163,7 @@ const adminSettingsStore = useAdminSettingsStore()
 const loading = ref(false)
 const pageTheme = ref<'light' | 'dark'>('light')
 const renderedHtml = ref('')
+const markdownError = ref<MarkdownError | null>(null)
 const markdownContainer = ref<HTMLElement | null>(null)
 const tocItems = ref<TocItem[]>([])
 const tocVisible = ref(typeof window !== 'undefined' ? window.innerWidth > 768 : true)
@@ -189,6 +210,18 @@ const isValidUrl = computed(() => {
   return url.startsWith('http://') || url.startsWith('https://')
 })
 
+const markdownErrorTitle = computed(() => {
+  return markdownError.value === 'not_found'
+    ? t('customPage.markdownNotFoundTitle')
+    : t('customPage.markdownLoadFailedTitle')
+})
+
+const markdownErrorDescription = computed(() => {
+  return markdownError.value === 'not_found'
+    ? t('customPage.markdownNotFoundDesc')
+    : t('customPage.markdownLoadFailedDesc')
+})
+
 function generateHeadingId(text: string, index: number): string {
   const base = text
     .toLowerCase()
@@ -209,6 +242,10 @@ function isRelativeMarkdownAsset(src: string): boolean {
     .every((part) => part !== '..' && !part.includes('\\'))
 }
 
+function encodePageSlugParam(slug: string): string {
+  return encodeURIComponent(encodeURIComponent(slug))
+}
+
 function buildPageImageUrl(slug: string, src: string): string {
   const trimmed = src.trim()
   const [pathPart, suffix = ''] = trimmed.split(/([?#].*)/, 2)
@@ -217,22 +254,20 @@ function buildPageImageUrl(slug: string, src: string): string {
     .filter((part) => part && part !== '.')
     .map((part) => encodeURIComponent(part))
     .join('/')
-  return `/api/v1/pages/${encodeURIComponent(slug)}/images/${encodedPath}${suffix}`
+  return `/api/v1/pages/${encodePageSlugParam(slug)}/images/${encodedPath}${suffix}`
 }
 
 async function fetchAndRenderMarkdown(slug: string) {
   loading.value = true
+  markdownError.value = null
+  renderedHtml.value = ''
   tocItems.value = []
   activeHeadingId.value = ''
   try {
-    const resp = await fetch(`/api/v1/pages/${encodeURIComponent(slug)}`, {
-      headers: authStore.token ? { Authorization: `Bearer ${authStore.token}` } : {},
+    const resp = await apiClient.get<string>(`/pages/${encodePageSlugParam(slug)}`, {
+      responseType: 'text',
     })
-    if (!resp.ok) {
-      renderedHtml.value = '<p class="text-red-500">Page not found</p>'
-      return
-    }
-    let raw = await resp.text()
+    let raw = resp.data
 
     raw = raw.replace(
       /!\[([^\]]*)\]\(([^)]+)\)/g,
@@ -261,13 +296,17 @@ async function fetchAndRenderMarkdown(slug: string) {
 
     renderedHtml.value = withIds
     tocItems.value = toc
-  } catch {
-    renderedHtml.value = '<p class="text-red-500">Failed to load page</p>'
+  } catch (error) {
+    const status = (error as { status?: number; response?: { status?: number } })?.response?.status
+      ?? (error as { status?: number })?.status
+    markdownError.value = status === 404 ? 'not_found' : 'load_failed'
   } finally {
     loading.value = false
     await nextTick()
     await nextTick()
-    injectCopyButtons()
+    if (!markdownError.value) {
+      injectCopyButtons()
+    }
   }
 }
 
@@ -316,16 +355,18 @@ function injectCopyButtons() {
     if (pre.querySelector('.copy-btn')) return
     const btn = document.createElement('button')
     btn.className = 'copy-btn'
-    btn.textContent = '复制'
+    btn.type = 'button'
+    btn.textContent = t('customPage.copyCode')
+    btn.setAttribute('aria-label', t('customPage.copyCode'))
     btn.addEventListener('click', async () => {
       const code = pre.querySelector('code')?.textContent ?? pre.textContent ?? ''
       try {
         await navigator.clipboard.writeText(code)
-        btn.textContent = '已复制 ✓'
-        setTimeout(() => { btn.textContent = '复制' }, 2000)
+        btn.textContent = t('customPage.copied')
+        setTimeout(() => { btn.textContent = t('customPage.copyCode') }, 2000)
       } catch {
-        btn.textContent = '失败'
-        setTimeout(() => { btn.textContent = '复制' }, 2000)
+        btn.textContent = t('customPage.copyFailed')
+        setTimeout(() => { btn.textContent = t('customPage.copyCode') }, 2000)
       }
     })
     pre.style.position = 'relative'
@@ -333,10 +374,29 @@ function injectCopyButtons() {
   })
 }
 
+async function ensurePageSettingsLoaded() {
+  const loaders: Promise<unknown>[] = []
+  if (!appStore.publicSettingsLoaded) {
+    loaders.push(appStore.fetchPublicSettings())
+  }
+  if (authStore.isAdmin && !adminSettingsStore.loaded) {
+    loaders.push(adminSettingsStore.fetch())
+  }
+  if (loaders.length === 0) return
+
+  loading.value = true
+  try {
+    await Promise.all(loaders)
+  } finally {
+    loading.value = false
+  }
+}
+
 watch(markdownSlug, (slug) => {
   if (slug) {
     fetchAndRenderMarkdown(slug)
   } else {
+    markdownError.value = null
     renderedHtml.value = ''
     tocItems.value = []
   }
@@ -355,13 +415,7 @@ onMounted(async () => {
     })
   }
 
-  if (appStore.publicSettingsLoaded) return
-  loading.value = true
-  try {
-    await appStore.fetchPublicSettings()
-  } finally {
-    loading.value = false
-  }
+  await ensurePageSettingsLoaded()
 })
 
 onUnmounted(() => {

@@ -193,6 +193,7 @@ export interface PublicSettings {
   promo_code_enabled: boolean
   password_reset_enabled: boolean
   invitation_code_enabled: boolean
+  totp_enabled: boolean
   login_agreement_enabled?: boolean
   login_agreement_mode?: 'modal' | 'checkbox' | string
   login_agreement_updated_at?: string
@@ -207,15 +208,16 @@ export interface PublicSettings {
   contact_info: string
   doc_url: string
   home_content: string
-  hide_ccs_import_button: boolean
   payment_enabled: boolean
   risk_control_enabled: boolean
+  purchase_subscription_enabled: boolean
+  purchase_subscription_url: string
   table_default_page_size: number
   table_page_size_options: number[]
   custom_menu_items: CustomMenuItem[]
   custom_endpoints: CustomEndpoint[]
   linuxdo_oauth_enabled: boolean
-  dingtalk_oauth_enabled?: boolean
+  dingtalk_oauth_enabled: boolean
   wechat_oauth_enabled: boolean
   wechat_oauth_open_enabled?: boolean
   wechat_oauth_mp_enabled?: boolean
@@ -229,6 +231,7 @@ export interface PublicSettings {
   balance_low_notify_enabled: boolean
   account_quota_notify_enabled: boolean
   balance_low_notify_threshold: number
+  balance_low_notify_recharge_url: string
   affiliate_enabled: boolean
 }
 
@@ -242,37 +245,6 @@ export interface AuthResponse {
 
 export interface CurrentUserResponse extends User {
   run_mode?: 'standard' | 'simple'
-}
-
-// ==================== Subscription Types ====================
-
-export interface Subscription {
-  id: number
-  user_id: number
-  name: string
-  url: string
-  type: 'clash' | 'v2ray' | 'surge' | 'quantumult' | 'shadowrocket'
-  update_interval: number // in hours
-  last_updated: string | null
-  node_count: number
-  is_active: boolean
-  created_at: string
-  updated_at: string
-}
-
-export interface CreateSubscriptionRequest {
-  name: string
-  url: string
-  type: Subscription['type']
-  update_interval?: number
-}
-
-export interface UpdateSubscriptionRequest {
-  name?: string
-  url?: string
-  type?: Subscription['type']
-  update_interval?: number
-  is_active?: boolean
 }
 
 // ==================== Announcement Types ====================
@@ -353,66 +325,6 @@ export interface AnnouncementUserReadStatus {
   balance: number
   eligible: boolean
   read_at?: string
-}
-
-// ==================== Proxy Node Types ====================
-
-export interface ProxyNode {
-  id: number
-  subscription_id: number
-  name: string
-  type: 'ss' | 'ssr' | 'vmess' | 'vless' | 'trojan' | 'hysteria' | 'hysteria2'
-  server: string
-  port: number
-  config: Record<string, unknown> // JSON configuration specific to proxy type
-  latency: number | null // in milliseconds
-  last_checked: string | null
-  is_available: boolean
-  created_at: string
-  updated_at: string
-}
-
-// ==================== Conversion Types ====================
-
-export interface ConversionRequest {
-  subscription_ids: number[]
-  target_type: 'clash' | 'v2ray' | 'surge' | 'quantumult' | 'shadowrocket'
-  filter?: {
-    name_pattern?: string
-    types?: ProxyNode['type'][]
-    min_latency?: number
-    max_latency?: number
-    available_only?: boolean
-  }
-  sort?: {
-    by: 'name' | 'latency' | 'type'
-    order: 'asc' | 'desc'
-  }
-}
-
-export interface ConversionResult {
-  url: string // URL to download the converted subscription
-  expires_at: string
-  node_count: number
-}
-
-// ==================== Statistics Types ====================
-
-export interface SubscriptionStats {
-  subscription_id: number
-  total_nodes: number
-  available_nodes: number
-  avg_latency: number | null
-  by_type: Record<ProxyNode['type'], number>
-  last_update: string
-}
-
-export interface UserStats {
-  total_subscriptions: number
-  total_nodes: number
-  active_subscriptions: number
-  total_conversions: number
-  last_conversion: string | null
 }
 
 // ==================== API Response Types ====================
@@ -602,8 +514,9 @@ export interface RedeemCode {
   expires_at?: string | null
   updated_at?: string
   notes?: string
-  group_id?: number | null // 订阅类型专用
-  validity_days?: number // 订阅类型专用
+  group_id?: number | null // Internal compatibility binding for legacy subscription codes.
+  plan_id?: number | null // Subscription package used by new subscription codes.
+  validity_days?: number // Subscription validity days, usually copied from the selected package.
   user?: User
   group?: Group // 关联的分组
 }
@@ -612,8 +525,9 @@ export interface GenerateRedeemCodesRequest {
   count: number
   type: RedeemCodeType
   value: number
-  group_id?: number | null // 订阅类型专用
-  validity_days?: number // 订阅类型专用
+  group_id?: number | null // Internal compatibility binding for legacy subscription codes.
+  plan_id?: number | null // Subscription package used by new subscription codes.
+  validity_days?: number // Subscription validity days, usually copied from the selected package.
   expires_at?: string | null
   expires_in_days?: number
 }
@@ -623,6 +537,7 @@ export interface BatchUpdateRedeemCodeFields {
   expires_at?: string | null
   notes?: string
   group_id?: number | null
+  plan_id?: number | null
 }
 
 export interface BatchUpdateRedeemCodesRequest {
@@ -662,6 +577,13 @@ export interface UserSubscription {
   id: number
   user_id: number
   group_id: number
+  plan_id?: number | null
+  plan_name?: string
+  plan_platform?: string
+  quota_usd?: number | null
+  daily_limit_usd?: number | null
+  weekly_limit_usd?: number | null
+  monthly_limit_usd?: number | null
   status: 'active' | 'expired' | 'revoked'
   starts_at: string
   daily_usage_usd: number
@@ -677,40 +599,59 @@ export interface UserSubscription {
   group?: Group
 }
 
+export interface SubscriptionUsageWindowProgress {
+  limit_usd: number
+  used_usd: number
+  remaining_usd: number
+  percentage: number
+  window_start: string
+  resets_at: string
+  resets_in_seconds: number
+}
+
 export interface SubscriptionProgress {
-  subscription_id: number
-  daily: {
-    used: number
-    limit: number | null
-    percentage: number
-    reset_in_seconds: number | null
-  } | null
-  weekly: {
-    used: number
-    limit: number | null
-    percentage: number
-    reset_in_seconds: number | null
-  } | null
-  monthly: {
-    used: number
-    limit: number | null
-    percentage: number
-    reset_in_seconds: number | null
-  } | null
+  id: number
+  group_name: string
   expires_at: string | null
-  days_remaining: number | null
+  expires_in_days: number
+  daily?: SubscriptionUsageWindowProgress | null
+  weekly?: SubscriptionUsageWindowProgress | null
+  monthly?: SubscriptionUsageWindowProgress | null
+}
+
+export interface SubscriptionProgressEntry {
+  subscription: UserSubscription
+  progress: SubscriptionProgress
 }
 
 export interface AssignSubscriptionRequest {
   user_id: number
-  group_id: number
+  group_id?: number
+  plan_id?: number
   validity_days?: number
+  notes?: string
 }
 
 export interface BulkAssignSubscriptionRequest {
   user_ids: number[]
-  group_id: number
+  group_id?: number
+  plan_id?: number
   validity_days?: number
+  notes?: string
+}
+
+export interface CreateUserSubscriptionFromPlanRequest {
+  user_id: number
+  plan_id: number
+  validity_days?: number
+  notes?: string
+}
+
+export interface BulkCreateUserSubscriptionFromPlanRequest {
+  user_ids: number[]
+  plan_id: number
+  validity_days?: number
+  notes?: string
 }
 
 export interface ExtendSubscriptionRequest {

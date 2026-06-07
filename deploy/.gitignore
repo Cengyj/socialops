@@ -6,9 +6,14 @@
 data/
 postgres_data/
 redis_data/
+dev-data/
+dev-postgres_data/
+dev-redis_data/
 
 # Environment configuration (contains sensitive information)
 .env
+.env.host-dev
+.env.host-dev.local
 
 # Backup files
 *.backup

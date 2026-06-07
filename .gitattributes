@@ -1,3 +1,6 @@
+# 默认文本文件使用 LF，避免不同系统反复改换行符
+* text=auto eol=lf
+
 # 确保所有 SQL 迁移文件使用 LF 换行符
 backend/migrations/*.sql text eol=lf
 

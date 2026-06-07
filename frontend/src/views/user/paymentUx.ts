@@ -49,12 +49,6 @@ export function describePaymentScenarioError(
 ): PaymentScenarioErrorDescriptor | null {
   const method = normalizePaymentMethodForDisplay(context.paymentMethod)
   const code = extractApiErrorCode(error)
-  const message = error instanceof Error
-    ? error.message
-    : (typeof error === 'object' && error && 'message' in error && typeof error.message === 'string'
-      ? error.message
-      : String(error || ''))
-  const normalizedMessage = message.toLowerCase()
 
   if (method === 'wxpay') {
     if (code === 'WECHAT_H5_NOT_AUTHORIZED') {
@@ -77,16 +71,13 @@ export function describePaymentScenarioError(
         hintKey: defaultWechatHint(context),
       }
     }
-    if (code === 'WECHAT_JSAPI_FAILED' || normalizedMessage.includes('get_brand_wcpay_request:fail')) {
+    if (code === 'WECHAT_JSAPI_FAILED') {
       return {
         messageKey: 'payment.errors.wechatJsapiFailed',
         hintKey: defaultWechatHint(context),
       }
     }
-    if (
-      normalizedMessage.includes('weixinjsbridge is unavailable') ||
-      normalizedMessage.includes('wechat_jsapi_unavailable')
-    ) {
+    if (code === 'WECHAT_JSAPI_UNAVAILABLE') {
       return {
         messageKey: 'payment.errors.wechatJsapiUnavailable',
         hintKey: 'payment.errors.wechatOpenInWeChatHint',

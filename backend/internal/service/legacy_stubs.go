@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	dbent "github.com/Wei-Shaw/socialops/ent"
 	"github.com/Wei-Shaw/socialops/internal/config"
 	infraerrors "github.com/Wei-Shaw/socialops/internal/pkg/errors"
 	"github.com/Wei-Shaw/socialops/internal/pkg/pagination"
@@ -24,7 +25,7 @@ type GroupRepository interface {
 	Delete(ctx context.Context, id int64) error
 	DeleteCascade(ctx context.Context, id int64) ([]int64, error)
 	List(ctx context.Context, params pagination.PaginationParams) ([]Group, *pagination.PaginationResult, error)
-	ListWithFilters(ctx context.Context, params pagination.PaginationParams, platform, status, search string, isExclusive *bool) ([]Group, *pagination.PaginationResult, error)
+	ListWithFilters(ctx context.Context, params pagination.PaginationParams, platform, status, subscriptionType, search string, isExclusive *bool) ([]Group, *pagination.PaginationResult, error)
 	ListActive(ctx context.Context) ([]Group, error)
 	ListActiveByPlatform(ctx context.Context, platform string) ([]Group, error)
 	ExistsByName(ctx context.Context, name string) (bool, error)
@@ -37,34 +38,30 @@ type SubscriptionService struct {
 	groupRepo           GroupRepository
 	userSubRepo         UserSubscriptionRepository
 	billingCacheService *BillingCacheService
+	entClient           *dbent.Client
 }
 
-func NewSubscriptionService(groupRepo GroupRepository, userSubRepo UserSubscriptionRepository, billingCacheService *BillingCacheService, _ any, _ *config.Config) *SubscriptionService {
+func NewSubscriptionService(groupRepo GroupRepository, userSubRepo UserSubscriptionRepository, billingCacheService *BillingCacheService, entClient *dbent.Client, _ *config.Config) *SubscriptionService {
 	return &SubscriptionService{
 		groupRepo:           groupRepo,
 		userSubRepo:         userSubRepo,
 		billingCacheService: billingCacheService,
+		entClient:           entClient,
 	}
 }
 
 func (s *SubscriptionService) AssignOrExtendSubscription(ctx context.Context, input *AssignSubscriptionInput) (*UserSubscription, bool, error) {
-	if input == nil {
-		return nil, false, ErrSubscriptionNilInput
-	}
 	if s == nil || s.groupRepo == nil || s.userSubRepo == nil {
 		return nil, false, ErrSubscriptionNotFound
 	}
-	group, err := s.groupRepo.GetByID(ctx, input.GroupID)
+	resolvedInput, _, err := s.resolveAssignSubscriptionInput(ctx, input)
 	if err != nil {
 		return nil, false, err
 	}
-	if group != nil && !group.IsSubscriptionType() {
-		return nil, false, ErrGroupNotSubscriptionType
-	}
 
-	existing, err := s.userSubRepo.GetByUserIDAndGroupID(ctx, input.UserID, input.GroupID)
+	existing, err := s.userSubRepo.GetByUserIDAndGroupID(ctx, resolvedInput.UserID, resolvedInput.GroupID)
 	if err != nil || existing == nil {
-		sub, created, assignErr := s.assignSubscription(ctx, input)
+		sub, created, assignErr := s.assignSubscription(ctx, resolvedInput)
 		if assignErr != nil {
 			return nil, false, assignErr
 		}
@@ -72,7 +69,7 @@ func (s *SubscriptionService) AssignOrExtendSubscription(ctx context.Context, in
 	}
 
 	now := time.Now()
-	validityDays := normalizeAssignValidityDays(input.ValidityDays)
+	validityDays := normalizeAssignValidityDays(resolvedInput.ValidityDays)
 	newExpiresAt := existing.ExpiresAt.AddDate(0, 0, validityDays)
 	isExpired := !existing.ExpiresAt.After(now)
 	if isExpired {
@@ -82,7 +79,13 @@ func (s *SubscriptionService) AssignOrExtendSubscription(ctx context.Context, in
 	renewed := *existing
 	renewed.ExpiresAt = newExpiresAt
 	renewed.Status = SubscriptionStatusActive
-	renewed.Notes = appendSubscriptionNotes(existing.Notes, input.Notes)
+	renewed.PlanID = resolvedInput.PlanID
+	renewed.PlanName = resolvedInput.PlanName
+	renewed.PlanPlatform = resolvedInput.PlanPlatform
+	renewed.DailyLimitUSD = resolvedInput.DailyLimitUSD
+	renewed.WeeklyLimitUSD = resolvedInput.WeeklyLimitUSD
+	renewed.MonthlyLimitUSD = resolvedInput.MonthlyLimitUSD
+	renewed.Notes = appendSubscriptionNotes(existing.Notes, resolvedInput.Notes)
 	renewed.UpdatedAt = now
 	if isExpired {
 		windowStart := startOfDay(now)
@@ -97,10 +100,7 @@ func (s *SubscriptionService) AssignOrExtendSubscription(ctx context.Context, in
 	if err := s.userSubRepo.Update(ctx, &renewed); err != nil {
 		return nil, false, err
 	}
-	s.InvalidateSubCache(input.UserID, input.GroupID)
-	if s.billingCacheService != nil {
-		_ = s.billingCacheService.InvalidateSubscription(ctx, input.UserID, input.GroupID)
-	}
+	s.invalidateSubscriptionCaches(ctx, resolvedInput.UserID, resolvedInput.GroupID)
 
 	sub, err := s.userSubRepo.GetByID(ctx, existing.ID)
 	return sub, true, err
@@ -109,16 +109,23 @@ func (s *SubscriptionService) Stop() {}
 
 // AssignSubscriptionInput is a legacy stub.
 type AssignSubscriptionInput struct {
-	Notes        string
-	UserID       int64
-	GroupID      int64
-	ValidityDays int
-	AssignedBy   int64
+	Notes           string
+	UserID          int64
+	GroupID         int64
+	ValidityDays    int
+	AssignedBy      int64
+	PlanID          *int64
+	PlanName        string
+	PlanPlatform    string
+	DailyLimitUSD   *float64
+	WeeklyLimitUSD  *float64
+	MonthlyLimitUSD *float64
 }
 
 // DefaultSubscriptionSetting is a legacy stub.
 type DefaultSubscriptionSetting struct {
-	GroupID      int64 `json:"group_id"`
+	PlanID       int64 `json:"plan_id,omitempty"`
+	GroupID      int64 `json:"group_id,omitempty"`
 	ValidityDays int   `json:"validity_days"`
 }
 
@@ -248,7 +255,12 @@ func (s *SubscriptionService) ExtendSubscription(ctx any, subID int64, days int)
 	if err := s.userSubRepo.ExtendExpiry(c, subID, newExpiresAt); err != nil {
 		return nil, err
 	}
-	return s.userSubRepo.GetByID(c, subID)
+	updated, err := s.userSubRepo.GetByID(c, subID)
+	if err != nil {
+		return nil, err
+	}
+	s.invalidateSubscriptionCaches(c, updated.UserID, updated.GroupID)
+	return updated, nil
 }
 
 var ErrAdjustWouldExpire = infraerrors.BadRequest("ADJUST_WOULD_EXPIRE", "adjustment would expire subscription")
@@ -261,7 +273,15 @@ func (s *SubscriptionService) RevokeSubscription(ctx any, subID int64) error {
 	if !ok || c == nil {
 		c = context.Background()
 	}
-	return s.userSubRepo.UpdateStatus(c, subID, SubscriptionStatusRevoked)
+	sub, err := s.userSubRepo.GetByID(c, subID)
+	if err != nil {
+		return err
+	}
+	if err := s.userSubRepo.UpdateStatus(c, subID, SubscriptionStatusRevoked); err != nil {
+		return err
+	}
+	s.invalidateSubscriptionCaches(c, sub.UserID, sub.GroupID)
+	return nil
 }
 
 const PromoCodeStatusActive = "active"

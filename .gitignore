@@ -80,6 +80,8 @@ Desktop.ini
 # ===================
 tmp/
 temp/
+__pycache__/
+*.py[cod]
 *.tmp
 *.temp
 *.log
@@ -108,6 +110,7 @@ backend/data/
 
 # 本地部署运行时数据
 deploy/data/
+deploy/dev-data-real/
 deploy/postgres_data/
 deploy/redis_data/
 

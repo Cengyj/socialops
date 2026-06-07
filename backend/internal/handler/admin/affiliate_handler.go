@@ -97,8 +97,6 @@ func (h *AffiliateHandler) UpdateUserSettings(c *gin.Context) {
 // the exclusive rebate rate AND regenerates the invite code as a new system
 // random one. Conceptually this "removes the user from the custom list".
 //
-// Both writes happen in this handler; failure of one leaves the other applied,
-// but the operation is idempotent so the admin can re-run it safely.
 // DELETE /api/v1/admin/affiliates/users/:user_id
 func (h *AffiliateHandler) ClearUserSettings(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
@@ -106,11 +104,7 @@ func (h *AffiliateHandler) ClearUserSettings(c *gin.Context) {
 		response.BadRequest(c, "Invalid user_id")
 		return
 	}
-	if err := h.affiliateService.AdminSetUserRebateRate(c.Request.Context(), userID, nil); err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	if _, err := h.affiliateService.AdminResetUserAffCode(c.Request.Context(), userID); err != nil {
+	if err := h.affiliateService.AdminClearUserSettings(c.Request.Context(), userID); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}

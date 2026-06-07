@@ -98,6 +98,7 @@ type RedeemCodeBatchUpdateFields struct {
 	ExpiresAt NullableTimeUpdate
 	Notes     *string
 	GroupID   NullableInt64Update
+	PlanID    NullableInt64Update
 
 	// Core fields are intentionally modeled only so service validation can
 	// reject payloads that try to mutate redemption value semantics in bulk.
@@ -110,6 +111,7 @@ func (f RedeemCodeBatchUpdateFields) HasChanges() bool {
 		f.ExpiresAt.Set ||
 		f.Notes != nil ||
 		f.GroupID.Set ||
+		f.PlanID.Set ||
 		f.Type != nil ||
 		f.Value != nil
 }
@@ -119,7 +121,7 @@ func (f RedeemCodeBatchUpdateFields) HasCoreFieldChanges() bool {
 }
 
 func (f RedeemCodeBatchUpdateFields) TouchesUsedSensitiveFields() bool {
-	return f.Status != nil || f.ExpiresAt.Set || f.GroupID.Set
+	return f.Status != nil || f.ExpiresAt.Set || f.GroupID.Set || f.PlanID.Set
 }
 
 type RedeemCodeBatchUpdateInput struct {
@@ -129,6 +131,18 @@ type RedeemCodeBatchUpdateInput struct {
 
 type RedeemCodeBatchUpdateResult struct {
 	Updated int64 `json:"updated"`
+}
+
+type RedeemCodeStats struct {
+	TotalCodes            int64            `json:"total_codes"`
+	ActiveCodes           int64            `json:"active_codes"`
+	UnusedCodes           int64            `json:"unused_codes"`
+	UsedCodes             int64            `json:"used_codes"`
+	ExpiredCodes          int64            `json:"expired_codes"`
+	DisabledCodes         int64            `json:"disabled_codes"`
+	TotalValueDistributed float64          `json:"total_value_distributed"`
+	TotalValue            float64          `json:"total_value"`
+	ByType                map[string]int64 `json:"by_type"`
 }
 
 // RedeemService 兑换码服务
@@ -188,24 +202,37 @@ func (s *RedeemService) GenerateRandomCode() (string, error) {
 	return strings.Join(parts, "-"), nil
 }
 
+func normalizeRedeemCodeCreationType(codeType string) (string, error) {
+	normalized := strings.TrimSpace(codeType)
+	if normalized == "" {
+		return RedeemTypeBalance, nil
+	}
+	switch normalized {
+	case RedeemTypeBalance, RedeemTypeConcurrency, RedeemTypeSubscription, RedeemTypeInvitation:
+		return normalized, nil
+	default:
+		return "", infraerrors.BadRequest("REDEEM_CODE_TYPE_INVALID", "invalid redeem code type")
+	}
+}
+
 // GenerateCodes 批量生成兑换码
 func (s *RedeemService) GenerateCodes(ctx context.Context, req GenerateCodesRequest) ([]RedeemCode, error) {
 	if req.Count <= 0 {
 		return nil, errors.New("count must be greater than 0")
 	}
 
+	codeType, err := normalizeRedeemCodeCreationType(req.Type)
+	if err != nil {
+		return nil, err
+	}
+
 	// 邀请码类型不需要数值，其他类型需要非零值（支持负数用于退款）
-	if req.Type != RedeemTypeInvitation && req.Value == 0 {
+	if codeType != RedeemTypeInvitation && req.Value == 0 {
 		return nil, errors.New("value must not be zero")
 	}
 
 	if req.Count > 1000 {
 		return nil, errors.New("cannot generate more than 1000 codes at once")
-	}
-
-	codeType := req.Type
-	if codeType == "" {
-		codeType = RedeemTypeBalance
 	}
 
 	// 邀请码类型的 value 设为 0
@@ -248,11 +275,16 @@ func (s *RedeemService) CreateCode(ctx context.Context, code *RedeemCode) error 
 	if code.Code == "" {
 		return errors.New("code is required")
 	}
-	if code.Type == "" {
-		code.Type = RedeemTypeBalance
+	codeType, err := normalizeRedeemCodeCreationType(code.Type)
+	if err != nil {
+		return err
 	}
-	if code.Type != RedeemTypeInvitation && code.Value == 0 {
+	code.Type = codeType
+	if code.Type != RedeemTypeInvitation && code.Type != RedeemTypeSubscription && code.Value == 0 {
 		return errors.New("value must not be zero")
+	}
+	if code.Type == RedeemTypeSubscription && code.PlanID == nil && code.GroupID == nil {
+		return infraerrors.BadRequest("REDEEM_CODE_INVALID", "subscription redeem code requires plan_id or group_id")
 	}
 	if code.Status == "" {
 		code.Status = StatusUnused
@@ -313,6 +345,24 @@ func (s *RedeemService) BatchUpdate(ctx context.Context, input *RedeemCodeBatchU
 	}
 	if input.Fields.GroupID.Set && input.Fields.GroupID.Value != nil && *input.Fields.GroupID.Value <= 0 {
 		return nil, infraerrors.BadRequest("REDEEM_CODE_GROUP_ID_INVALID", "group_id must be positive")
+	}
+	if input.Fields.PlanID.Set {
+		if input.Fields.PlanID.Value != nil && *input.Fields.PlanID.Value <= 0 {
+			return nil, infraerrors.BadRequest("REDEEM_CODE_PLAN_ID_INVALID", "plan_id must be positive")
+		}
+		if input.Fields.PlanID.Value != nil {
+			groupID, err := s.resolveRedeemPlanGroupID(ctx, *input.Fields.PlanID.Value)
+			if err != nil {
+				return nil, err
+			}
+			if input.Fields.GroupID.Set && input.Fields.GroupID.Value != nil && *input.Fields.GroupID.Value != groupID {
+				return nil, infraerrors.BadRequest("PLAN_GROUP_MISMATCH", "plan_id does not match group_id")
+			}
+			resolvedGroupID := groupID
+			input.Fields.GroupID = NullableInt64Update{Set: true, Value: &resolvedGroupID}
+		} else if !input.Fields.GroupID.Set {
+			input.Fields.GroupID = NullableInt64Update{Set: true, Value: nil}
+		}
 	}
 
 	updated, err := s.redeemRepo.BatchUpdate(ctx, ids, input.Fields)
@@ -408,8 +458,8 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 	}
 
 	// 验证兑换码类型的前置条件
-	if redeemCode.Type == RedeemTypeSubscription && redeemCode.GroupID == nil {
-		return nil, infraerrors.BadRequest("REDEEM_CODE_INVALID", "invalid subscription redeem code: missing group_id")
+	if redeemCode.Type == RedeemTypeSubscription && redeemCode.PlanID == nil && redeemCode.GroupID == nil {
+		return nil, infraerrors.BadRequest("REDEEM_CODE_INVALID", "invalid subscription redeem code: missing plan_id or group_id")
 	}
 
 	// 获取用户信息
@@ -460,23 +510,20 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 		}
 
 	case RedeemTypeSubscription:
-		validityDays := redeemCode.ValidityDays
-		if validityDays < 0 {
+		assignInput, groupID, err := s.buildRedeemSubscriptionAssignment(txCtx, userID, redeemCode)
+		if err != nil {
+			return nil, err
+		}
+		if assignInput.ValidityDays < 0 {
 			// 负数天数：缩短订阅，减到 0 则取消订阅
-			if err := s.reduceOrCancelSubscription(txCtx, userID, *redeemCode.GroupID, -validityDays, redeemCode.Code); err != nil {
+			if err := s.reduceOrCancelSubscription(txCtx, userID, groupID, -assignInput.ValidityDays, redeemCode.Code); err != nil {
 				return nil, fmt.Errorf("reduce or cancel subscription: %w", err)
 			}
 		} else {
-			if validityDays == 0 {
-				validityDays = 30
+			if assignInput.ValidityDays == 0 {
+				assignInput.ValidityDays = 30
 			}
-			_, _, err := s.subscriptionService.AssignOrExtendSubscription(txCtx, &AssignSubscriptionInput{
-				UserID:       userID,
-				GroupID:      *redeemCode.GroupID,
-				ValidityDays: validityDays,
-				AssignedBy:   0, // 系统分配
-				Notes:        fmt.Sprintf("通过兑换码 %s 兑换", redeemCode.Code),
-			})
+			_, _, err := s.subscriptionService.AssignOrExtendSubscription(txCtx, assignInput)
 			if err != nil {
 				return nil, fmt.Errorf("assign or extend subscription: %w", err)
 			}
@@ -508,21 +555,87 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 	return redeemCode, nil
 }
 
+func (s *RedeemService) buildRedeemSubscriptionAssignment(ctx context.Context, userID int64, redeemCode *RedeemCode) (*AssignSubscriptionInput, int64, error) {
+	if redeemCode == nil {
+		return nil, 0, infraerrors.BadRequest("REDEEM_CODE_INVALID", "redeem code is required")
+	}
+	if redeemCode.PlanID != nil {
+		plan, err := s.loadRedeemSubscriptionPlan(ctx, *redeemCode.PlanID)
+		if err != nil {
+			return nil, 0, err
+		}
+		groupID := plan.GroupID
+		if redeemCode.GroupID != nil && *redeemCode.GroupID != groupID {
+			return nil, 0, infraerrors.BadRequest("PLAN_GROUP_MISMATCH", "plan_id does not match group_id")
+		}
+		validityDays := redeemCode.ValidityDays
+		if validityDays == 0 {
+			validityDays = plan.ValidityDays
+		}
+		input := &AssignSubscriptionInput{
+			UserID:       userID,
+			GroupID:      groupID,
+			PlanID:       redeemCode.PlanID,
+			ValidityDays: validityDays,
+			AssignedBy:   0,
+			Notes:        fmt.Sprintf("redeemed with code %s", redeemCode.Code),
+		}
+		return input, groupID, nil
+	}
+	if redeemCode.GroupID == nil {
+		return nil, 0, infraerrors.BadRequest("REDEEM_CODE_INVALID", "subscription redeem code requires plan_id or group_id")
+	}
+	input := &AssignSubscriptionInput{
+		UserID:       userID,
+		GroupID:      *redeemCode.GroupID,
+		ValidityDays: redeemCode.ValidityDays,
+		AssignedBy:   0,
+		Notes:        fmt.Sprintf("redeemed with code %s", redeemCode.Code),
+	}
+	return input, *redeemCode.GroupID, nil
+}
+
+func (s *RedeemService) resolveRedeemPlanGroupID(ctx context.Context, planID int64) (int64, error) {
+	plan, err := s.loadRedeemSubscriptionPlan(ctx, planID)
+	if err != nil {
+		return 0, err
+	}
+	return plan.GroupID, nil
+}
+
+func (s *RedeemService) loadRedeemSubscriptionPlan(ctx context.Context, planID int64) (*dbent.SubscriptionPlan, error) {
+	if planID <= 0 {
+		return nil, infraerrors.BadRequest("PLAN_REQUIRED", "plan_id must be positive")
+	}
+	if s == nil || s.entClient == nil {
+		return nil, infraerrors.InternalServer("PLAN_CATALOG_UNAVAILABLE", "subscription plan catalog is unavailable")
+	}
+	plan, err := s.entClient.SubscriptionPlan.Get(ctx, planID)
+	if err != nil {
+		return nil, infraerrors.NotFound("PLAN_NOT_FOUND", "subscription plan not found")
+	}
+	return plan, nil
+}
+
+func (s *RedeemService) redeemCodeSubscriptionGroupID(ctx context.Context, redeemCode *RedeemCode) (int64, bool) {
+	if redeemCode == nil {
+		return 0, false
+	}
+	if redeemCode.GroupID != nil {
+		return *redeemCode.GroupID, true
+	}
+	if redeemCode.PlanID != nil {
+		groupID, err := s.resolveRedeemPlanGroupID(ctx, *redeemCode.PlanID)
+		return groupID, err == nil
+	}
+	return 0, false
+}
+
 // invalidateRedeemCaches 失效兑换相关的缓存
 func (s *RedeemService) invalidateRedeemCaches(ctx context.Context, userID int64, redeemCode *RedeemCode) {
 	switch redeemCode.Type {
 	case RedeemTypeBalance:
-		if s.authCacheInvalidator != nil {
-			s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
-		}
-		if s.billingCacheService == nil {
-			return
-		}
-		go func() {
-			cacheCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_ = s.billingCacheService.InvalidateUserBalance(cacheCtx, userID)
-		}()
+		s.invalidateBalanceCaches(ctx, userID)
 	case RedeemTypeConcurrency:
 		if s.authCacheInvalidator != nil {
 			s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
@@ -537,8 +650,7 @@ func (s *RedeemService) invalidateRedeemCaches(ctx context.Context, userID int64
 		if s.billingCacheService == nil {
 			return
 		}
-		if redeemCode.GroupID != nil {
-			groupID := *redeemCode.GroupID
+		if groupID, ok := s.redeemCodeSubscriptionGroupID(ctx, redeemCode); ok {
 			go func() {
 				cacheCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
@@ -546,6 +658,23 @@ func (s *RedeemService) invalidateRedeemCaches(ctx context.Context, userID int64
 			}()
 		}
 	}
+}
+
+func (s *RedeemService) invalidateBalanceCaches(ctx context.Context, userID int64) {
+	if s == nil || userID <= 0 {
+		return
+	}
+	if s.authCacheInvalidator != nil {
+		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
+	}
+	if s.billingCacheService == nil {
+		return
+	}
+	go func() {
+		cacheCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = s.billingCacheService.InvalidateUserBalance(cacheCtx, userID)
+	}()
 }
 
 func (s *RedeemService) tryAccrueAffiliateRebateForRedeem(ctx context.Context, userID int64, amount float64) {
@@ -603,9 +732,8 @@ func (s *RedeemService) Delete(ctx context.Context, id int64) error {
 		return fmt.Errorf("get redeem code: %w", err)
 	}
 
-	// 不允许删除已使用的兑换码
-	if code.IsUsed() {
-		return infraerrors.Conflict("REDEEM_CODE_DELETE_USED", "cannot delete used redeem code")
+	if err := ensureRedeemCodeDeletable(code); err != nil {
+		return err
 	}
 
 	if err := s.redeemRepo.Delete(ctx, id); err != nil {
@@ -615,20 +743,78 @@ func (s *RedeemService) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-// GetStats 获取兑换码统计信息
-func (s *RedeemService) GetStats(ctx context.Context) (map[string]any, error) {
-	// TODO: 实现统计逻辑
-	// 统计未使用、已使用的兑换码数量
-	// 统计总面值等
+func ensureRedeemCodeDeletable(code *RedeemCode) error {
+	if code == nil {
+		return ErrRedeemCodeNotFound
+	}
+	// 不允许删除已使用的兑换码；兑换历史需要保留用于用户记录与审计。
+	if code.IsUsed() {
+		return infraerrors.Conflict("REDEEM_CODE_DELETE_USED", "cannot delete used redeem code")
+	}
+	return nil
+}
 
-	stats := map[string]any{
-		"total_codes":  0,
-		"unused_codes": 0,
-		"used_codes":   0,
-		"total_value":  0.0,
+// GetStats returns real aggregate statistics for redeem-code operations.
+func (s *RedeemService) GetStats(ctx context.Context) (*RedeemCodeStats, error) {
+	if s == nil || s.redeemRepo == nil {
+		return nil, infraerrors.InternalServer("REDEEM_STATS_UNAVAILABLE", "redeem code statistics are unavailable")
+	}
+
+	stats := &RedeemCodeStats{
+		ByType: map[string]int64{
+			RedeemTypeBalance:      0,
+			RedeemTypeConcurrency:  0,
+			RedeemTypeSubscription: 0,
+			RedeemTypeInvitation:   0,
+		},
+	}
+
+	const pageSize = 1000
+	for page := 1; ; page++ {
+		codes, result, err := s.redeemRepo.List(ctx, pagination.PaginationParams{Page: page, PageSize: pageSize})
+		if err != nil {
+			return nil, fmt.Errorf("list redeem codes for stats: %w", err)
+		}
+		if len(codes) == 0 {
+			break
+		}
+
+		now := time.Now()
+		for i := range codes {
+			stats.applyCode(codes[i], now)
+		}
+
+		if result == nil || int64(page*pageSize) >= result.Total || page >= result.Pages {
+			break
+		}
 	}
 
 	return stats, nil
+}
+
+func (s *RedeemCodeStats) applyCode(code RedeemCode, now time.Time) {
+	s.TotalCodes++
+	s.TotalValue += code.Value
+	if code.Type != "" {
+		s.ByType[code.Type]++
+	}
+
+	switch {
+	case code.Status == StatusUsed:
+		s.UsedCodes++
+		if code.Value > 0 {
+			s.TotalValueDistributed += code.Value
+		}
+	case code.Status == StatusDisabled:
+		s.DisabledCodes++
+	case code.IsExpiredAt(now):
+		s.ExpiredCodes++
+	case code.Status == StatusUnused:
+		s.UnusedCodes++
+		s.ActiveCodes++
+	default:
+		s.UnusedCodes++
+	}
 }
 
 // GetUserHistory 获取用户的兑换历史

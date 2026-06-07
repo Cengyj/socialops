@@ -88,16 +88,26 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, requiresAdmin: true, title: 'Groups' }
   },
   {
-    path: '/admin/accounts',
-    name: 'AdminAccounts',
-    component: () => import('@/views/admin/AccountsView.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true, title: 'Accounts' }
+    path: '/accounts',
+    name: 'AccountWorkbench',
+    component: () => import('@/views/AccountWorkbenchRoute.vue'),
+    meta: { requiresAuth: true, title: 'Account Workbench' }
   },
   {
-    path: '/admin/proxies',
-    name: 'AdminProxies',
-    component: () => import('@/views/admin/ProxiesView.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true, title: 'Proxy Management' }
+    path: '/admin/accounts',
+    redirect: '/accounts'
+  },
+  {
+    path: '/proxies',
+    name: 'Proxies',
+    component: () => import('@/views/proxies/ProxiesView.vue'),
+    meta: { requiresAuth: true, title: 'Proxy Management' }
+  },
+  {
+    path: '/task-settings',
+    name: 'TaskSettings',
+    component: () => import('@/views/task-settings/TaskSettingsView.vue'),
+    meta: { requiresAuth: true, title: 'Task Settings' }
   },
   {
     path: '/admin/redeem-codes',

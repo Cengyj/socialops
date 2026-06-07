@@ -12,7 +12,8 @@ import type {
 } from "@/types";
 
 export interface DefaultSubscriptionSetting {
-  group_id: number;
+  plan_id?: number | null;
+  group_id?: number | null;
   validity_days: number;
 }
 
@@ -155,14 +156,27 @@ export function normalizeDefaultSubscriptionSettings(
   if (!Array.isArray(subscriptions)) return [];
 
   return subscriptions
-    .filter((item) => item.group_id > 0 && item.validity_days > 0)
-    .map((item) => ({
-      group_id: Math.floor(item.group_id),
-      validity_days: Math.min(
-        36500,
-        Math.max(1, Math.floor(item.validity_days)),
-      ),
-    }));
+    .filter((item) => Number(item.plan_id || item.group_id || 0) > 0 && item.validity_days > 0)
+    .map((item) => {
+      const planID =
+        item.plan_id != null && Number(item.plan_id) > 0
+          ? Math.floor(Number(item.plan_id))
+          : undefined;
+      const groupID =
+        planID == null && item.group_id != null && Number(item.group_id) > 0
+          ? Math.floor(Number(item.group_id))
+          : undefined;
+      const normalized: DefaultSubscriptionSetting = {
+        plan_id: planID,
+        validity_days: Math.min(
+          36500,
+          Math.max(1, Math.floor(item.validity_days)),
+        ),
+      };
+      if (groupID != null) normalized.group_id = groupID;
+      return normalized;
+    })
+    .filter((item) => item.plan_id != null || item.group_id != null);
 }
 
 export function buildAuthSourceDefaultsState(
@@ -384,10 +398,11 @@ export interface SystemSettings {
   contact_info: string;
   doc_url: string;
   home_content: string;
-  hide_ccs_import_button: boolean;
   table_default_page_size: number;
   table_page_size_options: number[];
   backend_mode_enabled: boolean;
+  purchase_subscription_enabled: boolean;
+  purchase_subscription_url: string;
   custom_menu_items: CustomMenuItem[];
   custom_endpoints: CustomEndpoint[];
   // SMTP settings
@@ -584,10 +599,11 @@ export interface UpdateSettingsRequest {
   contact_info?: string;
   doc_url?: string;
   home_content?: string;
-  hide_ccs_import_button?: boolean;
   table_default_page_size?: number;
   table_page_size_options?: number[];
   backend_mode_enabled?: boolean;
+  purchase_subscription_enabled?: boolean;
+  purchase_subscription_url?: string;
   custom_menu_items?: CustomMenuItem[];
   custom_endpoints?: CustomEndpoint[];
   smtp_host?: string;
@@ -929,96 +945,6 @@ export async function deleteAdminApiKey(): Promise<{ message: string }> {
   return data;
 }
 
-// ==================== Overload Cooldown Settings ====================
-
-/**
- * Overload cooldown settings interface (529 handling)
- */
-export interface OverloadCooldownSettings {
-  enabled: boolean;
-  cooldown_minutes: number;
-}
-
-export async function getOverloadCooldownSettings(): Promise<OverloadCooldownSettings> {
-  const { data } = await apiClient.get<OverloadCooldownSettings>(
-    "/admin/settings/overload-cooldown",
-  );
-  return data;
-}
-
-export async function updateOverloadCooldownSettings(
-  settings: OverloadCooldownSettings,
-): Promise<OverloadCooldownSettings> {
-  const { data } = await apiClient.put<OverloadCooldownSettings>(
-    "/admin/settings/overload-cooldown",
-    settings,
-  );
-  return data;
-}
-
-// ==================== 429 Rate Limit Cooldown Settings ====================
-
-export interface RateLimit429CooldownSettings {
-  enabled: boolean;
-  cooldown_seconds: number;
-}
-
-export async function getRateLimit429CooldownSettings(): Promise<RateLimit429CooldownSettings> {
-  const { data } = await apiClient.get<RateLimit429CooldownSettings>(
-    "/admin/settings/rate-limit-429-cooldown",
-  );
-  return data;
-}
-
-export async function updateRateLimit429CooldownSettings(
-  settings: RateLimit429CooldownSettings,
-): Promise<RateLimit429CooldownSettings> {
-  const { data } = await apiClient.put<RateLimit429CooldownSettings>(
-    "/admin/settings/rate-limit-429-cooldown",
-    settings,
-  );
-  return data;
-}
-
-// ==================== Stream Timeout Settings ====================
-
-/**
- * Stream timeout settings interface
- */
-export interface StreamTimeoutSettings {
-  enabled: boolean;
-  action: "temp_unsched" | "error" | "none";
-  temp_unsched_minutes: number;
-  threshold_count: number;
-  threshold_window_minutes: number;
-}
-
-/**
- * Get stream timeout settings
- * @returns Stream timeout settings
- */
-export async function getStreamTimeoutSettings(): Promise<StreamTimeoutSettings> {
-  const { data } = await apiClient.get<StreamTimeoutSettings>(
-    "/admin/settings/stream-timeout",
-  );
-  return data;
-}
-
-/**
- * Update stream timeout settings
- * @param settings - Stream timeout settings to update
- * @returns Updated settings
- */
-export async function updateStreamTimeoutSettings(
-  settings: StreamTimeoutSettings,
-): Promise<StreamTimeoutSettings> {
-  const { data } = await apiClient.put<StreamTimeoutSettings>(
-    "/admin/settings/stream-timeout",
-    settings,
-  );
-  return data;
-}
-
 export const settingsAPI = {
   getSettings,
   updateSettings,
@@ -1032,12 +958,6 @@ export const settingsAPI = {
   getAdminApiKey,
   regenerateAdminApiKey,
   deleteAdminApiKey,
-  getOverloadCooldownSettings,
-  updateOverloadCooldownSettings,
-  getRateLimit429CooldownSettings,
-  updateRateLimit429CooldownSettings,
-  getStreamTimeoutSettings,
-  updateStreamTimeoutSettings,
 };
 
 export default settingsAPI;

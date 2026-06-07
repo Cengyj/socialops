@@ -2458,6 +2458,7 @@ func (r *oauthPendingFlowRedeemCodeRepo) GetByCode(ctx context.Context, code str
 		Notes:        notes,
 		CreatedAt:    entity.CreatedAt,
 		GroupID:      entity.GroupID,
+		PlanID:       entity.PlanID,
 		ValidityDays: entity.ValidityDays,
 	}, nil
 }
@@ -2487,6 +2488,11 @@ func (r *oauthPendingFlowRedeemCodeRepo) Update(ctx context.Context, code *servi
 		update = update.SetGroupID(*code.GroupID)
 	} else {
 		update = update.ClearGroupID()
+	}
+	if code.PlanID != nil {
+		update = update.SetPlanID(*code.PlanID)
+	} else {
+		update = update.ClearPlanID()
 	}
 	_, err := update.Save(ctx)
 	return err

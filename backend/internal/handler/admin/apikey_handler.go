@@ -34,20 +34,31 @@ func (h *AdminAPIKeyHandler) UpdateGroup(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
-	var resetKey *service.APIKey
-	if req.ResetRateLimitUsage != nil && *req.ResetRateLimitUsage {
-		resetKey, err = h.adminService.AdminResetAPIKeyRateLimitUsage(c.Request.Context(), keyID)
+	resetRequested := req.ResetRateLimitUsage != nil && *req.ResetRateLimitUsage
+	var result *service.AdminUpdateAPIKeyGroupIDResult
+	if req.GroupID != nil && resetRequested {
+		result, err = h.adminService.AdminUpdateAPIKeyGroupAndRateLimitUsage(c.Request.Context(), keyID, req.GroupID, true)
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		resetRequested = false
+	} else if req.GroupID != nil || !resetRequested {
+		result, err = h.adminService.AdminUpdateAPIKeyGroupID(c.Request.Context(), keyID, req.GroupID)
 		if err != nil {
 			response.ErrorFrom(c, err)
 			return
 		}
 	}
-	result, err := h.adminService.AdminUpdateAPIKeyGroupID(c.Request.Context(), keyID, req.GroupID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	if resetKey != nil && req.GroupID == nil {
+	if resetRequested {
+		resetKey, err := h.adminService.AdminResetAPIKeyRateLimitUsage(c.Request.Context(), keyID)
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		if result == nil {
+			result = &service.AdminUpdateAPIKeyGroupIDResult{}
+		}
 		result.APIKey = resetKey
 	}
 	response.Success(c, gin.H{

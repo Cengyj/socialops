@@ -55,6 +55,16 @@ config.local.yaml
 *.log
 logs/
 
+# Local QA and generated artifacts
+.codex-artifacts/
+.codex-logs/
+.codex-qa/
+.codex-screenshots/
+artifacts/
+codex-screenshots/
+qa-artifacts/
+qa-screenshots/
+
 # Temporary files
 tmp/
 temp/

@@ -132,7 +132,7 @@ describe('TOTP 弹窗定时器清理', () => {
     await wrapper.get('button[type="button"].btn-primary').trigger('click')
     await flushPromises()
 
-    expect(mocks.showError).toHaveBeenCalledWith('setup failed')
+    expect(mocks.showError).toHaveBeenCalledWith('profile.totp.setupFailed')
     expect(wrapper.text()).not.toContain('setup failed')
     expect(wrapper.find('.bg-red-50').exists()).toBe(false)
   })
@@ -150,7 +150,7 @@ describe('TOTP 弹窗定时器清理', () => {
     await wrapper.get('form').trigger('submit.prevent')
     await flushPromises()
 
-    expect(mocks.showError).toHaveBeenCalledWith('disable failed')
+    expect(mocks.showError).toHaveBeenCalledWith('profile.totp.disableFailed')
     expect(wrapper.text()).not.toContain('disable failed')
     expect(wrapper.find('.bg-red-50').exists()).toBe(false)
   })

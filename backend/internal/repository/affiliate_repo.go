@@ -6,11 +6,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
 	dbent "github.com/Wei-Shaw/socialops/ent"
 	"github.com/Wei-Shaw/socialops/ent/user"
+	"github.com/Wei-Shaw/socialops/internal/payment"
 	"github.com/Wei-Shaw/socialops/internal/service"
 	"github.com/lib/pq"
 )
@@ -114,13 +116,57 @@ func (r *affiliateRepository) BindInviter(ctx context.Context, userID, inviterID
 	return bound, nil
 }
 
-func (r *affiliateRepository) AccrueQuota(ctx context.Context, inviterID, inviteeUserID int64, amount float64, freezeHours int, sourceOrderID *int64) (bool, error) {
+func (r *affiliateRepository) AccrueQuota(ctx context.Context, inviterID, inviteeUserID int64, amount float64, freezeHours int, sourceOrderID *int64, perInviteeCap float64) (bool, error) {
 	if amount <= 0 {
 		return false, nil
 	}
 
 	var applied bool
 	err := r.withTx(ctx, func(txCtx context.Context, txClient *dbent.Client) error {
+		rows, err := txClient.QueryContext(txCtx, `
+WITH locked_inviter AS (
+    SELECT user_id
+    FROM user_affiliates
+    WHERE user_id = $1
+    FOR UPDATE
+),
+existing AS (
+    SELECT COALESCE(SUM(amount), 0)::double precision AS total
+    FROM user_affiliate_ledger
+    WHERE user_id = $1
+      AND source_user_id = $2
+      AND action = 'accrue'
+)
+SELECT CASE
+    WHEN $4::double precision > 0
+        THEN GREATEST(LEAST($3::double precision, $4::double precision - existing.total), 0)
+    ELSE $3::double precision
+END AS amount
+FROM locked_inviter, existing`, inviterID, inviteeUserID, amount, perInviteeCap)
+		if err != nil {
+			return fmt.Errorf("claim affiliate accrual cap: %w", err)
+		}
+		defer func() { _ = rows.Close() }()
+
+		if !rows.Next() {
+			if err := rows.Err(); err != nil {
+				return err
+			}
+			applied = false
+			return nil
+		}
+		if err := rows.Scan(&amount); err != nil {
+			return err
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		amount = roundAffiliateAmount(amount, 8)
+		if amount <= 0 {
+			applied = false
+			return nil
+		}
+
 		// freezeHours > 0: add to frozen quota; == 0: add to available quota directly
 		var updateSQL string
 		if freezeHours > 0 {
@@ -505,6 +551,7 @@ SELECT po.id,
        COALESCE(invitee.username, ''),
        po.amount::double precision,
        po.pay_amount::double precision,
+       po.provider_snapshot->>'currency',
        ual.amount::double precision,
        po.payment_type,
        po.status,
@@ -520,6 +567,7 @@ LIMIT $`+fmt.Sprint(len(args)-1)+` OFFSET $`+fmt.Sprint(len(args)), args...)
 	items := make([]service.AffiliateRebateRecord, 0)
 	for rows.Next() {
 		var item service.AffiliateRebateRecord
+		var rawCurrency sql.NullString
 		if err := rows.Scan(
 			&item.OrderID,
 			&item.OutTradeNo,
@@ -531,6 +579,7 @@ LIMIT $`+fmt.Sprint(len(args)-1)+` OFFSET $`+fmt.Sprint(len(args)), args...)
 			&item.InviteeUsername,
 			&item.OrderAmount,
 			&item.PayAmount,
+			&rawCurrency,
 			&item.RebateAmount,
 			&item.PaymentType,
 			&item.OrderStatus,
@@ -538,12 +587,21 @@ LIMIT $`+fmt.Sprint(len(args)-1)+` OFFSET $`+fmt.Sprint(len(args)), args...)
 		); err != nil {
 			return nil, 0, err
 		}
+		item.Currency = normalizeAffiliatePaymentCurrency(rawCurrency.String)
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, err
 	}
 	return items, total, nil
+}
+
+func normalizeAffiliatePaymentCurrency(raw string) string {
+	currency, err := payment.NormalizePaymentCurrency(raw)
+	if err != nil {
+		return payment.DefaultPaymentCurrency
+	}
+	return currency
 }
 
 func (r *affiliateRepository) ListAffiliateTransferRecords(ctx context.Context, filter service.AffiliateRecordFilter) ([]service.AffiliateTransferRecord, int64, error) {
@@ -958,6 +1016,11 @@ func nullableFloat64Ptr(v sql.NullFloat64) *float64 {
 	return &v.Float64
 }
 
+func roundAffiliateAmount(v float64, scale int) float64 {
+	factor := math.Pow10(scale)
+	return math.Round(v*factor) / factor
+}
+
 func generateAffiliateCode() (string, error) {
 	buf := make([]byte, affiliateCodeLength)
 	if _, err := rand.Read(buf); err != nil {
@@ -1047,6 +1110,50 @@ WHERE user_id = $2`, candidate, userID)
 			return nil
 		}
 		return fmt.Errorf("reset aff_code: exhausted attempts")
+	})
+	if err != nil {
+		return "", err
+	}
+	return newCode, nil
+}
+
+// ClearUserAffiliateSettings removes all admin custom affiliate settings in one transaction.
+func (r *affiliateRepository) ClearUserAffiliateSettings(ctx context.Context, userID int64) (string, error) {
+	if userID <= 0 {
+		return "", service.ErrUserNotFound
+	}
+
+	var newCode string
+	err := r.withTx(ctx, func(txCtx context.Context, txClient *dbent.Client) error {
+		if _, err := ensureUserAffiliateWithClient(txCtx, txClient, userID); err != nil {
+			return err
+		}
+		for i := 0; i < affiliateCodeMaxAttempts; i++ {
+			candidate, codeErr := generateAffiliateCode()
+			if codeErr != nil {
+				return codeErr
+			}
+			res, err := txClient.ExecContext(txCtx, `
+UPDATE user_affiliates
+SET aff_code = $1,
+    aff_code_custom = false,
+    aff_rebate_rate_percent = NULL,
+    updated_at = NOW()
+WHERE user_id = $2`, candidate, userID)
+			if err != nil {
+				if isAffiliateUniqueViolation(err) {
+					continue
+				}
+				return fmt.Errorf("clear affiliate settings: %w", err)
+			}
+			affected, _ := res.RowsAffected()
+			if affected == 0 {
+				return service.ErrUserNotFound
+			}
+			newCode = candidate
+			return nil
+		}
+		return fmt.Errorf("clear affiliate settings: exhausted attempts")
 	})
 	if err != nil {
 		return "", err

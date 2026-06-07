@@ -1,9 +1,10 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ProfilePasswordForm from '@/components/user/profile/ProfilePasswordForm.vue'
 
-const { changePasswordMock, showSuccessMock, showErrorMock } = vi.hoisted(() => ({
+const { changePasswordMock, logoutMock, showSuccessMock, showErrorMock } = vi.hoisted(() => ({
   changePasswordMock: vi.fn(),
+  logoutMock: vi.fn(),
   showSuccessMock: vi.fn(),
   showErrorMock: vi.fn()
 }))
@@ -18,6 +19,12 @@ vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
     showSuccess: showSuccessMock,
     showError: showErrorMock
+  })
+}))
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({
+    logout: logoutMock
   })
 }))
 
@@ -47,6 +54,13 @@ vi.mock('vue-i18n', async (importOriginal) => {
 })
 
 describe('ProfilePasswordForm', () => {
+  beforeEach(() => {
+    changePasswordMock.mockReset()
+    logoutMock.mockReset()
+    showSuccessMock.mockReset()
+    showErrorMock.mockReset()
+  })
+
   it('shows validation failures as toast messages instead of inline errors', async () => {
     const wrapper = mount(ProfilePasswordForm)
 
@@ -60,7 +74,7 @@ describe('ProfilePasswordForm', () => {
     expect(wrapper.find('.input-error-text').exists()).toBe(false)
   })
 
-  it('shows API failures as toast messages', async () => {
+  it('shows API failures as safe toast messages', async () => {
     changePasswordMock.mockRejectedValue({
       response: { data: { detail: 'backend failure' } }
     })
@@ -73,7 +87,23 @@ describe('ProfilePasswordForm', () => {
     await wrapper.get('form').trigger('submit.prevent')
 
     expect(changePasswordMock).toHaveBeenCalledWith('old-password', 'new-password')
-    expect(showErrorMock).toHaveBeenCalledWith('backend failure')
+    expect(showErrorMock).toHaveBeenCalledWith('Failed to change password')
     expect(wrapper.find('.input-error-text').exists()).toBe(false)
+  })
+
+  it('clears the local session after a successful password change because tokens are revoked', async () => {
+    changePasswordMock.mockResolvedValue({ message: 'ok' })
+    logoutMock.mockResolvedValue(undefined)
+
+    const wrapper = mount(ProfilePasswordForm)
+
+    await wrapper.get('#old_password').setValue('old-password')
+    await wrapper.get('#new_password').setValue('new-password')
+    await wrapper.get('#confirm_password').setValue('new-password')
+    await wrapper.get('form').trigger('submit.prevent')
+
+    expect(changePasswordMock).toHaveBeenCalledWith('old-password', 'new-password')
+    expect(logoutMock).toHaveBeenCalledOnce()
+    expect(showSuccessMock).toHaveBeenCalledWith('Password changed successfully')
   })
 })

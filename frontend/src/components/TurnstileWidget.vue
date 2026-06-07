@@ -6,6 +6,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 interface TurnstileRenderOptions {
   sitekey: string
@@ -139,7 +140,7 @@ onMounted(async () => {
     await loadScript()
     renderWidget()
   } catch (error) {
-    console.error('Failed to initialize Turnstile:', error)
+    recordClientDiagnostic('turnstile.initialize', error)
     emit('error')
   }
 })

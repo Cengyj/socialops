@@ -155,3 +155,47 @@ func TestMigration135AllowsGitHubAndGoogleAuthProviders(t *testing.T) {
 	require.Contains(t, sql, "'github'")
 	require.Contains(t, sql, "'google'")
 }
+
+func TestMigration153ProtectsSocialTaskUsageLedgerIdempotency(t *testing.T) {
+	content, err := FS.ReadFile("153_social_task_usage_ledger_idempotency.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "WHERE request_id IS NOT NULL")
+	require.Contains(t, sql, "api_key_id IS NULL")
+	require.Contains(t, sql, "model = 'social-action'")
+	require.Contains(t, sql, "ROW_NUMBER() OVER (PARTITION BY request_id ORDER BY id)")
+	require.Contains(t, sql, "SET request_id = NULL")
+	require.NotContains(t, sql, "CONCURRENTLY")
+
+	indexContent, err := FS.ReadFile("154_social_task_usage_ledger_idempotency_notx.sql")
+	require.NoError(t, err)
+
+	indexSQL := string(indexContent)
+	require.Contains(t, indexSQL, "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_logs_social_task_request_unique")
+	require.Contains(t, indexSQL, "ON usage_logs (request_id)")
+	require.Contains(t, indexSQL, "WHERE request_id IS NOT NULL")
+	require.Contains(t, indexSQL, "api_key_id IS NULL")
+	require.Contains(t, indexSQL, "model = 'social-action'")
+	require.NotContains(t, indexSQL, "ON usage_logs (request_id, api_key_id)")
+}
+
+func TestMigration157WidensPaymentOrderMonetaryPrecision(t *testing.T) {
+	content, err := FS.ReadFile("157_widen_payment_order_amount_precision.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	for _, column := range []string{"amount", "pay_amount", "refund_amount"} {
+		require.Contains(t, sql, "ALTER COLUMN "+column+" TYPE DECIMAL(20,8)")
+	}
+}
+
+func TestMigration158WidensRedeemCodeLength(t *testing.T) {
+	content, err := FS.ReadFile("158_widen_redeem_code_length.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "ALTER TABLE redeem_codes")
+	require.Contains(t, sql, "ALTER COLUMN code TYPE VARCHAR(128)")
+	require.NotContains(t, sql, "DROP")
+}

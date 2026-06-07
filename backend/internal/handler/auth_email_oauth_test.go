@@ -348,7 +348,7 @@ func (r *oauthEmailAffiliateRepoStub) BindInviter(_ context.Context, userID, inv
 	return true, nil
 }
 
-func (r *oauthEmailAffiliateRepoStub) AccrueQuota(context.Context, int64, int64, float64, int, *int64) (bool, error) {
+func (r *oauthEmailAffiliateRepoStub) AccrueQuota(context.Context, int64, int64, float64, int, *int64, float64) (bool, error) {
 	panic("unexpected AccrueQuota call")
 }
 
@@ -378,6 +378,10 @@ func (r *oauthEmailAffiliateRepoStub) ResetUserAffCode(context.Context, int64) (
 
 func (r *oauthEmailAffiliateRepoStub) SetUserRebateRate(context.Context, int64, *float64) error {
 	panic("unexpected SetUserRebateRate call")
+}
+
+func (r *oauthEmailAffiliateRepoStub) ClearUserAffiliateSettings(context.Context, int64) (string, error) {
+	panic("unexpected ClearUserAffiliateSettings call")
 }
 
 func (r *oauthEmailAffiliateRepoStub) BatchSetUserRebateRate(context.Context, []int64, *float64) error {

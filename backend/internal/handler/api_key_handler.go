@@ -36,18 +36,18 @@ type CreateAPIKeyRequest struct {
 }
 
 type UpdateAPIKeyRequest struct {
-	Name                string   `json:"name"`
-	GroupID             *int64   `json:"group_id"`
-	Status              string   `json:"status" binding:"omitempty,oneof=active inactive disabled"`
-	IPWhitelist         []string `json:"ip_whitelist"`
-	IPBlacklist         []string `json:"ip_blacklist"`
-	Quota               *float64 `json:"quota"`
-	ExpiresAt           *string  `json:"expires_at"`
-	ResetQuota          *bool    `json:"reset_quota"`
-	RateLimit5h         *float64 `json:"rate_limit_5h"`
-	RateLimit1d         *float64 `json:"rate_limit_1d"`
-	RateLimit7d         *float64 `json:"rate_limit_7d"`
-	ResetRateLimitUsage *bool    `json:"reset_rate_limit_usage"`
+	Name                string    `json:"name"`
+	GroupID             *int64    `json:"group_id"`
+	Status              string    `json:"status" binding:"omitempty,oneof=active inactive disabled"`
+	IPWhitelist         *[]string `json:"ip_whitelist"`
+	IPBlacklist         *[]string `json:"ip_blacklist"`
+	Quota               *float64  `json:"quota"`
+	ExpiresAt           *string   `json:"expires_at"`
+	ResetQuota          *bool     `json:"reset_quota"`
+	RateLimit5h         *float64  `json:"rate_limit_5h"`
+	RateLimit1d         *float64  `json:"rate_limit_1d"`
+	RateLimit7d         *float64  `json:"rate_limit_7d"`
+	ResetRateLimitUsage *bool     `json:"reset_rate_limit_usage"`
 }
 
 func (h *APIKeyHandler) List(c *gin.Context) {

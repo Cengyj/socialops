@@ -12,7 +12,7 @@ export { authAPI, isTotp2FARequired, type LoginResponse } from './auth'
 // User APIs
 export { userAPI } from './user'
 export { usageAPI } from './usage'
-export { redeemAPI, type RedeemHistoryItem } from './redeem'
+export { redeemAPI, type RedeemHistoryItem, type RedeemResult } from './redeem'
 export { paymentAPI } from './payment'
 export { totpAPI } from './totp'
 export { default as announcementsAPI } from './announcements'

@@ -1,5 +1,5 @@
 <template>
-  <div class="relative flex min-h-screen items-center justify-center overflow-hidden p-4">
+  <div class="relative flex min-h-screen w-full items-center justify-center overflow-hidden p-4">
     <!-- Background -->
     <div
       class="absolute inset-0 bg-gradient-to-br from-gray-50 via-primary-50/30 to-gray-100 dark:from-dark-950 dark:via-dark-900 dark:to-dark-950"
@@ -25,7 +25,7 @@
     </div>
 
     <!-- Content Container -->
-    <div class="relative z-10 w-full max-w-md">
+    <div class="auth-shell relative z-10 w-full">
       <!-- Logo/Brand -->
       <div class="mb-8 text-center">
         <!-- Custom Logo or Default Logo -->
@@ -38,14 +38,14 @@
           <h1 class="text-gradient mb-2 text-3xl font-bold">
             {{ siteName }}
           </h1>
-          <p class="text-sm text-gray-500 dark:text-dark-400">
+          <p class="auth-subtitle mx-auto px-2 text-sm leading-6 text-gray-500 dark:text-dark-400">
             {{ siteSubtitle }}
           </p>
         </template>
       </div>
 
       <!-- Card Container -->
-      <div class="card-glass rounded-2xl p-8 shadow-glass">
+      <div class="card-glass w-full rounded-2xl p-6 shadow-glass sm:p-8">
         <slot />
       </div>
 
@@ -84,5 +84,21 @@ onMounted(() => {
 <style scoped>
 .text-gradient {
   @apply bg-gradient-to-r from-primary-600 to-primary-500 bg-clip-text text-transparent;
+}
+
+.auth-shell {
+  max-width: min(28rem, calc(100vw - 2rem));
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.auth-subtitle {
+  max-width: min(100%, 20rem);
+  overflow-wrap: anywhere;
+}
+
+.auth-shell :deep(*) {
+  box-sizing: border-box;
+  min-width: 0;
 }
 </style>

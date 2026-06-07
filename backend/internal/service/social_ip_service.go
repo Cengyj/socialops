@@ -3,15 +3,23 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"net/url"
 	"strings"
 	"time"
 
 	dbent "github.com/Wei-Shaw/socialops/ent"
 	"github.com/Wei-Shaw/socialops/ent/socialaccount"
 	"github.com/Wei-Shaw/socialops/ent/socialip"
+	"github.com/Wei-Shaw/socialops/ent/user"
 	infraerrors "github.com/Wei-Shaw/socialops/internal/pkg/errors"
 	"github.com/Wei-Shaw/socialops/internal/pkg/pagination"
+	"github.com/Wei-Shaw/socialops/internal/pkg/proxyurl"
+)
+
+const (
+	SocialIPTypeResidential = "residential"
+	SocialIPTypeStatic      = "static"
+	SocialIPTypeMobile      = "mobile"
+	SocialIPTypeDatacenter  = "datacenter"
 )
 
 // SocialIP represents a user-owned execution proxy.
@@ -46,9 +54,8 @@ type UpdateSocialIPInput struct {
 	Remark   *string `json:"remark"`
 }
 
-// SocialIPListFilters contains admin filters for execution proxies.
+// SocialIPListFilters contains filters for execution proxies.
 type SocialIPListFilters struct {
-	UserID *int64
 	Status string
 	IPType string
 	Search string
@@ -66,10 +73,34 @@ func NewSocialIPService(entClient *dbent.Client) *SocialIPService {
 
 // Create creates a new social IP entry.
 func (s *SocialIPService) Create(ctx context.Context, input *CreateSocialIPInput) (*SocialIP, error) {
+	if input == nil {
+		return nil, infraerrors.BadRequest("SOCIAL_IP_INPUT_REQUIRED", "social IP input is required")
+	}
+	if input.UserID <= 0 {
+		return nil, infraerrors.BadRequest("SOCIAL_IP_OWNER_REQUIRED", "social IP owner is required")
+	}
+	exists, err := s.entClient.User.Query().
+		Where(user.IDEQ(input.UserID)).
+		Exist(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, infraerrors.NotFound("SOCIAL_IP_OWNER_NOT_FOUND", "social IP owner not found")
+	}
+
+	ipType, err := normalizeSocialIPType(input.IPType, true)
+	if err != nil {
+		return nil, err
+	}
+	name, err := normalizeSocialIPName(input.Name)
+	if err != nil {
+		return nil, err
+	}
 	q := s.entClient.SocialIP.Create().
 		SetUserID(input.UserID).
-		SetName(input.Name).
-		SetIPType(input.IPType).
+		SetName(name).
+		SetIPType(ipType).
 		SetStatus("unknown")
 
 	if input.Endpoint != nil {
@@ -77,7 +108,9 @@ func (s *SocialIPService) Create(ctx context.Context, input *CreateSocialIPInput
 		if err != nil {
 			return nil, err
 		}
-		q.SetEndpoint(endpoint)
+		if endpoint != "" {
+			q.SetEndpoint(endpoint)
+		}
 	}
 	if input.Remark != nil {
 		q.SetRemark(*input.Remark)
@@ -115,9 +148,10 @@ func (s *SocialIPService) GetByIDForUser(ctx context.Context, id, userID int64) 
 }
 
 // ListByUser returns social IPs for a specific user.
-func (s *SocialIPService) ListByUser(ctx context.Context, userID int64, params pagination.PaginationParams) ([]*SocialIP, *pagination.PaginationResult, error) {
+func (s *SocialIPService) ListByUser(ctx context.Context, userID int64, params pagination.PaginationParams, filters SocialIPListFilters) ([]*SocialIP, *pagination.PaginationResult, error) {
 	q := s.entClient.SocialIP.Query().
 		Where(socialip.UserIDEQ(userID))
+	q = applySocialIPListFilters(q, filters)
 
 	total, err := q.Clone().Count(ctx)
 	if err != nil {
@@ -142,12 +176,32 @@ func (s *SocialIPService) ListByUser(ctx context.Context, userID int64, params p
 	return ips, result, nil
 }
 
-// ListForAdmin returns execution proxies across users for admin management.
-func (s *SocialIPService) ListForAdmin(ctx context.Context, params pagination.PaginationParams, filters SocialIPListFilters) ([]*SocialIP, *pagination.PaginationResult, error) {
-	q := s.entClient.SocialIP.Query()
-	if filters.UserID != nil && *filters.UserID > 0 {
-		q = q.Where(socialip.UserIDEQ(*filters.UserID))
+// ListUsableByUser returns online proxies with a configured endpoint for assignment and execution.
+func (s *SocialIPService) ListUsableByUser(ctx context.Context, userID int64) ([]*SocialIP, error) {
+	ents, err := s.entClient.SocialIP.Query().
+		Where(
+			socialip.UserIDEQ(userID),
+			socialip.StatusEQ(SocialIPStatusOnline),
+			socialip.EndpointNotNil(),
+			socialip.EndpointNEQ(""),
+		).
+		Order(dbent.Asc(socialip.FieldID)).
+		All(ctx)
+	if err != nil {
+		return nil, err
 	}
+	ips := make([]*SocialIP, 0, len(ents))
+	for _, e := range ents {
+		ip := socialIPFromEnt(e)
+		if strings.TrimSpace(stringValue(ip.Endpoint)) == "" {
+			continue
+		}
+		ips = append(ips, ip)
+	}
+	return ips, nil
+}
+
+func applySocialIPListFilters(q *dbent.SocialIPQuery, filters SocialIPListFilters) *dbent.SocialIPQuery {
 	if filters.Status != "" {
 		q = q.Where(socialip.StatusEQ(filters.Status))
 	}
@@ -161,27 +215,7 @@ func (s *SocialIPService) ListForAdmin(ctx context.Context, params pagination.Pa
 			socialip.RemarkContainsFold(search),
 		))
 	}
-
-	total, err := q.Clone().Count(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	ents, err := q.
-		Offset(params.Offset()).
-		Limit(params.Limit()).
-		Order(dbent.Desc(socialip.FieldCreatedAt)).
-		All(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	ips := make([]*SocialIP, len(ents))
-	for i, e := range ents {
-		ips[i] = socialIPFromEnt(e)
-	}
-	result := &pagination.PaginationResult{Total: int64(total), Page: params.Page, PageSize: params.PageSize}
-	return ips, result, nil
+	return q
 }
 
 // Update updates a social IP entry.
@@ -189,20 +223,41 @@ func (s *SocialIPService) Update(ctx context.Context, id int64, input *UpdateSoc
 	q := s.entClient.SocialIP.UpdateOneID(id)
 
 	if input.Name != nil {
-		q.SetName(*input.Name)
+		name, err := normalizeSocialIPName(*input.Name)
+		if err != nil {
+			return nil, err
+		}
+		q.SetName(name)
 	}
 	if input.IPType != nil {
-		q.SetIPType(*input.IPType)
+		ipType, err := normalizeSocialIPType(*input.IPType, false)
+		if err != nil {
+			return nil, err
+		}
+		q.SetIPType(ipType)
 	}
 	if input.Endpoint != nil {
 		endpoint, err := normalizeSocialIPEndpoint(input.Endpoint)
 		if err != nil {
 			return nil, err
 		}
-		q.SetEndpoint(endpoint).
-			SetStatus(SocialIPStatusUnknown).
-			ClearLatencyMs().
-			ClearLastCheckAt()
+		current, err := s.entClient.SocialIP.Get(ctx, id)
+		if err != nil {
+			if dbent.IsNotFound(err) {
+				return nil, infraerrors.NotFound("SOCIAL_IP_NOT_FOUND", "social IP not found")
+			}
+			return nil, err
+		}
+		if endpoint == "" {
+			q.ClearEndpoint()
+		} else {
+			q.SetEndpoint(endpoint)
+		}
+		if endpoint != stringValue(current.Endpoint) {
+			q.SetStatus(SocialIPStatusUnknown).
+				ClearLatencyMs().
+				ClearLastCheckAt()
+		}
 	}
 	if input.Remark != nil {
 		q.SetRemark(*input.Remark)
@@ -216,6 +271,14 @@ func (s *SocialIPService) Update(ctx context.Context, id int64, input *UpdateSoc
 		return nil, err
 	}
 	return socialIPFromEnt(ent), nil
+}
+
+// UpdateForUser updates a proxy only when it belongs to the current user.
+func (s *SocialIPService) UpdateForUser(ctx context.Context, id, userID int64, input *UpdateSocialIPInput) (*SocialIP, error) {
+	if _, err := s.GetByIDForUser(ctx, id, userID); err != nil {
+		return nil, err
+	}
+	return s.Update(ctx, id, input)
 }
 
 // Delete soft-deletes a social IP entry.
@@ -244,9 +307,17 @@ func (s *SocialIPService) Delete(ctx context.Context, id int64) error {
 	return tx.Commit()
 }
 
+// DeleteForUser deletes a proxy only when it belongs to the current user.
+func (s *SocialIPService) DeleteForUser(ctx context.Context, id, userID int64) error {
+	if _, err := s.GetByIDForUser(ctx, id, userID); err != nil {
+		return err
+	}
+	return s.Delete(ctx, id)
+}
+
 func clearDefaultProxySnapshotsForDeletedIP(ctx context.Context, client *dbent.Client, id int64) error {
 	accounts, err := client.SocialAccount.Query().
-		Where(socialaccount.BoundIPNotNil()).
+		Where(socialaccount.DefaultProxySnapshotNotNil()).
 		All(ctx)
 	if err != nil {
 		return err
@@ -254,10 +325,11 @@ func clearDefaultProxySnapshotsForDeletedIP(ctx context.Context, client *dbent.C
 
 	accountIDs := make([]int64, 0)
 	for _, account := range accounts {
-		if account.BoundIP == nil {
+		snapshot := trimPtr(account.DefaultProxySnapshot)
+		if snapshot == "" {
 			continue
 		}
-		snapshotID, ok := SocialIPIDFromSnapshot(strings.TrimSpace(*account.BoundIP))
+		snapshotID, ok := SocialIPIDFromSnapshot(snapshot)
 		if ok && snapshotID == id {
 			accountIDs = append(accountIDs, account.ID)
 		}
@@ -267,9 +339,30 @@ func clearDefaultProxySnapshotsForDeletedIP(ctx context.Context, client *dbent.C
 	}
 	_, err = client.SocialAccount.Update().
 		Where(socialaccount.IDIn(accountIDs...)).
-		ClearBoundIP().
+		ClearDefaultProxySnapshot().
 		Save(ctx)
 	return err
+}
+
+func normalizeSocialIPType(raw string, defaultIfEmpty bool) (string, error) {
+	ipType := strings.TrimSpace(raw)
+	if ipType == "" && defaultIfEmpty {
+		return SocialIPTypeResidential, nil
+	}
+	switch ipType {
+	case SocialIPTypeResidential, SocialIPTypeStatic, SocialIPTypeMobile, SocialIPTypeDatacenter:
+		return ipType, nil
+	default:
+		return "", infraerrors.BadRequest("SOCIAL_IP_TYPE_INVALID", "social IP type is invalid")
+	}
+}
+
+func normalizeSocialIPName(raw string) (string, error) {
+	name := strings.TrimSpace(raw)
+	if name == "" {
+		return "", infraerrors.BadRequest("SOCIAL_IP_NAME_REQUIRED", "social IP name is required")
+	}
+	return name, nil
 }
 
 func normalizeSocialIPEndpoint(endpoint *string) (string, error) {
@@ -280,7 +373,7 @@ func normalizeSocialIPEndpoint(endpoint *string) (string, error) {
 	if normalized == "" {
 		return normalized, nil
 	}
-	parsed, err := url.Parse(normalized)
+	normalized, parsed, err := proxyurl.Parse(normalized)
 	if err != nil {
 		return "", infraerrors.BadRequest("INVALID_PROXY_ENDPOINT", "invalid proxy endpoint URL")
 	}

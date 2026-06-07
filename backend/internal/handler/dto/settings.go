@@ -186,7 +186,8 @@ type SystemSettings struct {
 }
 
 type DefaultSubscriptionSetting struct {
-	GroupID      int64 `json:"group_id"`
+	PlanID       int64 `json:"plan_id,omitempty"`
+	GroupID      int64 `json:"group_id,omitempty"`
 	ValidityDays int   `json:"validity_days"`
 }
 
@@ -314,7 +315,7 @@ func ParseUserVisibleMenuItems(raw string) []CustomMenuItem {
 	items := ParseCustomMenuItems(raw)
 	filtered := make([]CustomMenuItem, 0, len(items))
 	for _, item := range items {
-		if item.Visibility != "admin" {
+		if item.Visibility == "user" {
 			filtered = append(filtered, item)
 		}
 	}

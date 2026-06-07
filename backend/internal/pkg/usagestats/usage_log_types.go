@@ -3,28 +3,6 @@ package usagestats
 
 import "time"
 
-const (
-	ModelSourceRequested = "requested"
-	ModelSourceUpstream  = "upstream"
-	ModelSourceMapping   = "mapping"
-)
-
-func IsValidModelSource(source string) bool {
-	switch source {
-	case ModelSourceRequested, ModelSourceUpstream, ModelSourceMapping:
-		return true
-	default:
-		return false
-	}
-}
-
-func NormalizeModelSource(source string) string {
-	if IsValidModelSource(source) {
-		return source
-	}
-	return ModelSourceRequested
-}
-
 // DashboardStats 仪表盘统计
 type DashboardStats struct {
 	// 用户统计
@@ -266,6 +244,7 @@ type UsageLogFilters struct {
 	AccountID   int64
 	GroupID     int64
 	Model       string
+	Status      string
 	RequestType *int16
 	Stream      *bool
 	BillingType *int8

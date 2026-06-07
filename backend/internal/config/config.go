@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -59,6 +61,22 @@ type Config struct {
 	Timezone                string                        `mapstructure:"timezone"` // e.g. "Asia/Shanghai", "UTC"
 	Update                  UpdateConfig                  `mapstructure:"update"`
 	Idempotency             IdempotencyConfig             `mapstructure:"idempotency"`
+	TwitterLogin            TwitterLoginConfig            `mapstructure:"twitter_login"`
+}
+
+// TwitterLoginConfig configures the external services used by the Twitter/X
+// account login flow that acquires execution credentials (cookies/OAuth tokens).
+// When endpoints are empty the login action fails closed (no fake success).
+type TwitterLoginConfig struct {
+	// DeviceParamsURL is the external API that supplies a real device
+	// fingerprint per login. A static fingerprint significantly raises
+	// Twitter risk-control rejection, so this should be configured.
+	DeviceParamsURL string `mapstructure:"device_params_url"`
+	// DeviceParamsCollection is the collection name posted to the device API.
+	DeviceParamsCollection string `mapstructure:"device_params_collection"`
+	// EmailCodeURL is the external API polled for email verification codes
+	// when Twitter issues an email challenge (LoginAcid) during login.
+	EmailCodeURL string `mapstructure:"email_code_url"`
 }
 
 type LogConfig struct {
@@ -595,17 +613,7 @@ type DatabaseConfig struct {
 }
 
 func (d *DatabaseConfig) DSN() string {
-	// 当密码为空时不包含 password 参数，避免 libpq 解析错误
-	if d.Password == "" {
-		return fmt.Sprintf(
-			"host=%s port=%d user=%s dbname=%s sslmode=%s",
-			d.Host, d.Port, d.User, d.DBName, d.SSLMode,
-		)
-	}
-	return fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		d.Host, d.Port, d.User, d.Password, d.DBName, d.SSLMode,
-	)
+	return BuildPostgresDSN(d.Host, d.Port, d.User, d.Password, d.DBName, d.SSLMode, "")
 }
 
 // DSNWithTimezone returns DSN with timezone setting
@@ -613,17 +621,30 @@ func (d *DatabaseConfig) DSNWithTimezone(tz string) string {
 	if tz == "" {
 		tz = "Asia/Shanghai"
 	}
-	// 当密码为空时不包含 password 参数，避免 libpq 解析错误
-	if d.Password == "" {
-		return fmt.Sprintf(
-			"host=%s port=%d user=%s dbname=%s sslmode=%s TimeZone=%s",
-			d.Host, d.Port, d.User, d.DBName, d.SSLMode, tz,
-		)
+	return BuildPostgresDSN(d.Host, d.Port, d.User, d.Password, d.DBName, d.SSLMode, tz)
+}
+
+func BuildPostgresDSN(host string, port int, user, password, dbName, sslMode, timezone string) string {
+	query := url.Values{}
+	if sslMode != "" {
+		query.Set("sslmode", sslMode)
 	}
-	return fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s TimeZone=%s",
-		d.Host, d.Port, d.User, d.Password, d.DBName, d.SSLMode, tz,
-	)
+	if timezone != "" {
+		query.Set("TimeZone", timezone)
+	}
+
+	userInfo := url.UserPassword(user, password)
+	if password == "" {
+		userInfo = url.User(user)
+	}
+
+	return (&url.URL{
+		Scheme:   "postgres",
+		User:     userInfo,
+		Host:     net.JoinHostPort(host, strconv.Itoa(port)),
+		Path:     "/" + dbName,
+		RawQuery: query.Encode(),
+	}).String()
 }
 
 // RedisConfig Redis 连接配置
@@ -1163,10 +1184,18 @@ func setDefaults() {
 	viper.SetDefault("idempotency.cleanup_batch_size", 500)
 	viper.SetDefault("concurrency.ping_interval", 10)
 
+	// Twitter/X login (credential acquisition) external services.
+	// Endpoints default to empty: the login action fails closed until configured.
+	viper.SetDefault("twitter_login.device_params_url", "")
+	viper.SetDefault("twitter_login.device_params_collection", "twitter_parameter")
+	viper.SetDefault("twitter_login.email_code_url", "")
+
 	// Subscription Maintenance (bounded queue + worker pool)
 	viper.SetDefault("subscription_maintenance.worker_count", 2)
 	viper.SetDefault("subscription_maintenance.queue_size", 1024)
 
+	// Update metadata/download proxy.
+	viper.SetDefault("update.proxy_url", "")
 }
 
 func (c *Config) Validate() error {

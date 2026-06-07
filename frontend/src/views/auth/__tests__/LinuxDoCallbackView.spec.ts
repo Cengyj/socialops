@@ -87,6 +87,7 @@ describe('LinuxDoCallbackView', () => {
     apiClientPost.mockReset()
     sendVerifyCode.mockReset()
     sendPendingOAuthVerifyCode.mockReset()
+    window.__SOCIALOPS_CLIENT_DIAGNOSTICS__ = []
     getPublicSettings.mockResolvedValue({
       turnstile_enabled: false,
       turnstile_site_key: ''
@@ -599,8 +600,11 @@ describe('LinuxDoCallbackView', () => {
     await wrapper.get('[data-testid="linuxdo-create-account-submit"]').trigger('click')
     await flushPromises()
 
-    expect(showError).toHaveBeenCalledWith('create failed')
+    expect(showError).toHaveBeenCalledWith('auth.loginFailed')
     expect(wrapper.text()).not.toContain('create failed')
+    expect(window.__SOCIALOPS_CLIENT_DIAGNOSTICS__?.at(-1)?.context).toBe(
+      'auth.linuxdo.create_account'
+    )
   })
 
   it('sends a verify code for pending oauth account creation', async () => {

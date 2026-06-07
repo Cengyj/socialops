@@ -24,30 +24,10 @@ export const getAdminSteps = (t: (key: string) => string, _isSimpleMode = false)
     }
   },
   {
-    element: 'a[href="/admin/proxies"]',
-    popover: {
-      title: t('onboarding.admin.proxies.title'),
-      description: t('onboarding.admin.proxies.description'),
-      side: 'right',
-      align: 'center',
-      showButtons: ['next', 'previous']
-    }
-  },
-  {
     element: 'a[href="/admin/subscriptions"]',
     popover: {
       title: t('onboarding.admin.subscriptions.title'),
       description: t('onboarding.admin.subscriptions.description'),
-      side: 'right',
-      align: 'center',
-      showButtons: ['next', 'previous']
-    }
-  },
-  {
-    element: 'a[href="/admin/usage"]',
-    popover: {
-      title: t('onboarding.admin.usage.title'),
-      description: t('onboarding.admin.usage.description'),
       side: 'right',
       align: 'center',
       showButtons: ['next', 'previous']

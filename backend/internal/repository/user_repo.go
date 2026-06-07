@@ -45,24 +45,21 @@ func (r *userRepository) Create(ctx context.Context, userIn *service.User) error
 
 	// 统一使用 ent 的事务：保证用户与允许分组的更新原子化，
 	// 并避免基于 *sql.Tx 手动构造 ent client 导致的 ExecQuerier 断言错误。
-	tx, err := r.client.Tx(ctx)
-	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
-		return err
-	}
-
+	var tx *dbent.Tx
 	var txClient *dbent.Client
 	txCtx := ctx
-	if err == nil {
+	if existingTx := dbent.TxFromContext(ctx); existingTx != nil {
+		txClient = existingTx.Client()
+	} else if startedTx, err := r.client.Tx(ctx); err != nil && !errors.Is(err, dbent.ErrTxStarted) {
+		return err
+	} else if err == nil {
+		tx = startedTx
 		defer func() { _ = tx.Rollback() }()
 		txClient = tx.Client()
 		txCtx = dbent.NewTxContext(ctx, tx)
 	} else {
 		// 已处于外部事务中（ErrTxStarted），复用当前事务 client 并由调用方负责提交/回滚。
-		if existingTx := dbent.TxFromContext(ctx); existingTx != nil {
-			txClient = existingTx.Client()
-		} else {
-			txClient = r.client
-		}
+		txClient = r.client
 	}
 
 	releaseEmailLock, err := lockRepositoryScopedKeys(
@@ -89,6 +86,7 @@ func (r *userRepository) Create(ctx context.Context, userIn *service.User) error
 		SetBalance(userIn.Balance).
 		SetConcurrency(userIn.Concurrency).
 		SetStatus(userIn.Status).
+		SetTokenVersion(userIn.TokenVersion).
 		SetSignupSource(userSignupSourceOrDefault(userIn.SignupSource)).
 		SetNillableLastLoginAt(userIn.LastLoginAt).
 		SetNillableLastActiveAt(userIn.LastActiveAt).
@@ -219,6 +217,9 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User) error
 		SetBalanceNotifyExtraEmails(marshalExtraEmails(userIn.BalanceNotifyExtraEmails)).
 		SetTotalRecharged(userIn.TotalRecharged).
 		SetRpmLimit(userIn.RPMLimit)
+	if !userIn.TokenVersionResolved {
+		updateOp = updateOp.SetTokenVersion(userIn.TokenVersion)
+	}
 	if userIn.SignupSource != "" {
 		updateOp = updateOp.SetSignupSource(userIn.SignupSource)
 	}
@@ -944,6 +945,8 @@ func applyUserEntityToService(dst *service.User, src *dbent.User) {
 		return
 	}
 	dst.ID = src.ID
+	dst.TokenVersion = src.TokenVersion
+	dst.TokenVersionResolved = false
 	dst.SignupSource = src.SignupSource
 	dst.LastLoginAt = src.LastLoginAt
 	dst.LastActiveAt = src.LastActiveAt

@@ -23,7 +23,8 @@ func NewRedeemCodeRepository(client *dbent.Client) service.RedeemCodeRepository 
 }
 
 func (r *redeemCodeRepository) Create(ctx context.Context, code *service.RedeemCode) error {
-	created, err := r.client.RedeemCode.Create().
+	client := clientFromContext(ctx, r.client)
+	created, err := client.RedeemCode.Create().
 		SetCode(code.Code).
 		SetType(code.Type).
 		SetValue(code.Value).
@@ -34,6 +35,7 @@ func (r *redeemCodeRepository) Create(ctx context.Context, code *service.RedeemC
 		SetNillableUsedBy(code.UsedBy).
 		SetNillableUsedAt(code.UsedAt).
 		SetNillableGroupID(code.GroupID).
+		SetNillablePlanID(code.PlanID).
 		Save(ctx)
 	if err == nil {
 		code.ID = created.ID
@@ -47,10 +49,11 @@ func (r *redeemCodeRepository) CreateBatch(ctx context.Context, codes []service.
 		return nil
 	}
 
+	client := clientFromContext(ctx, r.client)
 	builders := make([]*dbent.RedeemCodeCreate, 0, len(codes))
 	for i := range codes {
 		c := &codes[i]
-		b := r.client.RedeemCode.Create().
+		b := client.RedeemCode.Create().
 			SetCode(c.Code).
 			SetType(c.Type).
 			SetValue(c.Value).
@@ -60,11 +63,12 @@ func (r *redeemCodeRepository) CreateBatch(ctx context.Context, codes []service.
 			SetNillableExpiresAt(c.ExpiresAt).
 			SetNillableUsedBy(c.UsedBy).
 			SetNillableUsedAt(c.UsedAt).
-			SetNillableGroupID(c.GroupID)
+			SetNillableGroupID(c.GroupID).
+			SetNillablePlanID(c.PlanID)
 		builders = append(builders, b)
 	}
 
-	return r.client.RedeemCode.CreateBulk(builders...).Exec(ctx)
+	return client.RedeemCode.CreateBulk(builders...).Exec(ctx)
 }
 
 func (r *redeemCodeRepository) GetByID(ctx context.Context, id int64) (*service.RedeemCode, error) {
@@ -218,6 +222,11 @@ func (r *redeemCodeRepository) Update(ctx context.Context, code *service.RedeemC
 	} else {
 		up.ClearGroupID()
 	}
+	if code.PlanID != nil {
+		up.SetPlanID(*code.PlanID)
+	} else {
+		up.ClearPlanID()
+	}
 	if code.ExpiresAt != nil {
 		up.SetExpiresAt(*code.ExpiresAt)
 	} else {
@@ -307,6 +316,13 @@ func (r *redeemCodeRepository) batchUpdate(ctx context.Context, client *dbent.Cl
 			up.SetGroupID(*fields.GroupID.Value)
 		} else {
 			up.ClearGroupID()
+		}
+	}
+	if fields.PlanID.Set {
+		if fields.PlanID.Value != nil {
+			up.SetPlanID(*fields.PlanID.Value)
+		} else {
+			up.ClearPlanID()
 		}
 	}
 
@@ -421,6 +437,7 @@ func redeemCodeEntityToService(m *dbent.RedeemCode) *service.RedeemCode {
 		CreatedAt:    m.CreatedAt,
 		ExpiresAt:    m.ExpiresAt,
 		GroupID:      m.GroupID,
+		PlanID:       m.PlanID,
 		ValidityDays: m.ValidityDays,
 	}
 	if m.Edges.User != nil {

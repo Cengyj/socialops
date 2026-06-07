@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Wei-Shaw/socialops/internal/config"
@@ -142,4 +143,163 @@ func TestAdminSettingHandler_UpdateSettings_IgnoresAIGatewaySettingsAndPreserves
 	require.Equal(t, "true", repo.values[service.SettingKeyGitHubOAuthEnabled])
 	require.Equal(t, "github-client", repo.values[service.SettingKeyGitHubOAuthClientID])
 	require.Equal(t, "github-secret", repo.values[service.SettingKeyGitHubOAuthClientSecret])
+}
+
+func TestAdminSettingHandler_UpdateSettings_InvalidPaymentPatchDoesNotPersistSystemSettings(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &settingHandlerRepoStub{values: map[string]string{
+		service.SettingKeySiteName: "Original SocialOps",
+	}}
+	settingService := service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}})
+	handler := NewSettingHandler(
+		settingService,
+		nil,
+		nil,
+		service.NewPaymentConfigService(nil, repo, nil),
+		nil,
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/admin/settings", bytes.NewReader([]byte(`{
+		"site_name": "Changed SocialOps",
+		"payment_balance_recharge_multiplier": 0
+	}`)))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	handler.UpdateSettings(c)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Equal(t, "Original SocialOps", repo.values[service.SettingKeySiteName])
+}
+
+func TestAdminSettingHandler_UpdateSettings_NormalizesCustomMenuPageSlug(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &settingHandlerRepoStub{values: map[string]string{}}
+	handler := NewSettingHandler(
+		service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}}),
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/admin/settings", bytes.NewReader([]byte(`{
+		"site_name": "SocialOps",
+		"default_concurrency": 5,
+		"custom_menu_items": [
+			{
+				"id": "help-center",
+				"label": "Help Center",
+				"icon_svg": "",
+				"url": "",
+				"page_slug": "help/intro",
+				"visibility": "user",
+				"sort_order": 0
+			}
+		]
+	}`)))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	handler.UpdateSettings(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	raw := repo.values[service.SettingKeyCustomMenuItems]
+	require.NotEmpty(t, raw)
+
+	var items []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(raw), &items))
+	require.Len(t, items, 1)
+	require.Equal(t, "help/intro", items[0]["page_slug"])
+	require.Equal(t, "md:help/intro", items[0]["url"])
+}
+
+func TestAdminSettingHandler_UpdateSettings_RejectsInvalidCustomMenuPageSlug(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	longSlug := strings.Repeat("a", 65)
+	tests := []struct {
+		name string
+		item string
+	}{
+		{
+			name: "path traversal",
+			item: `{
+				"id": "bad-page",
+				"label": "Bad Page",
+				"icon_svg": "",
+				"url": "",
+				"page_slug": "../admin",
+				"visibility": "user",
+				"sort_order": 0
+			}`,
+		},
+		{
+			name: "backslash",
+			item: `{
+				"id": "bad-page",
+				"label": "Bad Page",
+				"icon_svg": "",
+				"url": "",
+				"page_slug": "help\\intro",
+				"visibility": "user",
+				"sort_order": 0
+			}`,
+		},
+		{
+			name: "empty markdown URL",
+			item: `{
+				"id": "bad-page",
+				"label": "Bad Page",
+				"icon_svg": "",
+				"url": "md:",
+				"visibility": "user",
+				"sort_order": 0
+			}`,
+		},
+		{
+			name: "exceeds page route slug limit",
+			item: `{
+				"id": "bad-page",
+				"label": "Bad Page",
+				"icon_svg": "",
+				"url": "",
+				"page_slug": "` + longSlug + `",
+				"visibility": "user",
+				"sort_order": 0
+			}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &settingHandlerRepoStub{values: map[string]string{}}
+			handler := NewSettingHandler(
+				service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}}),
+				nil,
+				nil,
+				nil,
+				nil,
+				nil,
+			)
+
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/admin/settings", bytes.NewReader([]byte(`{
+				"site_name": "SocialOps",
+				"default_concurrency": 5,
+				"custom_menu_items": [`+tt.item+`]
+			}`)))
+			c.Request.Header.Set("Content-Type", "application/json")
+
+			handler.UpdateSettings(c)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			require.Empty(t, repo.values[service.SettingKeyCustomMenuItems])
+		})
+	}
 }

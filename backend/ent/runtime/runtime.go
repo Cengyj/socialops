@@ -780,7 +780,7 @@ func init() {
 	// redeemcode.DefaultCreatedAt holds the default value on creation for the created_at field.
 	redeemcode.DefaultCreatedAt = redeemcodeDescCreatedAt.Default.(func() time.Time)
 	// redeemcodeDescValidityDays is the schema descriptor for validity_days field.
-	redeemcodeDescValidityDays := redeemcodeFields[10].Descriptor()
+	redeemcodeDescValidityDays := redeemcodeFields[11].Descriptor()
 	// redeemcode.DefaultValidityDays holds the default value on creation for the validity_days field.
 	redeemcode.DefaultValidityDays = redeemcodeDescValidityDays.Default.(int)
 	securitysecretMixin := schema.SecuritySecret{}.Mixin()
@@ -848,7 +848,9 @@ func init() {
 	setting.UpdateDefaultUpdatedAt = settingDescUpdatedAt.UpdateDefault.(func() time.Time)
 	socialaccountMixin := schema.SocialAccount{}.Mixin()
 	socialaccountMixinHooks1 := socialaccountMixin[1].Hooks()
+	socialaccountHooks := schema.SocialAccount{}.Hooks()
 	socialaccount.Hooks[0] = socialaccountMixinHooks1[0]
+	socialaccount.Hooks[1] = socialaccountHooks[0]
 	socialaccountMixinInters1 := socialaccountMixin[1].Interceptors()
 	socialaccount.Interceptors[0] = socialaccountMixinInters1[0]
 	socialaccountMixinFields0 := socialaccountMixin[0].Fields()
@@ -881,44 +883,64 @@ func init() {
 	socialaccountDescNameKey := socialaccountFields[3].Descriptor()
 	// socialaccount.NameKeyValidator is a validator for the "name_key" field. It is called by the builders before save.
 	socialaccount.NameKeyValidator = socialaccountDescNameKey.Validators[0].(func(string) error)
-	// socialaccountDescAccountID is the schema descriptor for account_id field.
-	socialaccountDescAccountID := socialaccountFields[4].Descriptor()
-	// socialaccount.AccountIDValidator is a validator for the "account_id" field. It is called by the builders before save.
-	socialaccount.AccountIDValidator = socialaccountDescAccountID.Validators[0].(func(string) error)
+	// socialaccountDescIdentityKind is the schema descriptor for identity_kind field.
+	socialaccountDescIdentityKind := socialaccountFields[4].Descriptor()
+	// socialaccount.DefaultIdentityKind holds the default value on creation for the identity_kind field.
+	socialaccount.DefaultIdentityKind = socialaccountDescIdentityKind.Default.(string)
+	// socialaccount.IdentityKindValidator is a validator for the "identity_kind" field. It is called by the builders before save.
+	socialaccount.IdentityKindValidator = socialaccountDescIdentityKind.Validators[0].(func(string) error)
+	// socialaccountDescIdentityKey is the schema descriptor for identity_key field.
+	socialaccountDescIdentityKey := socialaccountFields[5].Descriptor()
+	// socialaccount.IdentityKeyValidator is a validator for the "identity_key" field. It is called by the builders before save.
+	socialaccount.IdentityKeyValidator = socialaccountDescIdentityKey.Validators[0].(func(string) error)
+	// socialaccountDescPlatformUserID is the schema descriptor for platform_user_id field.
+	socialaccountDescPlatformUserID := socialaccountFields[6].Descriptor()
+	// socialaccount.PlatformUserIDValidator is a validator for the "platform_user_id" field. It is called by the builders before save.
+	socialaccount.PlatformUserIDValidator = socialaccountDescPlatformUserID.Validators[0].(func(string) error)
 	// socialaccountDescPassword is the schema descriptor for password field.
-	socialaccountDescPassword := socialaccountFields[5].Descriptor()
+	socialaccountDescPassword := socialaccountFields[7].Descriptor()
 	// socialaccount.PasswordValidator is a validator for the "password" field. It is called by the builders before save.
 	socialaccount.PasswordValidator = socialaccountDescPassword.Validators[0].(func(string) error)
 	// socialaccountDescPhone is the schema descriptor for phone field.
-	socialaccountDescPhone := socialaccountFields[6].Descriptor()
+	socialaccountDescPhone := socialaccountFields[8].Descriptor()
 	// socialaccount.PhoneValidator is a validator for the "phone" field. It is called by the builders before save.
 	socialaccount.PhoneValidator = socialaccountDescPhone.Validators[0].(func(string) error)
 	// socialaccountDescEmail is the schema descriptor for email field.
-	socialaccountDescEmail := socialaccountFields[7].Descriptor()
+	socialaccountDescEmail := socialaccountFields[9].Descriptor()
 	// socialaccount.EmailValidator is a validator for the "email" field. It is called by the builders before save.
 	socialaccount.EmailValidator = socialaccountDescEmail.Validators[0].(func(string) error)
 	// socialaccountDescEmailPassword is the schema descriptor for email_password field.
-	socialaccountDescEmailPassword := socialaccountFields[8].Descriptor()
+	socialaccountDescEmailPassword := socialaccountFields[10].Descriptor()
 	// socialaccount.EmailPasswordValidator is a validator for the "email_password" field. It is called by the builders before save.
 	socialaccount.EmailPasswordValidator = socialaccountDescEmailPassword.Validators[0].(func(string) error)
+	// socialaccountDescTwoFactor is the schema descriptor for two_factor field.
+	socialaccountDescTwoFactor := socialaccountFields[11].Descriptor()
+	// socialaccount.TwoFactorValidator is a validator for the "two_factor" field. It is called by the builders before save.
+	socialaccount.TwoFactorValidator = socialaccountDescTwoFactor.Validators[0].(func(string) error)
+	// socialaccountDescBackupCode is the schema descriptor for backup_code field.
+	socialaccountDescBackupCode := socialaccountFields[12].Descriptor()
+	// socialaccount.BackupCodeValidator is a validator for the "backup_code" field. It is called by the builders before save.
+	socialaccount.BackupCodeValidator = socialaccountDescBackupCode.Validators[0].(func(string) error)
+	// socialaccountDescEmailClientID is the schema descriptor for email_client_id field.
+	socialaccountDescEmailClientID := socialaccountFields[13].Descriptor()
+	// socialaccount.EmailClientIDValidator is a validator for the "email_client_id" field. It is called by the builders before save.
+	socialaccount.EmailClientIDValidator = socialaccountDescEmailClientID.Validators[0].(func(string) error)
+	// socialaccountDescRegistrationIP is the schema descriptor for registration_ip field.
+	socialaccountDescRegistrationIP := socialaccountFields[15].Descriptor()
+	// socialaccount.RegistrationIPValidator is a validator for the "registration_ip" field. It is called by the builders before save.
+	socialaccount.RegistrationIPValidator = socialaccountDescRegistrationIP.Validators[0].(func(string) error)
 	// socialaccountDescAccountStatus is the schema descriptor for account_status field.
-	socialaccountDescAccountStatus := socialaccountFields[9].Descriptor()
+	socialaccountDescAccountStatus := socialaccountFields[18].Descriptor()
 	// socialaccount.DefaultAccountStatus holds the default value on creation for the account_status field.
 	socialaccount.DefaultAccountStatus = socialaccountDescAccountStatus.Default.(string)
 	// socialaccount.AccountStatusValidator is a validator for the "account_status" field. It is called by the builders before save.
 	socialaccount.AccountStatusValidator = socialaccountDescAccountStatus.Validators[0].(func(string) error)
 	// socialaccountDescTaskStatus is the schema descriptor for task_status field.
-	socialaccountDescTaskStatus := socialaccountFields[10].Descriptor()
+	socialaccountDescTaskStatus := socialaccountFields[19].Descriptor()
 	// socialaccount.DefaultTaskStatus holds the default value on creation for the task_status field.
 	socialaccount.DefaultTaskStatus = socialaccountDescTaskStatus.Default.(string)
 	// socialaccount.TaskStatusValidator is a validator for the "task_status" field. It is called by the builders before save.
 	socialaccount.TaskStatusValidator = socialaccountDescTaskStatus.Validators[0].(func(string) error)
-	// socialaccountDescSource is the schema descriptor for source field.
-	socialaccountDescSource := socialaccountFields[12].Descriptor()
-	// socialaccount.DefaultSource holds the default value on creation for the source field.
-	socialaccount.DefaultSource = socialaccountDescSource.Default.(string)
-	// socialaccount.SourceValidator is a validator for the "source" field. It is called by the builders before save.
-	socialaccount.SourceValidator = socialaccountDescSource.Validators[0].(func(string) error)
 	socialipMixin := schema.SocialIP{}.Mixin()
 	socialipMixinHooks1 := socialipMixin[1].Hooks()
 	socialip.Hooks[0] = socialipMixinHooks1[0]
@@ -978,41 +1000,47 @@ func init() {
 	// socialtasklog.ActionValidator is a validator for the "action" field. It is called by the builders before save.
 	socialtasklog.ActionValidator = socialtasklogDescAction.Validators[0].(func(string) error)
 	// socialtasklogDescStatus is the schema descriptor for status field.
-	socialtasklogDescStatus := socialtasklogFields[5].Descriptor()
+	socialtasklogDescStatus := socialtasklogFields[7].Descriptor()
 	// socialtasklog.DefaultStatus holds the default value on creation for the status field.
 	socialtasklog.DefaultStatus = socialtasklogDescStatus.Default.(string)
 	// socialtasklog.StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	socialtasklog.StatusValidator = socialtasklogDescStatus.Validators[0].(func(string) error)
 	// socialtasklogDescPrice is the schema descriptor for price field.
-	socialtasklogDescPrice := socialtasklogFields[7].Descriptor()
+	socialtasklogDescPrice := socialtasklogFields[9].Descriptor()
 	// socialtasklog.DefaultPrice holds the default value on creation for the price field.
 	socialtasklog.DefaultPrice = socialtasklogDescPrice.Default.(float64)
 	// socialtasklogDescChargedAmount is the schema descriptor for charged_amount field.
-	socialtasklogDescChargedAmount := socialtasklogFields[8].Descriptor()
+	socialtasklogDescChargedAmount := socialtasklogFields[10].Descriptor()
 	// socialtasklog.DefaultChargedAmount holds the default value on creation for the charged_amount field.
 	socialtasklog.DefaultChargedAmount = socialtasklogDescChargedAmount.Default.(float64)
 	// socialtasklogDescChargeStatus is the schema descriptor for charge_status field.
-	socialtasklogDescChargeStatus := socialtasklogFields[9].Descriptor()
+	socialtasklogDescChargeStatus := socialtasklogFields[11].Descriptor()
 	// socialtasklog.DefaultChargeStatus holds the default value on creation for the charge_status field.
 	socialtasklog.DefaultChargeStatus = socialtasklogDescChargeStatus.Default.(string)
 	// socialtasklog.ChargeStatusValidator is a validator for the "charge_status" field. It is called by the builders before save.
 	socialtasklog.ChargeStatusValidator = socialtasklogDescChargeStatus.Validators[0].(func(string) error)
 	// socialtasklogDescChargeSource is the schema descriptor for charge_source field.
-	socialtasklogDescChargeSource := socialtasklogFields[10].Descriptor()
+	socialtasklogDescChargeSource := socialtasklogFields[12].Descriptor()
 	// socialtasklog.ChargeSourceValidator is a validator for the "charge_source" field. It is called by the builders before save.
 	socialtasklog.ChargeSourceValidator = socialtasklogDescChargeSource.Validators[0].(func(string) error)
 	// socialtasklogDescBillingRequestID is the schema descriptor for billing_request_id field.
-	socialtasklogDescBillingRequestID := socialtasklogFields[13].Descriptor()
+	socialtasklogDescBillingRequestID := socialtasklogFields[15].Descriptor()
 	// socialtasklog.BillingRequestIDValidator is a validator for the "billing_request_id" field. It is called by the builders before save.
 	socialtasklog.BillingRequestIDValidator = socialtasklogDescBillingRequestID.Validators[0].(func(string) error)
 	// socialtasklogDescIdempotencyKey is the schema descriptor for idempotency_key field.
-	socialtasklogDescIdempotencyKey := socialtasklogFields[14].Descriptor()
+	socialtasklogDescIdempotencyKey := socialtasklogFields[16].Descriptor()
 	// socialtasklog.IdempotencyKeyValidator is a validator for the "idempotency_key" field. It is called by the builders before save.
 	socialtasklog.IdempotencyKeyValidator = socialtasklogDescIdempotencyKey.Validators[0].(func(string) error)
 	subscriptionplanFields := schema.SubscriptionPlan{}.Fields()
 	_ = subscriptionplanFields
+	// subscriptionplanDescPlatform is the schema descriptor for platform field.
+	subscriptionplanDescPlatform := subscriptionplanFields[1].Descriptor()
+	// subscriptionplan.DefaultPlatform holds the default value on creation for the platform field.
+	subscriptionplan.DefaultPlatform = subscriptionplanDescPlatform.Default.(string)
+	// subscriptionplan.PlatformValidator is a validator for the "platform" field. It is called by the builders before save.
+	subscriptionplan.PlatformValidator = subscriptionplanDescPlatform.Validators[0].(func(string) error)
 	// subscriptionplanDescName is the schema descriptor for name field.
-	subscriptionplanDescName := subscriptionplanFields[1].Descriptor()
+	subscriptionplanDescName := subscriptionplanFields[2].Descriptor()
 	// subscriptionplan.NameValidator is a validator for the "name" field. It is called by the builders before save.
 	subscriptionplan.NameValidator = func() func(string) error {
 		validators := subscriptionplanDescName.Validators
@@ -1030,43 +1058,43 @@ func init() {
 		}
 	}()
 	// subscriptionplanDescDescription is the schema descriptor for description field.
-	subscriptionplanDescDescription := subscriptionplanFields[2].Descriptor()
+	subscriptionplanDescDescription := subscriptionplanFields[3].Descriptor()
 	// subscriptionplan.DefaultDescription holds the default value on creation for the description field.
 	subscriptionplan.DefaultDescription = subscriptionplanDescDescription.Default.(string)
 	// subscriptionplanDescValidityDays is the schema descriptor for validity_days field.
-	subscriptionplanDescValidityDays := subscriptionplanFields[5].Descriptor()
+	subscriptionplanDescValidityDays := subscriptionplanFields[6].Descriptor()
 	// subscriptionplan.DefaultValidityDays holds the default value on creation for the validity_days field.
 	subscriptionplan.DefaultValidityDays = subscriptionplanDescValidityDays.Default.(int)
 	// subscriptionplanDescValidityUnit is the schema descriptor for validity_unit field.
-	subscriptionplanDescValidityUnit := subscriptionplanFields[6].Descriptor()
+	subscriptionplanDescValidityUnit := subscriptionplanFields[7].Descriptor()
 	// subscriptionplan.DefaultValidityUnit holds the default value on creation for the validity_unit field.
 	subscriptionplan.DefaultValidityUnit = subscriptionplanDescValidityUnit.Default.(string)
 	// subscriptionplan.ValidityUnitValidator is a validator for the "validity_unit" field. It is called by the builders before save.
 	subscriptionplan.ValidityUnitValidator = subscriptionplanDescValidityUnit.Validators[0].(func(string) error)
 	// subscriptionplanDescFeatures is the schema descriptor for features field.
-	subscriptionplanDescFeatures := subscriptionplanFields[7].Descriptor()
+	subscriptionplanDescFeatures := subscriptionplanFields[8].Descriptor()
 	// subscriptionplan.DefaultFeatures holds the default value on creation for the features field.
 	subscriptionplan.DefaultFeatures = subscriptionplanDescFeatures.Default.(string)
 	// subscriptionplanDescProductName is the schema descriptor for product_name field.
-	subscriptionplanDescProductName := subscriptionplanFields[8].Descriptor()
+	subscriptionplanDescProductName := subscriptionplanFields[9].Descriptor()
 	// subscriptionplan.DefaultProductName holds the default value on creation for the product_name field.
 	subscriptionplan.DefaultProductName = subscriptionplanDescProductName.Default.(string)
 	// subscriptionplan.ProductNameValidator is a validator for the "product_name" field. It is called by the builders before save.
 	subscriptionplan.ProductNameValidator = subscriptionplanDescProductName.Validators[0].(func(string) error)
 	// subscriptionplanDescForSale is the schema descriptor for for_sale field.
-	subscriptionplanDescForSale := subscriptionplanFields[9].Descriptor()
+	subscriptionplanDescForSale := subscriptionplanFields[10].Descriptor()
 	// subscriptionplan.DefaultForSale holds the default value on creation for the for_sale field.
 	subscriptionplan.DefaultForSale = subscriptionplanDescForSale.Default.(bool)
 	// subscriptionplanDescSortOrder is the schema descriptor for sort_order field.
-	subscriptionplanDescSortOrder := subscriptionplanFields[10].Descriptor()
+	subscriptionplanDescSortOrder := subscriptionplanFields[11].Descriptor()
 	// subscriptionplan.DefaultSortOrder holds the default value on creation for the sort_order field.
 	subscriptionplan.DefaultSortOrder = subscriptionplanDescSortOrder.Default.(int)
 	// subscriptionplanDescCreatedAt is the schema descriptor for created_at field.
-	subscriptionplanDescCreatedAt := subscriptionplanFields[11].Descriptor()
+	subscriptionplanDescCreatedAt := subscriptionplanFields[15].Descriptor()
 	// subscriptionplan.DefaultCreatedAt holds the default value on creation for the created_at field.
 	subscriptionplan.DefaultCreatedAt = subscriptionplanDescCreatedAt.Default.(func() time.Time)
 	// subscriptionplanDescUpdatedAt is the schema descriptor for updated_at field.
-	subscriptionplanDescUpdatedAt := subscriptionplanFields[12].Descriptor()
+	subscriptionplanDescUpdatedAt := subscriptionplanFields[16].Descriptor()
 	// subscriptionplan.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	subscriptionplan.DefaultUpdatedAt = subscriptionplanDescUpdatedAt.Default.(func() time.Time)
 	// subscriptionplan.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -1267,44 +1295,48 @@ func init() {
 	user.DefaultStatus = userDescStatus.Default.(string)
 	// user.StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	user.StatusValidator = userDescStatus.Validators[0].(func(string) error)
+	// userDescTokenVersion is the schema descriptor for token_version field.
+	userDescTokenVersion := userFields[6].Descriptor()
+	// user.DefaultTokenVersion holds the default value on creation for the token_version field.
+	user.DefaultTokenVersion = userDescTokenVersion.Default.(int64)
 	// userDescUsername is the schema descriptor for username field.
-	userDescUsername := userFields[6].Descriptor()
+	userDescUsername := userFields[7].Descriptor()
 	// user.DefaultUsername holds the default value on creation for the username field.
 	user.DefaultUsername = userDescUsername.Default.(string)
 	// user.UsernameValidator is a validator for the "username" field. It is called by the builders before save.
 	user.UsernameValidator = userDescUsername.Validators[0].(func(string) error)
 	// userDescNotes is the schema descriptor for notes field.
-	userDescNotes := userFields[7].Descriptor()
+	userDescNotes := userFields[8].Descriptor()
 	// user.DefaultNotes holds the default value on creation for the notes field.
 	user.DefaultNotes = userDescNotes.Default.(string)
 	// userDescTotpEnabled is the schema descriptor for totp_enabled field.
-	userDescTotpEnabled := userFields[9].Descriptor()
+	userDescTotpEnabled := userFields[10].Descriptor()
 	// user.DefaultTotpEnabled holds the default value on creation for the totp_enabled field.
 	user.DefaultTotpEnabled = userDescTotpEnabled.Default.(bool)
 	// userDescSignupSource is the schema descriptor for signup_source field.
-	userDescSignupSource := userFields[11].Descriptor()
+	userDescSignupSource := userFields[12].Descriptor()
 	// user.DefaultSignupSource holds the default value on creation for the signup_source field.
 	user.DefaultSignupSource = userDescSignupSource.Default.(string)
 	// user.SignupSourceValidator is a validator for the "signup_source" field. It is called by the builders before save.
 	user.SignupSourceValidator = userDescSignupSource.Validators[0].(func(string) error)
 	// userDescBalanceNotifyEnabled is the schema descriptor for balance_notify_enabled field.
-	userDescBalanceNotifyEnabled := userFields[14].Descriptor()
+	userDescBalanceNotifyEnabled := userFields[15].Descriptor()
 	// user.DefaultBalanceNotifyEnabled holds the default value on creation for the balance_notify_enabled field.
 	user.DefaultBalanceNotifyEnabled = userDescBalanceNotifyEnabled.Default.(bool)
 	// userDescBalanceNotifyThresholdType is the schema descriptor for balance_notify_threshold_type field.
-	userDescBalanceNotifyThresholdType := userFields[15].Descriptor()
+	userDescBalanceNotifyThresholdType := userFields[16].Descriptor()
 	// user.DefaultBalanceNotifyThresholdType holds the default value on creation for the balance_notify_threshold_type field.
 	user.DefaultBalanceNotifyThresholdType = userDescBalanceNotifyThresholdType.Default.(string)
 	// userDescBalanceNotifyExtraEmails is the schema descriptor for balance_notify_extra_emails field.
-	userDescBalanceNotifyExtraEmails := userFields[17].Descriptor()
+	userDescBalanceNotifyExtraEmails := userFields[18].Descriptor()
 	// user.DefaultBalanceNotifyExtraEmails holds the default value on creation for the balance_notify_extra_emails field.
 	user.DefaultBalanceNotifyExtraEmails = userDescBalanceNotifyExtraEmails.Default.(string)
 	// userDescTotalRecharged is the schema descriptor for total_recharged field.
-	userDescTotalRecharged := userFields[18].Descriptor()
+	userDescTotalRecharged := userFields[19].Descriptor()
 	// user.DefaultTotalRecharged holds the default value on creation for the total_recharged field.
 	user.DefaultTotalRecharged = userDescTotalRecharged.Default.(float64)
 	// userDescRpmLimit is the schema descriptor for rpm_limit field.
-	userDescRpmLimit := userFields[19].Descriptor()
+	userDescRpmLimit := userFields[20].Descriptor()
 	// user.DefaultRpmLimit holds the default value on creation for the rpm_limit field.
 	user.DefaultRpmLimit = userDescRpmLimit.Default.(int)
 	userallowedgroupFields := schema.UserAllowedGroup{}.Fields()
@@ -1454,26 +1486,38 @@ func init() {
 	usersubscription.DefaultUpdatedAt = usersubscriptionDescUpdatedAt.Default.(func() time.Time)
 	// usersubscription.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	usersubscription.UpdateDefaultUpdatedAt = usersubscriptionDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// usersubscriptionDescPlanName is the schema descriptor for plan_name field.
+	usersubscriptionDescPlanName := usersubscriptionFields[3].Descriptor()
+	// usersubscription.DefaultPlanName holds the default value on creation for the plan_name field.
+	usersubscription.DefaultPlanName = usersubscriptionDescPlanName.Default.(string)
+	// usersubscription.PlanNameValidator is a validator for the "plan_name" field. It is called by the builders before save.
+	usersubscription.PlanNameValidator = usersubscriptionDescPlanName.Validators[0].(func(string) error)
+	// usersubscriptionDescPlanPlatform is the schema descriptor for plan_platform field.
+	usersubscriptionDescPlanPlatform := usersubscriptionFields[4].Descriptor()
+	// usersubscription.DefaultPlanPlatform holds the default value on creation for the plan_platform field.
+	usersubscription.DefaultPlanPlatform = usersubscriptionDescPlanPlatform.Default.(string)
+	// usersubscription.PlanPlatformValidator is a validator for the "plan_platform" field. It is called by the builders before save.
+	usersubscription.PlanPlatformValidator = usersubscriptionDescPlanPlatform.Validators[0].(func(string) error)
 	// usersubscriptionDescStatus is the schema descriptor for status field.
-	usersubscriptionDescStatus := usersubscriptionFields[4].Descriptor()
+	usersubscriptionDescStatus := usersubscriptionFields[10].Descriptor()
 	// usersubscription.DefaultStatus holds the default value on creation for the status field.
 	usersubscription.DefaultStatus = usersubscriptionDescStatus.Default.(string)
 	// usersubscription.StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	usersubscription.StatusValidator = usersubscriptionDescStatus.Validators[0].(func(string) error)
 	// usersubscriptionDescDailyUsageUsd is the schema descriptor for daily_usage_usd field.
-	usersubscriptionDescDailyUsageUsd := usersubscriptionFields[8].Descriptor()
+	usersubscriptionDescDailyUsageUsd := usersubscriptionFields[14].Descriptor()
 	// usersubscription.DefaultDailyUsageUsd holds the default value on creation for the daily_usage_usd field.
 	usersubscription.DefaultDailyUsageUsd = usersubscriptionDescDailyUsageUsd.Default.(float64)
 	// usersubscriptionDescWeeklyUsageUsd is the schema descriptor for weekly_usage_usd field.
-	usersubscriptionDescWeeklyUsageUsd := usersubscriptionFields[9].Descriptor()
+	usersubscriptionDescWeeklyUsageUsd := usersubscriptionFields[15].Descriptor()
 	// usersubscription.DefaultWeeklyUsageUsd holds the default value on creation for the weekly_usage_usd field.
 	usersubscription.DefaultWeeklyUsageUsd = usersubscriptionDescWeeklyUsageUsd.Default.(float64)
 	// usersubscriptionDescMonthlyUsageUsd is the schema descriptor for monthly_usage_usd field.
-	usersubscriptionDescMonthlyUsageUsd := usersubscriptionFields[10].Descriptor()
+	usersubscriptionDescMonthlyUsageUsd := usersubscriptionFields[16].Descriptor()
 	// usersubscription.DefaultMonthlyUsageUsd holds the default value on creation for the monthly_usage_usd field.
 	usersubscription.DefaultMonthlyUsageUsd = usersubscriptionDescMonthlyUsageUsd.Default.(float64)
 	// usersubscriptionDescAssignedAt is the schema descriptor for assigned_at field.
-	usersubscriptionDescAssignedAt := usersubscriptionFields[12].Descriptor()
+	usersubscriptionDescAssignedAt := usersubscriptionFields[18].Descriptor()
 	// usersubscription.DefaultAssignedAt holds the default value on creation for the assigned_at field.
 	usersubscription.DefaultAssignedAt = usersubscriptionDescAssignedAt.Default.(func() time.Time)
 }

@@ -42,11 +42,11 @@
         <LocaleSwitcher />
 
         <!-- Subscription Progress (for users with active subscriptions) -->
-        <SubscriptionProgressMini v-if="user" />
+        <SubscriptionProgressMini v-if="user && !authStore.isSimpleMode" />
 
         <!-- Balance Display -->
         <div
-          v-if="user"
+          v-if="user && !authStore.isSimpleMode"
           class="hidden items-center gap-2 rounded-xl bg-primary-50 px-3 py-1.5 dark:bg-primary-900/20 sm:flex"
         >
           <svg
@@ -106,7 +106,10 @@
               </div>
 
               <!-- Balance (mobile only) -->
-              <div class="border-b border-gray-100 px-4 py-2 dark:border-dark-700 sm:hidden">
+              <div
+                v-if="!authStore.isSimpleMode"
+                class="border-b border-gray-100 px-4 py-2 dark:border-dark-700 sm:hidden"
+              >
                 <div class="text-xs text-gray-500 dark:text-dark-400">
                   {{ t('common.balance') }}
                 </div>
@@ -222,6 +225,7 @@ import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import SubscriptionProgressMini from '@/components/common/SubscriptionProgressMini.vue'
 import AnnouncementBell from '@/components/common/AnnouncementBell.vue'
 import Icon from '@/components/icons/Icon.vue'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 const router = useRouter()
 const route = useRoute()
@@ -304,7 +308,7 @@ async function handleLogout() {
     await authStore.logout()
   } catch (error) {
     // Ignore logout errors - still redirect to login
-    console.error('Logout error:', error)
+    recordClientDiagnostic('appHeader.logout', error)
   }
   await router.push('/login')
 }

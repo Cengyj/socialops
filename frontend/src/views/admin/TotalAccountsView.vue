@@ -3,107 +3,242 @@
     <TablePageLayout>
       <template #filters>
         <div class="space-y-4">
-          <nav class="flex flex-wrap gap-2 rounded-xl border border-gray-200 bg-white p-2 shadow-sm dark:border-dark-700 dark:bg-dark-800" :aria-label="t('nav.socialAccounts')">
-            <router-link to="/admin/accounts" :class="accountTabInactiveClass">
-              <span>{{ t('admin.socialAccountWorkbench.tabs.management') }}</span>
-              <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:bg-dark-700 dark:text-gray-300">
-                {{ t('admin.socialAccountWorkbench.tabs.managementCount', { count: managementTabCount }) }}
-              </span>
-            </router-link>
-            <router-link to="/admin/total-accounts" :class="accountTabActiveClass">
-              <span>{{ t('admin.socialAccountWorkbench.tabs.pool') }}</span>
-              <span class="rounded-full bg-white/80 px-2 py-0.5 text-xs text-primary-700 dark:bg-primary-900/40 dark:text-primary-200">
-                {{ t('admin.socialAccountWorkbench.tabs.poolCount', { count: poolTabCount }) }}
-              </span>
-            </router-link>
-          </nav>
-
-          <div class="grid gap-3 md:grid-cols-4">
-            <div v-for="stat in stats" :key="stat.label" class="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-dark-700 dark:bg-dark-800">
-              <div class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ stat.label }}</div>
-              <div class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ stat.value }}</div>
+          <div v-if="loadError" class="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-950/30">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div class="flex items-start gap-3">
+                <Icon name="exclamationTriangle" size="md" class="mt-0.5 shrink-0 text-red-500" />
+                <div>
+                  <p class="text-sm font-medium text-red-700 dark:text-red-300">{{ t('admin.socialAccountWorkbench.failedToLoad') }}</p>
+                  <p class="mt-1 text-sm text-red-600 dark:text-red-300/80">{{ loadError }}</p>
+                </div>
+              </div>
+              <button type="button" class="btn btn-secondary shrink-0" @click="loadAccounts">{{ t('common.retry') }}</button>
             </div>
           </div>
 
-          <div class="flex flex-col gap-3 rounded-xl border border-primary-100 bg-primary-50/60 p-3 dark:border-primary-900/40 dark:bg-primary-900/10 xl:flex-row xl:items-center xl:justify-between">
-            <div class="flex flex-1 flex-wrap items-center gap-3">
-              <SearchInput v-model="searchQuery" :placeholder="t('admin.socialAccountWorkbench.searchPlaceholder')" class="w-full sm:w-72" />
-              <Select v-model="accountStatusFilter" :options="accountStatusOptions" class="w-full sm:w-44" />
-              <Select v-model="assignmentFilter" :options="assignmentOptions" class="w-full sm:w-40" />
+          <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <div v-for="stat in stats" :key="stat.label" class="rounded-lg border border-gray-200 bg-white px-3 py-2.5 shadow-sm dark:border-dark-700 dark:bg-dark-800">
+              <div class="flex items-center justify-between gap-3">
+                <div class="truncate text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ stat.label }}</div>
+                <div class="shrink-0 text-lg font-semibold leading-6 text-gray-900 dark:text-white">{{ stat.value }}</div>
+              </div>
             </div>
-            <div class="flex flex-wrap items-center justify-end gap-3">
-              <span class="rounded-full bg-white px-3 py-1 text-sm font-medium text-gray-900 shadow-sm dark:bg-dark-800 dark:text-white">
-                {{ t('admin.socialAccountWorkbench.selection.selectedCount', { count: selectedIds.length }) }}
-              </span>
-              <button class="btn btn-secondary" :disabled="selectedIds.length === 0" @click="clearSelection">
-                {{ t('admin.socialAccountWorkbench.executionBar.clear') }}
-              </button>
-              <button class="btn btn-secondary" @click="triggerImport">
-                <Icon name="upload" size="md" class="mr-2" />
-                {{ t('admin.socialAccountWorkbench.toolbar.importAccounts') }}
-              </button>
-              <button class="btn btn-secondary" @click="exportAccounts">
-                <Icon name="download" size="md" class="mr-2" />
-                {{ t('admin.socialAccountWorkbench.toolbar.exportRecords') }}
-              </button>
-              <button class="btn btn-primary" :disabled="selectedIds.length === 0" @click="openAssignDialog">
-                {{ t('admin.socialAccountWorkbench.actions.assign') }}
-              </button>
-              <button class="btn btn-secondary" :disabled="selectedIds.length === 0" @click="reclaimSelectedAccounts">
-                {{ t('admin.socialAccountWorkbench.actions.reclaim') }}
-              </button>
-              <button class="btn btn-danger" :disabled="selectedIds.length === 0" @click="deleteDialogOpen = true">
-                {{ t('admin.socialAccountWorkbench.actions.delete') }}
-              </button>
-              <input ref="importFileInput" type="file" accept=".csv,.json" class="hidden" @change="handleImportFile" />
+          </div>
+
+          <div data-testid="total-accounts-toolbar" class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-dark-700 dark:bg-dark-800/80">
+            <div class="flex flex-col gap-3">
+              <div class="flex flex-col gap-2 xl:flex-row xl:items-center">
+                <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2 xl:flex-nowrap">
+                  <SearchInput v-model="searchQuery" :placeholder="t('admin.socialAccountWorkbench.searchPlaceholder')" class="w-full shrink-0 sm:w-[220px] xl:w-[200px] 2xl:w-[300px]" />
+                  <Select v-model="accountStatusFilter" :options="accountStatusOptions" class="w-full shrink-0 sm:w-[168px] xl:w-[148px] 2xl:w-[184px]" />
+                  <Select v-model="assignmentFilter" :options="assignmentOptions" class="w-full shrink-0 sm:w-[152px] xl:w-[132px] 2xl:w-[168px]" />
+                  <Select v-model="importPlatform" :options="importPlatformOptions" class="w-full shrink-0 sm:w-[152px] xl:w-[132px] 2xl:w-[168px]" />
+                  <div class="hidden h-6 w-px shrink-0 bg-gray-200 dark:bg-dark-700 xl:block"></div>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm h-10 w-full shrink-0 justify-center whitespace-nowrap sm:w-auto xl:w-10 xl:min-w-[40px] xl:max-w-[40px] xl:px-0 2xl:w-auto 2xl:min-w-0 2xl:max-w-none 2xl:px-3"
+                    :aria-label="t('common.refresh')"
+                    :title="t('common.refresh')"
+                    :disabled="loading"
+                    @click="loadAccounts"
+                  >
+                    <Icon name="refresh" size="sm" :class="loading ? 'animate-spin' : ''" />
+                    <span class="xl:hidden 2xl:inline">{{ t('common.refresh') }}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm h-10 w-full shrink-0 justify-center whitespace-nowrap sm:w-auto xl:w-10 xl:min-w-[40px] xl:max-w-[40px] xl:px-0 2xl:w-auto 2xl:min-w-0 2xl:max-w-none 2xl:px-3"
+                    :aria-label="t('admin.socialAccountWorkbench.toolbar.importAccounts')"
+                    :title="t('admin.socialAccountWorkbench.toolbar.importAccounts')"
+                    @click="triggerImport"
+                  >
+                    <Icon name="upload" size="sm" />
+                    <span class="xl:hidden 2xl:inline">{{ t('admin.socialAccountWorkbench.toolbar.importAccounts') }}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm h-10 w-full shrink-0 justify-center whitespace-nowrap sm:w-auto xl:w-10 xl:min-w-[40px] xl:max-w-[40px] xl:px-0 2xl:w-auto 2xl:min-w-0 2xl:max-w-none 2xl:px-3"
+                    :aria-label="t('admin.socialAccountWorkbench.toolbar.exportRecords')"
+                    :title="t('admin.socialAccountWorkbench.toolbar.exportRecords')"
+                    @click="exportAccounts"
+                  >
+                    <Icon name="download" size="sm" />
+                    <span class="xl:hidden 2xl:inline">{{ t('admin.socialAccountWorkbench.toolbar.exportRecords') }}</span>
+                  </button>
+                  <input ref="importFileInput" type="file" accept=".csv,.json,.xlsx" class="hidden" @change="handleImportFile" />
+                </div>
+
+                <div class="flex w-full shrink-0 flex-col gap-2 sm:flex-row xl:ml-auto xl:w-auto xl:items-center">
+                  <div class="flex h-10 w-full shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-dark-600 dark:bg-dark-800 sm:w-auto">
+                    <div class="flex min-w-[132px] flex-1 items-center justify-center whitespace-nowrap bg-primary-50 px-3 text-sm font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300 sm:flex-none xl:min-w-[112px] xl:px-2 2xl:min-w-[132px] 2xl:px-3">
+                      {{ t('admin.socialAccountWorkbench.executionBar.selectedCount', { count: selectedIds.length }) }}
+                    </div>
+                    <button
+                      type="button"
+                      class="flex h-full w-10 shrink-0 items-center justify-center border-l border-gray-200 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-600 dark:text-gray-300 dark:hover:bg-dark-700 dark:hover:text-gray-100"
+                      :aria-label="t('admin.socialAccountWorkbench.executionBar.clear')"
+                      :title="t('admin.socialAccountWorkbench.executionBar.clear')"
+                      :disabled="!hasSelection"
+                      @click="clearSelection"
+                    >
+                      <Icon name="x" size="sm" />
+                    </button>
+                  </div>
+                  <button type="button" class="btn btn-primary btn-sm h-10 w-full shrink-0 justify-center whitespace-nowrap sm:w-auto sm:px-4 xl:px-3 2xl:px-4" :disabled="!canAssignSelected || assigning" @click="openAssignDialog">
+                    <Icon name="userPlus" size="sm" />
+                    <span>{{ t('admin.socialAccountWorkbench.actions.assign') }}</span>
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm h-10 w-full shrink-0 justify-center whitespace-nowrap sm:w-auto sm:px-4 xl:px-3 2xl:px-4" :disabled="!hasSelection || reclaiming" @click="openReclaimDialog">
+                    <Icon name="swap" size="sm" />
+                    <span>{{ t('admin.socialAccountWorkbench.actions.reclaim') }}</span>
+                  </button>
+                  <button type="button" class="btn btn-danger btn-sm h-10 w-full shrink-0 justify-center whitespace-nowrap sm:w-auto sm:px-4 xl:px-3 2xl:px-4" :disabled="!hasSelection || deleting" @click="openDeleteDialog">
+                    <Icon name="trash" size="sm" />
+                    <span>{{ t('admin.socialAccountWorkbench.actions.delete') }}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="hasSelection" class="flex flex-col gap-2 border-t border-gray-100 pt-3 text-xs text-gray-500 dark:border-dark-700 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between">
+                <div class="flex min-w-0 flex-wrap items-center gap-2">
+                  <span class="rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-700 dark:bg-dark-700 dark:text-gray-200">
+                    {{ t('admin.socialAccountWorkbench.stats.unassigned') }} {{ selectedUnassignedCount }}
+                  </span>
+                  <span class="rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-700 dark:bg-dark-700 dark:text-gray-200">
+                    {{ t('admin.socialAccountWorkbench.stats.assigned') }} {{ selectedAssignedCount }}
+                  </span>
+                </div>
+                <span v-if="selectedAssignedCount > 0" class="min-w-0 text-amber-600 dark:text-amber-300">
+                  {{ t('admin.socialAccountWorkbench.toasts.assignRequiresUnassigned', { count: selectedAssignedCount }) }}
+                </span>
+              </div>
             </div>
           </div>
         </div>
       </template>
 
       <template #table>
-        <DataTable :columns="columns" :data="filteredAccounts" row-key="id" default-sort-key="id" default-sort-order="desc">
+        <DataTable
+          class="total-accounts-table"
+          :columns="columns"
+          :data="filteredAccounts"
+          :loading="loading"
+          row-key="id"
+          default-sort-key="id"
+          default-sort-order="desc"
+          :estimate-row-height="72"
+          :sticky-first-column="false"
+          :sticky-actions-column="true"
+        >
           <template #header-select>
-            <input
-              type="checkbox"
-              class="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              :checked="allVisibleSelected"
-              :indeterminate="someVisibleSelected"
-              @click.stop
-              @change="toggleAllVisible"
-            />
+            <div class="flex justify-center">
+              <input
+                type="checkbox"
+                class="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                :checked="allVisibleSelected"
+                :indeterminate="someVisibleSelected"
+                @click.stop
+                @change="toggleAllVisible"
+              />
+            </div>
           </template>
           <template #cell-select="{ row }">
-            <input
-              type="checkbox"
-              class="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              :checked="isSelected(row.id)"
-              @click.stop
-              @change="toggleSelection(row.id)"
-            />
+            <div class="flex justify-center">
+              <input
+                type="checkbox"
+                class="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                :checked="isSelected(row.id)"
+                @click.stop
+                @change="toggleSelection(row.id)"
+              />
+            </div>
           </template>
           <template #cell-account="{ row }">
-            <button class="font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400" @click="openDetailDialog(row)">{{ row.account }}</button>
+            <button class="flex min-w-[220px] max-w-[260px] items-center gap-3 text-left" @click="openDetailDialog(row)">
+              <span :class="['flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-xs font-semibold', platformAvatarClass(row.platform)]">
+                {{ platformInitial(row.platform) }}
+              </span>
+              <span class="min-w-0">
+                <span class="block truncate font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400">{{ row.account }}</span>
+                <span class="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">#{{ row.id }} · {{ row.username || '-' }}</span>
+              </span>
+            </button>
           </template>
-          <template #cell-password="{ value }">
-            <span class="font-mono text-sm text-gray-700 dark:text-gray-300">{{ value || '-' }}</span>
+          <template #cell-platform="{ value }">
+            <span class="inline-block max-w-[110px] truncate rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-medium text-gray-700 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-200" :title="String(value || '')">
+              {{ value || '-' }}
+            </span>
           </template>
-          <template #cell-emailPassword="{ value }">
-            <span class="font-mono text-sm text-gray-700 dark:text-gray-300">{{ value || '-' }}</span>
+          <template #cell-email="{ value }">
+            <span class="block w-[200px] truncate text-sm text-gray-700 dark:text-gray-300" :title="String(value || '')">{{ value || '-' }}</span>
           </template>
-          <template #cell-boundIp="{ row }">
-            <span class="text-sm text-gray-700 dark:text-gray-300">{{ defaultProxyLabel(row.boundIp) }}</span>
+          <template #cell-credentials="{ row }">
+            <div class="grid w-full min-w-0 max-w-full gap-1.5 text-xs text-gray-700 dark:text-gray-300 sm:w-[300px] sm:max-w-[300px]">
+              <div class="flex min-w-0 gap-1.5">
+                <span class="shrink-0 font-medium text-gray-500 dark:text-gray-400">{{ t('admin.socialAccountWorkbench.columns.password') }}</span>
+                <span class="min-w-0 truncate" :title="row.password">{{ row.password || '-' }}</span>
+              </div>
+              <div class="flex min-w-0 gap-1.5">
+                <span class="shrink-0 font-medium text-gray-500 dark:text-gray-400">{{ t('admin.socialAccountWorkbench.columns.emailPassword') }}</span>
+                <span class="min-w-0 truncate" :title="row.emailPassword">{{ row.emailPassword || '-' }}</span>
+              </div>
+              <div class="flex min-w-0 gap-1.5">
+                <span class="shrink-0 font-medium text-gray-500 dark:text-gray-400">{{ t('admin.socialAccountWorkbench.columns.authCookie') }}</span>
+                <span class="min-w-0 truncate" :title="row.authCookie">{{ row.authCookie || '-' }}</span>
+              </div>
+              <div class="flex min-w-0 gap-1.5">
+                <span class="shrink-0 font-medium text-gray-500 dark:text-gray-400">{{ t('admin.socialAccountWorkbench.columns.executionAuth') }}</span>
+                <span class="min-w-0 truncate" :title="row.executionAuth">{{ row.executionAuth || '-' }}</span>
+              </div>
+            </div>
+          </template>
+          <template #cell-defaultProxySnapshot="{ row }">
+            <span class="block w-[220px] truncate text-sm text-gray-700 dark:text-gray-300" :title="row.defaultProxySnapshot">{{ row.defaultProxySnapshot || '-' }}</span>
           </template>
           <template #cell-accountStatus="{ value }">
             <span :class="['badge', accountStatusBadgeClass(String(value))]">{{ t(`admin.socialAccountWorkbench.accountStatus.${value}`) }}</span>
           </template>
           <template #cell-assignedUser="{ row }">
-            <span :class="['badge', row.assignedUser ? 'badge-primary' : 'badge-warning']">
-              {{ row.assignedUser || t('admin.socialAccountWorkbench.assignment.unassigned') }}
-            </span>
+            <div class="max-w-[220px]">
+              <span :class="['badge max-w-full truncate', row.assignedUser ? 'badge-primary' : 'badge-warning']">
+                {{ row.assignedUser || t('admin.socialAccountWorkbench.assignment.unassigned') }}
+              </span>
+            </div>
           </template>
           <template #cell-actions="{ row }">
-            <button class="btn btn-secondary px-2 py-1 text-xs" @click="openEditDialog(row)">{{ t('common.edit') }}</button>
+            <div class="flex items-center justify-start gap-2">
+              <button class="btn btn-secondary h-9 w-9 px-0" :aria-label="t('admin.socialAccountWorkbench.rowActions.detail')" :title="t('admin.socialAccountWorkbench.rowActions.detail')" @click="openDetailDialog(row)">
+                <Icon name="eye" size="sm" />
+              </button>
+              <button class="btn btn-secondary h-9 w-9 px-0" :aria-label="t('common.edit')" :title="t('common.edit')" @click="openEditDialog(row)">
+                <Icon name="edit" size="sm" />
+              </button>
+            </div>
+          </template>
+          <template #empty>
+            <div class="flex flex-col items-center py-8 text-center">
+              <Icon name="inbox" size="xl" class="mb-4 h-12 w-12 text-gray-400 dark:text-dark-500" />
+              <p class="text-lg font-medium text-gray-900 dark:text-gray-100">
+                {{ accounts.length === 0 ? t('admin.socialAccountWorkbench.empty.title') : t('admin.socialAccountWorkbench.noResults.title') }}
+              </p>
+              <p class="mt-1 max-w-md text-sm text-gray-500 dark:text-gray-400">
+                {{ accounts.length === 0 ? t('admin.socialAccountWorkbench.empty.description') : t('admin.socialAccountWorkbench.noResults.description') }}
+              </p>
+              <div v-if="accounts.length === 0" class="mt-4 flex flex-wrap justify-center gap-2">
+                <button type="button" class="btn btn-primary btn-sm" @click="triggerImport">
+                  <Icon name="upload" size="sm" />
+                  <span>{{ t('admin.socialAccountWorkbench.toolbar.importAccounts') }}</span>
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" @click="loadAccounts">
+                  <Icon name="refresh" size="sm" />
+                  <span>{{ t('common.refresh') }}</span>
+                </button>
+              </div>
+              <button v-else type="button" class="btn btn-secondary btn-sm mt-4" @click="clearAccountFilters">
+                <Icon name="x" size="sm" />
+                <span>{{ t('admin.socialAccountWorkbench.filters.clear') }}</span>
+              </button>
+            </div>
           </template>
         </DataTable>
       </template>
@@ -114,10 +249,15 @@
         <div class="rounded-lg border border-primary-200 bg-primary-50 p-4 text-sm text-primary-700 dark:border-primary-800/60 dark:bg-primary-900/20 dark:text-primary-300">
           {{ t('admin.socialAccountWorkbench.tabs.poolDescription') }}
         </div>
-        <div class="grid gap-3 text-sm sm:grid-cols-2">
-          <div v-for="item in detailItems" :key="item.label" class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
-            <div class="text-gray-500 dark:text-gray-400">{{ item.label }}</div>
-            <div class="mt-1 font-medium text-gray-900 dark:text-white">{{ item.value || '-' }}</div>
+        <div class="space-y-3">
+          <div v-for="section in detailSections" :key="section.title" class="rounded-lg border border-gray-200 bg-white p-3 text-sm dark:border-dark-700 dark:bg-dark-800">
+            <div class="mb-3 text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ section.title }}</div>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div v-for="item in section.items" :key="item.label" class="rounded-md bg-gray-50 p-3 dark:bg-dark-700">
+                <div class="text-gray-500 dark:text-gray-400">{{ item.label }}</div>
+                <div class="mt-1 whitespace-pre-wrap break-all font-medium text-gray-900 dark:text-white">{{ item.value || '-' }}</div>
+              </div>
+            </div>
           </div>
         </div>
         <div v-if="selectedAccount.taskMessage" :class="['rounded-lg border p-3 text-sm', resultMessagePanelClass(selectedAccount.accountStatus)]">
@@ -129,17 +269,76 @@
       </template>
     </BaseDialog>
 
-    <BaseDialog :show="editDialogOpen" :title="t('admin.socialAccountWorkbench.detailTitle')" width="wide" @close="editDialogOpen = false">
-      <div class="grid gap-3 sm:grid-cols-2">
-        <input v-model="accountForm.name" type="text" class="input" :placeholder="t('admin.socialAccountWorkbench.form.account')" />
-        <input v-model="accountForm.accountId" type="text" class="input" :placeholder="t('admin.socialAccountWorkbench.form.accountId')" />
-        <Select v-model="accountForm.accountStatus" :options="accountStatusOptionsWithoutAll" />
-        <input v-model="accountForm.password" type="text" class="input" :placeholder="t('admin.socialAccountWorkbench.form.password')" />
-        <input v-model="accountForm.phone" type="text" class="input" :placeholder="t('admin.socialAccountWorkbench.form.phone')" />
-        <input v-model="accountForm.email" type="text" class="input" :placeholder="t('admin.socialAccountWorkbench.form.email')" />
-        <input v-model="accountForm.emailPassword" type="text" class="input" :placeholder="t('admin.socialAccountWorkbench.form.emailPassword')" />
-        <Select v-if="selectedAccountOwnerId" v-model="accountForm.defaultProxyId" :options="defaultProxyOptions" />
-        <textarea v-model="accountForm.remark" class="input min-h-[88px] sm:col-span-2" :placeholder="t('admin.socialAccountWorkbench.form.remark')"></textarea>
+    <BaseDialog :show="editDialogOpen" :title="t('admin.socialAccountWorkbench.editTitle')" width="wide" @close="editDialogOpen = false">
+      <div v-if="selectedAccount" class="space-y-4">
+        <div data-testid="total-account-edit-identity" class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm dark:border-dark-700 dark:bg-dark-700/60">
+          <div class="mb-2 text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ t('accountWorkbench.edit.identityTitle') }}</div>
+          <div class="grid gap-2 sm:grid-cols-3">
+            <div v-for="item in editIdentityItems" :key="item.label">
+              <div class="text-xs text-gray-500 dark:text-gray-400">{{ item.label }}</div>
+              <div class="mt-1 break-all font-medium text-gray-900 dark:text-white">{{ item.value || '-' }}</div>
+            </div>
+          </div>
+          <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">{{ t('accountWorkbench.edit.identityHint') }}</p>
+        </div>
+
+        <div data-testid="total-account-edit-form" class="space-y-3">
+          <div class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ t('accountWorkbench.detailSections.credentials') }}</div>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
+              <label class="block text-xs text-gray-500 dark:text-gray-400" for="total-account-edit-password">{{ t('admin.socialAccountWorkbench.form.password') }}</label>
+              <input id="total-account-edit-password" v-model="accountForm.password" type="text" class="input mt-2 bg-white dark:bg-dark-800" />
+            </div>
+            <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
+              <label class="block text-xs text-gray-500 dark:text-gray-400" for="total-account-edit-phone">{{ t('admin.socialAccountWorkbench.form.phone') }}</label>
+              <input id="total-account-edit-phone" v-model="accountForm.phone" type="text" class="input mt-2 bg-white dark:bg-dark-800" />
+            </div>
+            <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
+              <label class="block text-xs text-gray-500 dark:text-gray-400" for="total-account-edit-email">{{ t('admin.socialAccountWorkbench.form.email') }}</label>
+              <input id="total-account-edit-email" v-model="accountForm.email" type="text" class="input mt-2 bg-white dark:bg-dark-800" />
+            </div>
+            <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
+              <label class="block text-xs text-gray-500 dark:text-gray-400" for="total-account-edit-email-password">{{ t('admin.socialAccountWorkbench.form.emailPassword') }}</label>
+              <input id="total-account-edit-email-password" v-model="accountForm.emailPassword" type="text" class="input mt-2 bg-white dark:bg-dark-800" />
+            </div>
+            <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
+              <label class="block text-xs text-gray-500 dark:text-gray-400" for="total-account-edit-two-factor">{{ t('admin.socialAccountWorkbench.form.twoFactor') }}</label>
+              <input id="total-account-edit-two-factor" v-model="accountForm.twoFactor" type="text" class="input mt-2 bg-white dark:bg-dark-800" />
+            </div>
+            <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
+              <label class="block text-xs text-gray-500 dark:text-gray-400" for="total-account-edit-backup-code">{{ t('admin.socialAccountWorkbench.form.backupCode') }}</label>
+              <input id="total-account-edit-backup-code" v-model="accountForm.backupCode" type="text" class="input mt-2 bg-white dark:bg-dark-800" />
+            </div>
+            <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
+              <label class="block text-xs text-gray-500 dark:text-gray-400" for="total-account-edit-email-client-id">{{ t('admin.socialAccountWorkbench.form.emailClientId') }}</label>
+              <input id="total-account-edit-email-client-id" v-model="accountForm.emailClientId" type="text" class="input mt-2 bg-white dark:bg-dark-800" />
+            </div>
+            <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
+              <label class="block text-xs text-gray-500 dark:text-gray-400" for="total-account-edit-email-token">{{ t('admin.socialAccountWorkbench.form.emailToken') }}</label>
+              <input id="total-account-edit-email-token" v-model="accountForm.emailToken" type="text" class="input mt-2 bg-white dark:bg-dark-800" />
+            </div>
+            <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700 sm:col-span-2">
+              <label class="block text-xs text-gray-500 dark:text-gray-400" for="total-account-edit-auth-cookie">{{ t('admin.socialAccountWorkbench.form.authCookie') }}</label>
+              <textarea id="total-account-edit-auth-cookie" v-model="accountForm.authCookie" class="input mt-2 min-h-[88px] bg-white dark:bg-dark-800"></textarea>
+            </div>
+            <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700 sm:col-span-2">
+              <label class="block text-xs text-gray-500 dark:text-gray-400" for="total-account-edit-execution-auth">{{ t('admin.socialAccountWorkbench.form.executionAuth') }}</label>
+              <textarea id="total-account-edit-execution-auth" v-model="accountForm.executionAuth" class="input mt-2 min-h-[120px] bg-white dark:bg-dark-800"></textarea>
+            </div>
+          </div>
+
+          <div class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ t('accountWorkbench.detailSections.operations') }}</div>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
+              <label class="mb-2 block text-xs text-gray-500 dark:text-gray-400">{{ t('admin.socialAccountWorkbench.columns.accountStatus') }}</label>
+              <Select v-model="accountForm.accountStatus" :options="accountStatusOptionsWithoutAll" />
+            </div>
+            <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700 sm:col-span-2">
+              <label class="block text-xs text-gray-500 dark:text-gray-400" for="total-account-edit-remark">{{ t('admin.socialAccountWorkbench.form.remark') }}</label>
+              <textarea id="total-account-edit-remark" v-model="accountForm.remark" class="input mt-2 min-h-[88px] bg-white dark:bg-dark-800"></textarea>
+            </div>
+          </div>
+        </div>
       </div>
       <template #footer>
         <button class="btn btn-secondary" @click="editDialogOpen = false">{{ t('common.cancel') }}</button>
@@ -147,7 +346,7 @@
       </template>
     </BaseDialog>
 
-    <BaseDialog :show="assignDialogOpen" :title="t('admin.socialAccountWorkbench.assignDialog.title')" width="wide" @close="assignDialogOpen = false">
+    <BaseDialog :show="assignDialogOpen" :title="t('admin.socialAccountWorkbench.assignDialog.title')" width="wide" @close="closeAssignDialog">
       <div class="space-y-4">
         <div class="rounded-lg border border-primary-200 bg-primary-50 p-4 text-sm text-primary-700 dark:border-primary-800/60 dark:bg-primary-900/20 dark:text-primary-300">
           {{ t('admin.socialAccountWorkbench.assignDialog.hint', { count: selectedAccounts.length }) }}
@@ -245,8 +444,96 @@
         </div>
       </div>
       <template #footer>
-        <button class="btn btn-secondary" @click="assignDialogOpen = false">{{ t('common.cancel') }}</button>
-        <button class="btn btn-primary" :disabled="!targetUser" @click="confirmAssignDialog">{{ t('admin.socialAccountWorkbench.assignDialog.confirm') }}</button>
+        <button class="btn btn-secondary" @click="closeAssignDialog">{{ t('common.cancel') }}</button>
+        <button class="btn btn-primary" :disabled="!targetUser || assigning" @click="openAssignConfirmDialog">{{ t('admin.socialAccountWorkbench.assignDialog.reviewButton') }}</button>
+      </template>
+    </BaseDialog>
+
+    <BaseDialog :show="assignConfirmDialogOpen" :title="t('admin.socialAccountWorkbench.assignDialog.confirmTitle')" width="normal" @close="assignConfirmDialogOpen = false">
+      <div class="space-y-4">
+        <div class="rounded-lg border border-primary-200 bg-primary-50 p-4 text-sm text-primary-700 dark:border-primary-800/60 dark:bg-primary-900/20 dark:text-primary-300">
+          {{ t('admin.socialAccountWorkbench.assignDialog.confirmHint', { count: selectedIds.length, user: selectedTargetUser ? selectedTargetUser.email : '-' }) }}
+        </div>
+        <div class="grid gap-3 text-sm sm:grid-cols-2">
+          <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-dark-600 dark:bg-dark-800">
+            <div class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ t('admin.socialAccountWorkbench.assignDialog.accountSummary') }}</div>
+            <div class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{{ selectedIds.length }}</div>
+            <div class="mt-3 flex flex-wrap gap-2">
+              <span
+                v-for="account in selectedAccountPreview"
+                :key="account.id"
+                class="max-w-full truncate rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700 dark:bg-dark-700 dark:text-gray-200"
+              >
+                {{ account.account }}
+              </span>
+              <span v-if="remainingSelectedAccountCount > 0" class="rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/20 dark:text-primary-300">
+                {{ t('admin.socialAccountWorkbench.assignDialog.accountSummaryMore', { count: remainingSelectedAccountCount }) }}
+              </span>
+            </div>
+          </div>
+          <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-dark-600 dark:bg-dark-800">
+            <div class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ t('admin.socialAccountWorkbench.assignDialog.targetUser') }}</div>
+            <div v-if="selectedTargetUser" class="mt-2 min-w-0">
+              <div class="truncate text-base font-semibold text-gray-900 dark:text-white">{{ selectedTargetUser.email }}</div>
+              <div class="mt-1 text-sm text-gray-500 dark:text-gray-400">#{{ selectedTargetUser.id }} · {{ selectedTargetUser.role }}</div>
+              <div class="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 dark:bg-dark-700 dark:text-gray-300">
+                {{ t('admin.socialAccountWorkbench.assignDialog.assignedCountLabel', { count: assignedCountForUser(selectedTargetUser.id) }) }}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600 dark:border-dark-700 dark:bg-dark-700 dark:text-gray-300">
+          {{ t('admin.socialAccountWorkbench.assignDialog.impactHint') }}
+        </div>
+      </div>
+      <template #footer>
+        <button class="btn btn-secondary" :disabled="assigning" @click="assignConfirmDialogOpen = false">{{ t('admin.socialAccountWorkbench.assignDialog.backToSelect') }}</button>
+        <button class="btn btn-primary" :disabled="!targetUser || assigning" @click="confirmAssignDialog">
+          <Icon name="refresh" size="sm" :class="assigning ? 'animate-spin' : 'hidden'" />
+          <span>{{ t('admin.socialAccountWorkbench.assignDialog.confirm') }}</span>
+        </button>
+      </template>
+    </BaseDialog>
+
+    <BaseDialog :show="reclaimDialogOpen" :title="t('admin.socialAccountWorkbench.reclaimDialog.title')" width="normal" @close="reclaimDialogOpen = false">
+      <div class="space-y-4">
+        <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-200">
+          {{ t('admin.socialAccountWorkbench.reclaimDialog.hint', { count: selectedIds.length }) }}
+        </div>
+        <div class="grid gap-3 text-sm sm:grid-cols-2">
+          <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-dark-600 dark:bg-dark-800">
+            <div class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ t('admin.socialAccountWorkbench.stats.assigned') }}</div>
+            <div class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{{ selectedAssignedCount }}</div>
+            <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.socialAccountWorkbench.reclaimDialog.assignedImpact') }}</div>
+          </div>
+          <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-dark-600 dark:bg-dark-800">
+            <div class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ t('admin.socialAccountWorkbench.stats.unassigned') }}</div>
+            <div class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{{ selectedUnassignedCount }}</div>
+            <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.socialAccountWorkbench.reclaimDialog.unassignedImpact') }}</div>
+          </div>
+        </div>
+        <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-dark-600 dark:bg-dark-800">
+          <div class="mb-3 flex items-center justify-between gap-2">
+            <div class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.socialAccountWorkbench.reclaimDialog.accountSummary') }}</div>
+            <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.socialAccountWorkbench.selection.selectedCount', { count: selectedIds.length }) }}</div>
+          </div>
+          <div class="grid gap-2 text-sm">
+            <div v-for="account in selectedAccountPreview" :key="account.id" class="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-gray-50 px-3 py-2 dark:bg-dark-700">
+              <span class="min-w-0 truncate font-medium text-gray-900 dark:text-white">{{ account.account }}</span>
+              <span class="shrink-0 truncate text-xs text-gray-500 dark:text-gray-400">{{ account.assignedUser || t('admin.socialAccountWorkbench.assignment.unassigned') }}</span>
+            </div>
+            <div v-if="remainingSelectedAccountCount > 0" class="rounded-lg bg-primary-50 px-3 py-2 text-xs font-medium text-primary-700 dark:bg-primary-900/20 dark:text-primary-300">
+              {{ t('admin.socialAccountWorkbench.assignDialog.accountSummaryMore', { count: remainingSelectedAccountCount }) }}
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <button class="btn btn-secondary" :disabled="reclaiming" @click="reclaimDialogOpen = false">{{ t('common.cancel') }}</button>
+        <button class="btn btn-primary" :disabled="!hasSelection || reclaiming" @click="reclaimSelectedAccounts">
+          <Icon name="refresh" size="sm" :class="reclaiming ? 'animate-spin' : 'hidden'" />
+          <span>{{ t('admin.socialAccountWorkbench.reclaimDialog.confirm') }}</span>
+        </button>
       </template>
     </BaseDialog>
 
@@ -255,16 +542,42 @@
         <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-300">
           {{ t('admin.socialAccountWorkbench.deleteDialog.hint', { count: selectedIds.length }) }}
         </div>
-        <div class="grid gap-3 text-sm sm:grid-cols-2">
-          <div v-for="account in selectedAccounts" :key="account.id" class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
-            <div class="font-medium text-gray-900 dark:text-white">{{ account.account }}</div>
-            <div class="mt-1 text-gray-500 dark:text-gray-400">{{ account.assignedUser || t('admin.socialAccountWorkbench.assignment.unassigned') }}</div>
+        <div class="grid gap-3 text-sm sm:grid-cols-3">
+          <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-dark-600 dark:bg-dark-800">
+            <div class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ t('admin.socialAccountWorkbench.selection.selectedCount', { count: selectedIds.length }) }}</div>
+            <div class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{{ selectedIds.length }}</div>
           </div>
+          <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-dark-600 dark:bg-dark-800">
+            <div class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ t('admin.socialAccountWorkbench.stats.assigned') }}</div>
+            <div class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{{ selectedAssignedCount }}</div>
+          </div>
+          <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-dark-600 dark:bg-dark-800">
+            <div class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ t('admin.socialAccountWorkbench.stats.unassigned') }}</div>
+            <div class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{{ selectedUnassignedCount }}</div>
+          </div>
+        </div>
+        <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-dark-600 dark:bg-dark-800">
+          <div class="mb-3 text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.socialAccountWorkbench.deleteDialog.accountSummary') }}</div>
+          <div class="grid gap-2 text-sm">
+            <div v-for="account in selectedAccountPreview" :key="account.id" class="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-gray-50 px-3 py-2 dark:bg-dark-700">
+              <span class="min-w-0 truncate font-medium text-gray-900 dark:text-white">{{ account.account }}</span>
+              <span class="shrink-0 truncate text-xs text-gray-500 dark:text-gray-400">{{ account.assignedUser || t('admin.socialAccountWorkbench.assignment.unassigned') }}</span>
+            </div>
+            <div v-if="remainingSelectedAccountCount > 0" class="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700 dark:bg-red-900/20 dark:text-red-300">
+              {{ t('admin.socialAccountWorkbench.assignDialog.accountSummaryMore', { count: remainingSelectedAccountCount }) }}
+            </div>
+          </div>
+        </div>
+        <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600 dark:border-dark-700 dark:bg-dark-700 dark:text-gray-300">
+          {{ t('admin.socialAccountWorkbench.deleteDialog.impactHint') }}
         </div>
       </div>
       <template #footer>
-        <button class="btn btn-secondary" @click="deleteDialogOpen = false">{{ t('common.cancel') }}</button>
-        <button class="btn btn-danger" @click="confirmDeleteDialog">{{ t('admin.socialAccountWorkbench.deleteDialog.confirm') }}</button>
+        <button class="btn btn-secondary" :disabled="deleting" @click="deleteDialogOpen = false">{{ t('common.cancel') }}</button>
+        <button class="btn btn-danger" :disabled="!hasSelection || deleting" @click="confirmDeleteDialog">
+          <Icon name="refresh" size="sm" :class="deleting ? 'animate-spin' : 'hidden'" />
+          <span>{{ t('admin.socialAccountWorkbench.deleteDialog.confirm') }}</span>
+        </button>
       </template>
     </BaseDialog>
   </AppLayout>
@@ -282,27 +595,35 @@ import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import type { Column } from '@/components/common/types'
 import { adminAPI } from '@/api/admin'
-import type { AdminProxy, SocialAccount } from '@/api/admin'
+import type { SocialAccount } from '@/api/admin'
 import type { AdminUser } from '@/types'
 import { useAppStore } from '@/stores/app'
+import { extractSafeApiErrorMessage } from '@/utils/apiError'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 type AccountStatus = 'pending_check' | 'available' | 'limited' | 'invalid' | 'not_stored'
-type Source = 'registered' | 'manual_import' | 'file_upload'
 
 interface AccountRow {
   id: number
   account: string
   platform: string
-  accountId: string
+  username: string
+  platformUserId: string
   password: string
   phone: string
   email: string
   emailPassword: string
-  boundIp: string
+  twoFactor: string
+  backupCode: string
+  emailClientId: string
+  emailToken: string
+  registrationIp: string
+  authCookie: string
+  executionAuth: string
+  defaultProxySnapshot: string
   accountStatus: AccountStatus
   taskStatus: string
   taskMessage: string
-  source: Source
   assignedUserId: number | null
   assignedUser: string | null
   remark: string
@@ -318,34 +639,42 @@ const assignmentFilter = ref('all')
 const selectedIds = ref<number[]>([])
 const accounts = ref<AccountRow[]>([])
 const users = ref<AdminUser[]>([])
-const proxies = ref<AdminProxy[]>([])
+const loading = ref(false)
+const loadError = ref('')
 const selectedAccount = ref<AccountRow | null>(null)
 const selectedAccountId = ref<number | null>(null)
-const selectedAccountOwnerId = ref<number | null>(null)
-const initialDefaultProxyId = ref('')
 const detailDialogOpen = ref(false)
 const editDialogOpen = ref(false)
 const assignDialogOpen = ref(false)
+const assignConfirmDialogOpen = ref(false)
+const reclaimDialogOpen = ref(false)
 const deleteDialogOpen = ref(false)
+const assigning = ref(false)
+const reclaiming = ref(false)
+const deleting = ref(false)
 const targetUser = ref('')
 const targetUserSearch = ref('')
+const importPlatform = ref('x_twitter')
 const importFileInput = ref<HTMLInputElement | null>(null)
 
 const accountForm = reactive({
-  name: '',
-  accountId: '',
   password: '',
   phone: '',
   email: '',
   emailPassword: '',
+  twoFactor: '',
+  backupCode: '',
+  emailClientId: '',
+  emailToken: '',
+  authCookie: '',
+  executionAuth: '',
   accountStatus: 'pending_check',
-  defaultProxyId: '',
   remark: '',
 })
 
 onMounted(async () => {
   await loadUsers()
-  await Promise.all([loadAccounts(), loadProxies()])
+  await loadAccounts()
 })
 
 watch(assignDialogOpen, (open) => {
@@ -356,17 +685,16 @@ watch(assignDialogOpen, (open) => {
 })
 
 const columns = computed<Column[]>(() => [
-  { key: 'select', label: '', width: '48px' },
-  { key: 'id', label: t('admin.socialAccountWorkbench.columns.id'), sortable: true },
-  { key: 'account', label: t('admin.socialAccountWorkbench.columns.account'), sortable: true },
-  { key: 'platform', label: t('admin.socialAccountWorkbench.columns.platform'), sortable: true },
-  { key: 'password', label: t('admin.socialAccountWorkbench.columns.password') },
-  { key: 'email', label: t('admin.socialAccountWorkbench.columns.email'), sortable: true },
-  { key: 'emailPassword', label: t('admin.socialAccountWorkbench.columns.emailPassword') },
-  { key: 'boundIp', label: t('admin.socialAccountWorkbench.columns.boundIp'), sortable: true },
-  { key: 'accountStatus', label: t('admin.socialAccountWorkbench.columns.accountStatus'), sortable: true },
-  { key: 'assignedUser', label: t('admin.socialAccountWorkbench.columns.assignedUser'), sortable: true },
-  { key: 'actions', label: t('admin.socialAccountWorkbench.columns.actions') },
+  { key: 'select', label: '', class: 'w-[56px] min-w-[56px] text-center' },
+  { key: 'id', label: t('admin.socialAccountWorkbench.columns.id'), sortable: true, class: 'w-[84px] min-w-[84px]' },
+  { key: 'account', label: t('admin.socialAccountWorkbench.columns.account'), sortable: true, class: 'min-w-[240px]' },
+  { key: 'platform', label: t('admin.socialAccountWorkbench.columns.platform'), sortable: true, class: 'min-w-[118px]' },
+  { key: 'email', label: t('admin.socialAccountWorkbench.columns.email'), sortable: true, class: 'min-w-[210px] max-w-[220px]' },
+  { key: 'credentials', label: t('admin.socialAccountWorkbench.columns.credentials'), class: 'min-w-[300px] max-w-[320px]' },
+  { key: 'defaultProxySnapshot', label: t('admin.socialAccountWorkbench.columns.defaultProxySnapshot'), sortable: true, class: 'min-w-[220px] max-w-[240px]' },
+  { key: 'accountStatus', label: t('admin.socialAccountWorkbench.columns.accountStatus'), sortable: true, class: 'min-w-[128px]' },
+  { key: 'assignedUser', label: t('admin.socialAccountWorkbench.columns.assignedUser'), sortable: true, class: 'min-w-[190px] max-w-[230px]' },
+  { key: 'actions', label: t('admin.socialAccountWorkbench.columns.actions'), class: 'w-[128px] min-w-[128px]' },
 ])
 
 const accountStatusOptionsWithoutAll = computed(() => [
@@ -387,6 +715,9 @@ const assignmentOptions = computed(() => [
   { value: 'assigned', label: t('admin.socialAccountWorkbench.assignment.assigned') },
   { value: 'unassigned', label: t('admin.socialAccountWorkbench.assignment.unassigned') },
 ])
+const importPlatformOptions = computed(() => [
+  { value: 'x_twitter', label: 'X / Twitter' },
+])
 
 const filteredTargetUsers = computed(() => {
   const keyword = targetUserSearch.value.trim().toLowerCase()
@@ -397,7 +728,27 @@ const filteredTargetUsers = computed(() => {
 const filteredAccounts = computed(() => {
   const keyword = searchQuery.value.trim().toLowerCase()
   return accounts.value.filter(account => {
-    const values = [account.account, account.platform, account.accountId, account.password, account.phone, account.email, account.emailPassword, account.boundIp, account.assignedUser ?? '', account.taskMessage, account.remark]
+    const values = [
+      account.account,
+      account.platform,
+      account.username,
+      account.platformUserId,
+      account.password,
+      account.phone,
+      account.email,
+      account.emailPassword,
+      account.twoFactor,
+      account.backupCode,
+      account.emailClientId,
+      account.emailToken,
+      account.registrationIp,
+      account.authCookie,
+      account.executionAuth,
+      account.defaultProxySnapshot,
+      account.assignedUser ?? '',
+      account.taskMessage,
+      account.remark,
+    ]
     const matchesKeyword = !keyword || values.some(value => value.toLowerCase().includes(keyword))
     const matchesStatus = accountStatusFilter.value === 'all' || account.accountStatus === accountStatusFilter.value
     const matchesAssignment = assignmentFilter.value === 'all' || (assignmentFilter.value === 'assigned' ? !!account.assignedUserId : !account.assignedUserId)
@@ -413,45 +764,67 @@ const stats = computed(() => [
 ])
 
 const selectedAccounts = computed(() => accounts.value.filter(account => selectedIds.value.includes(account.id)))
+const hasSelection = computed(() => selectedIds.value.length > 0)
+const selectedAssignedCount = computed(() => selectedAccounts.value.filter(account => account.assignedUserId).length)
+const selectedUnassignedCount = computed(() => selectedAccounts.value.length - selectedAssignedCount.value)
+const canAssignSelected = computed(() => hasSelection.value && selectedAssignedCount.value === 0)
 const selectedAccountPreview = computed(() => selectedAccounts.value.slice(0, 6))
 const remainingSelectedAccountCount = computed(() => Math.max(0, selectedAccounts.value.length - selectedAccountPreview.value.length))
 const selectedTargetUser = computed(() => users.value.find(user => String(user.id) === targetUser.value) ?? null)
 const visibleIds = computed(() => filteredAccounts.value.map(account => account.id))
 const allVisibleSelected = computed(() => visibleIds.value.length > 0 && visibleIds.value.every(id => selectedIds.value.includes(id)))
 const someVisibleSelected = computed(() => visibleIds.value.some(id => selectedIds.value.includes(id)) && !allVisibleSelected.value)
-const canSubmitAccount = computed(() => accountForm.name.trim() !== '')
-const managementTabCount = computed(() => accounts.value.length)
-const poolTabCount = computed(() => accounts.value.filter(account => !account.assignedUserId).length)
-const accountTabActiveClass = 'flex min-h-[40px] items-center gap-2 rounded-lg bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm'
-const accountTabInactiveClass = 'flex min-h-[40px] items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700'
-const defaultProxyOptions = computed(() => {
-  const ownerID = selectedAccountOwnerId.value
-  const options = [{ value: '', label: t('admin.socialAccountWorkbench.defaultProxy.clear') }]
-  if (!ownerID) return options
+const canSubmitAccount = computed(() => selectedAccountId.value !== null)
+const detailSections = computed(() => {
+  if (!selectedAccount.value) return []
   return [
-    ...options,
-    ...proxies.value
-      .filter(proxy => proxy.user_id === ownerID)
-      .map(proxy => ({
-        value: String(proxy.id),
-        label: proxyLabel(proxy),
-        disabled: proxy.status !== 'online',
-      })),
+    {
+      title: t('accountWorkbench.detailSections.identity'),
+      items: [
+        { label: t('admin.socialAccountWorkbench.columns.id'), value: selectedAccount.value.id },
+        { label: t('admin.socialAccountWorkbench.columns.account'), value: selectedAccount.value.account },
+        { label: t('admin.socialAccountWorkbench.columns.platform'), value: selectedAccount.value.platform },
+        { label: t('accountWorkbench.columns.username'), value: selectedAccount.value.username },
+        { label: t('admin.socialAccountWorkbench.columns.platformUserId'), value: selectedAccount.value.platformUserId },
+        { label: t('admin.socialAccountWorkbench.columns.registrationIp'), value: selectedAccount.value.registrationIp },
+      ],
+    },
+    {
+      title: t('accountWorkbench.detailSections.credentials'),
+      items: [
+        { label: t('admin.socialAccountWorkbench.columns.password'), value: selectedAccount.value.password },
+        { label: t('admin.socialAccountWorkbench.columns.phone'), value: selectedAccount.value.phone },
+        { label: t('admin.socialAccountWorkbench.columns.email'), value: selectedAccount.value.email },
+        { label: t('admin.socialAccountWorkbench.columns.emailPassword'), value: selectedAccount.value.emailPassword },
+        { label: t('admin.socialAccountWorkbench.columns.twoFactor'), value: selectedAccount.value.twoFactor },
+        { label: t('admin.socialAccountWorkbench.columns.backupCode'), value: selectedAccount.value.backupCode },
+        { label: t('admin.socialAccountWorkbench.columns.emailClientId'), value: selectedAccount.value.emailClientId },
+        { label: t('admin.socialAccountWorkbench.columns.emailToken'), value: selectedAccount.value.emailToken },
+        { label: t('admin.socialAccountWorkbench.columns.authCookie'), value: selectedAccount.value.authCookie },
+        { label: t('admin.socialAccountWorkbench.columns.executionAuth'), value: selectedAccount.value.executionAuth },
+      ],
+    },
+    {
+      title: t('accountWorkbench.detailSections.operations'),
+      items: [
+        { label: t('admin.socialAccountWorkbench.columns.defaultProxySnapshot'), value: selectedAccount.value.defaultProxySnapshot },
+        { label: t('admin.socialAccountWorkbench.form.remark'), value: selectedAccount.value.remark },
+        { label: t('admin.socialAccountWorkbench.columns.assignedUser'), value: selectedAccount.value.assignedUser ?? t('admin.socialAccountWorkbench.assignment.unassigned') },
+        { label: t('admin.socialAccountWorkbench.columns.createdAt'), value: selectedAccount.value.createdAt },
+      ],
+    },
   ]
 })
-const detailItems = computed(() => {
+
+const editIdentityItems = computed(() => {
   if (!selectedAccount.value) return []
   return [
     { label: t('admin.socialAccountWorkbench.columns.id'), value: selectedAccount.value.id },
     { label: t('admin.socialAccountWorkbench.columns.account'), value: selectedAccount.value.account },
     { label: t('admin.socialAccountWorkbench.columns.platform'), value: selectedAccount.value.platform },
-    { label: t('admin.socialAccountWorkbench.columns.password'), value: selectedAccount.value.password },
-    { label: t('admin.socialAccountWorkbench.columns.phone'), value: selectedAccount.value.phone },
-    { label: t('admin.socialAccountWorkbench.columns.email'), value: selectedAccount.value.email },
-    { label: t('admin.socialAccountWorkbench.columns.emailPassword'), value: selectedAccount.value.emailPassword },
-    { label: t('admin.socialAccountWorkbench.columns.boundIp'), value: defaultProxyLabel(selectedAccount.value.boundIp) },
-    { label: t('admin.socialAccountWorkbench.columns.assignedUser'), value: selectedAccount.value.assignedUser ?? t('admin.socialAccountWorkbench.assignment.unassigned') },
-    { label: t('admin.socialAccountWorkbench.columns.createdAt'), value: selectedAccount.value.createdAt },
+    { label: t('accountWorkbench.columns.username'), value: selectedAccount.value.username },
+    { label: t('admin.socialAccountWorkbench.columns.platformUserId'), value: selectedAccount.value.platformUserId },
+    { label: t('admin.socialAccountWorkbench.columns.registrationIp'), value: selectedAccount.value.registrationIp },
   ]
 })
 
@@ -465,20 +838,18 @@ async function loadUsers() {
 }
 
 async function loadAccounts() {
+  loading.value = true
+  loadError.value = ''
   try {
-    const result = await adminAPI.socialAccounts.list({ page: 1, page_size: 200 })
+    const result = await adminAPI.totalAccounts.list({ page: 1, page_size: 200 })
     accounts.value = (result.items ?? []).map(mapApiAccount)
-  } catch (error: any) {
-    appStore.showError(error?.message || t('admin.socialAccountWorkbench.failedToLoad'))
-  }
-}
-
-async function loadProxies() {
-  try {
-    const result = await adminAPI.proxies.list({ page: 1, page_size: 200 })
-    proxies.value = result.items ?? []
-  } catch {
-    proxies.value = []
+    selectedIds.value = selectedIds.value.filter(id => accounts.value.some(account => account.id === id))
+  } catch (error) {
+    recordClientDiagnostic('admin.total_accounts.load_accounts', error)
+    loadError.value = extractSafeApiErrorMessage(error, t('admin.socialAccountWorkbench.failedToLoad'))
+    appStore.showError(loadError.value)
+  } finally {
+    loading.value = false
   }
 }
 
@@ -487,16 +858,23 @@ function mapApiAccount(account: SocialAccount): AccountRow {
     id: account.id,
     account: account.name,
     platform: account.platform,
-    accountId: account.account_id ?? '',
+    username: account.username ?? normalizeUsername(account.name),
+    platformUserId: account.platform_user_id ?? '',
     password: account.password ?? '',
     phone: account.phone ?? '',
     email: account.email ?? '',
     emailPassword: account.email_password ?? '',
-    boundIp: account.bound_ip ?? '',
+    twoFactor: account.two_factor ?? '',
+    backupCode: account.backup_code ?? '',
+    emailClientId: account.email_client_id ?? '',
+    emailToken: account.email_token ?? '',
+    registrationIp: account.registration_ip ?? '',
+    authCookie: account.auth_cookie ?? '',
+    executionAuth: account.execution_auth ?? '',
+    defaultProxySnapshot: account.default_proxy_snapshot ?? '',
     accountStatus: toAccountStatus(account.account_status),
     taskStatus: account.task_status,
     taskMessage: account.task_message ?? '',
-    source: toSource(account.source),
     assignedUserId: account.assigned_user_id ?? null,
     assignedUser: ownerLabel(account.assigned_user_id),
     remark: account.remark ?? '',
@@ -530,6 +908,12 @@ function clearSelection() {
   selectedIds.value = []
 }
 
+function clearAccountFilters() {
+  searchQuery.value = ''
+  accountStatusFilter.value = 'all'
+  assignmentFilter.value = 'all'
+}
+
 function assignedCountForUser(userID: number): number {
   return accounts.value.filter(account => account.assignedUserId === userID).length
 }
@@ -541,16 +925,18 @@ function openDetailDialog(row: AccountRow) {
 
 function openEditDialog(row: AccountRow) {
   selectedAccountId.value = row.id
-  selectedAccountOwnerId.value = row.assignedUserId
-  accountForm.name = row.account
-  accountForm.accountId = row.accountId
+  selectedAccount.value = row
   accountForm.password = row.password
   accountForm.phone = row.phone
   accountForm.email = row.email
   accountForm.emailPassword = row.emailPassword
+  accountForm.twoFactor = row.twoFactor
+  accountForm.backupCode = row.backupCode
+  accountForm.emailClientId = row.emailClientId
+  accountForm.emailToken = row.emailToken
+  accountForm.authCookie = row.authCookie
+  accountForm.executionAuth = row.executionAuth
   accountForm.accountStatus = row.accountStatus
-  accountForm.defaultProxyId = defaultProxyIdFromSnapshot(row.boundIp)
-  initialDefaultProxyId.value = accountForm.defaultProxyId
   accountForm.remark = row.remark
   editDialogOpen.value = true
 }
@@ -558,25 +944,26 @@ function openEditDialog(row: AccountRow) {
 async function submitEditDialog() {
   if (!selectedAccountId.value || !canSubmitAccount.value) return
   try {
-    await adminAPI.socialAccounts.update(selectedAccountId.value, {
-      name: accountForm.name.trim(),
-      account_id: accountForm.accountId || undefined,
-      password: accountForm.password || undefined,
-      phone: accountForm.phone || undefined,
-      email: accountForm.email || undefined,
-      email_password: accountForm.emailPassword || undefined,
+    await adminAPI.accountWorkbench.update(selectedAccountId.value, {
+      password: accountForm.password,
+      phone: accountForm.phone,
+      email: accountForm.email,
+      email_password: accountForm.emailPassword,
+      two_factor: accountForm.twoFactor,
+      backup_code: accountForm.backupCode,
+      email_client_id: accountForm.emailClientId,
+      email_token: accountForm.emailToken,
+      auth_cookie: accountForm.authCookie,
+      execution_auth: accountForm.executionAuth,
       account_status: accountForm.accountStatus,
-      remark: accountForm.remark || undefined,
+      remark: accountForm.remark,
     })
-    if (accountForm.defaultProxyId !== initialDefaultProxyId.value) {
-      const proxyId = accountForm.defaultProxyId ? Number(accountForm.defaultProxyId) : null
-      await adminAPI.socialAccounts.setDefaultProxy(selectedAccountId.value, proxyId)
-    }
     appStore.showSuccess(t('admin.socialAccountWorkbench.saved'))
     editDialogOpen.value = false
     await loadAccounts()
-  } catch (error: any) {
-    appStore.showError(error?.message || t('common.error'))
+  } catch (error) {
+    recordClientDiagnostic('admin.total_accounts.edit', error)
+    appStore.showError(extractSafeApiErrorMessage(error, t('common.error')))
   }
 }
 
@@ -589,11 +976,12 @@ async function handleImportFile(event: Event) {
   const file = input.files?.[0]
   if (!file) return
   try {
-    const result = await adminAPI.socialAccounts.importAccounts(file)
+    const result = await adminAPI.accountWorkbench.importAccounts(file, importPlatform.value)
     appStore.showSuccess(t('admin.socialAccountWorkbench.imported', { count: result.created }))
     await loadAccounts()
-  } catch (error: any) {
-    appStore.showError(error?.message || t('common.error'))
+  } catch (error) {
+    recordClientDiagnostic('admin.total_accounts.import', error)
+    appStore.showError(extractSafeApiErrorMessage(error, t('common.error')))
   } finally {
     input.value = ''
   }
@@ -601,10 +989,11 @@ async function handleImportFile(event: Event) {
 
 async function exportAccounts() {
   try {
-    const blob = await adminAPI.socialAccounts.exportAccounts()
+    const blob = await adminAPI.accountWorkbench.exportAccounts()
     downloadBlob(blob, 'social_account_pool.csv')
-  } catch (error: any) {
-    appStore.showError(error?.message || t('common.error'))
+  } catch (error) {
+    recordClientDiagnostic('admin.total_accounts.export', error)
+    appStore.showError(extractSafeApiErrorMessage(error, t('common.error')))
   }
 }
 
@@ -617,48 +1006,87 @@ function openAssignDialog() {
   assignDialogOpen.value = true
 }
 
-async function confirmAssignDialog() {
+function closeAssignDialog() {
+  assignDialogOpen.value = false
+  assignConfirmDialogOpen.value = false
+}
+
+function openAssignConfirmDialog() {
   const userIdNum = Number(targetUser.value)
   if (!Number.isFinite(userIdNum) || userIdNum <= 0) {
     appStore.showError(t('admin.socialAccountWorkbench.toasts.selectTargetUser'))
     return
   }
+  assignConfirmDialogOpen.value = true
+}
+
+async function confirmAssignDialog() {
+  if (assigning.value) return
+  const accountIds = [...selectedIds.value]
+  const userIdNum = Number(targetUser.value)
+  if (!accountIds.length || !Number.isFinite(userIdNum) || userIdNum <= 0) {
+    appStore.showError(t('admin.socialAccountWorkbench.toasts.selectTargetUser'))
+    return
+  }
+  assigning.value = true
   try {
-    for (const id of selectedIds.value) {
-      await adminAPI.socialAccounts.assign(id, userIdNum)
-    }
-    appStore.showSuccess(t('admin.socialAccountWorkbench.toasts.assigned', { count: selectedIds.value.length, user: selectedTargetUser.value?.email ?? `#${userIdNum}` }))
-    assignDialogOpen.value = false
+    const result = await adminAPI.totalAccounts.batchAssign(accountIds, userIdNum)
+    appStore.showSuccess(t('admin.socialAccountWorkbench.toasts.assigned', { count: result.succeeded, user: selectedTargetUser.value?.email ?? `#${userIdNum}` }))
+    closeAssignDialog()
     clearSelection()
     await loadAccounts()
-  } catch (error: any) {
-    appStore.showError(error?.message || t('common.error'))
+  } catch (error) {
+    recordClientDiagnostic('admin.total_accounts.assign', error)
+    appStore.showError(extractSafeApiErrorMessage(error, t('common.error')))
+  } finally {
+    assigning.value = false
   }
+}
+
+function openReclaimDialog() {
+  if (!hasSelection.value) return
+  reclaimDialogOpen.value = true
 }
 
 async function reclaimSelectedAccounts() {
+  if (reclaiming.value || !hasSelection.value) return
+  const accountIds = [...selectedIds.value]
+  reclaiming.value = true
   try {
-    for (const id of selectedIds.value) {
-      await adminAPI.socialAccounts.reclaim(id)
-    }
-    appStore.showSuccess(t('admin.socialAccountWorkbench.toasts.reclaimed', { count: selectedIds.value.length }))
+    const result = await adminAPI.totalAccounts.batchReclaim(accountIds)
+    appStore.showSuccess(t('admin.socialAccountWorkbench.toasts.reclaimed', { count: result.succeeded }))
+    reclaimDialogOpen.value = false
     clearSelection()
     await loadAccounts()
-  } catch (error: any) {
-    appStore.showError(error?.message || t('common.error'))
+  } catch (error) {
+    recordClientDiagnostic('admin.total_accounts.reclaim', error)
+    appStore.showError(extractSafeApiErrorMessage(error, t('common.error')))
+  } finally {
+    reclaiming.value = false
   }
 }
 
+function openDeleteDialog() {
+  if (!hasSelection.value) return
+  deleteDialogOpen.value = true
+}
+
 async function confirmDeleteDialog() {
-  const deleteCount = selectedIds.value.length
+  if (deleting.value || !hasSelection.value) return
+  const accountIds = [...selectedIds.value]
+  const deleteCount = accountIds.length
+  deleting.value = true
   try {
-    await adminAPI.socialAccounts.batchDelete(selectedIds.value)
-    appStore.showSuccess(t('admin.socialAccountWorkbench.toasts.deleted', { count: deleteCount }))
+    const result = await adminAPI.totalAccounts.batchDelete(accountIds)
+    appStore.showSuccess(t('admin.socialAccountWorkbench.toasts.deleted', { count: result.succeeded || deleteCount }))
     deleteDialogOpen.value = false
     clearSelection()
     await loadAccounts()
-  } catch (error: any) {
-    appStore.showError(error?.message || t('common.error'))
+  } catch (error) {
+    recordClientDiagnostic('admin.total_accounts.delete', error)
+    appStore.showError(extractSafeApiErrorMessage(error, t('common.error')))
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -675,37 +1103,31 @@ function resultMessagePanelClass(status: string): string {
   return 'border-gray-200 bg-gray-50 text-gray-600 dark:border-dark-700 dark:bg-dark-700 dark:text-gray-300'
 }
 
-function proxyLabel(proxy: AdminProxy): string {
-  const status = t(`admin.proxies.status.${proxy.status}`)
-  return `${proxy.name} (#${proxy.id}, ${status})`
+function normalizePlatform(value?: string | null): string {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[-/\s]+/g, '_')
+  if (['twitter', 'x', 'x_twitter', 'twitter_x'].includes(normalized)) return 'x_twitter'
+  return normalized
 }
 
-function defaultProxyIdFromSnapshot(snapshot: string): string {
-  const parsed = parseDefaultProxySnapshot(snapshot)
-  return parsed?.id ? String(parsed.id) : ''
+function normalizeUsername(value?: string | null): string {
+  return String(value || '').trim().toLowerCase().replace(/^@+/, '').trim()
 }
 
-function defaultProxyLabel(snapshot: string): string {
-  const parsed = parseDefaultProxySnapshot(snapshot)
-  if (!parsed?.id) return '-'
-  const proxy = proxies.value.find(item => item.id === parsed.id)
-  if (proxy) return proxyLabel(proxy)
-  return parsed.name ? `${parsed.name} (#${parsed.id})` : `#${parsed.id}`
+function platformInitial(value?: string | null): string {
+  const normalized = normalizePlatform(value)
+  if (normalized === 'x_twitter') return 'X'
+  return (normalized || '?').slice(0, 2).toUpperCase()
 }
 
-function parseDefaultProxySnapshot(snapshot: string): { id?: number; name?: string } | null {
-  const trimmed = snapshot.trim()
-  if (!trimmed || !trimmed.startsWith('{')) return null
-  try {
-    const parsed = JSON.parse(trimmed) as { id?: unknown; name?: unknown }
-    const id = Number(parsed.id)
-    return {
-      id: Number.isFinite(id) && id > 0 ? id : undefined,
-      name: typeof parsed.name === 'string' ? parsed.name : undefined,
-    }
-  } catch {
-    return null
-  }
+function platformAvatarClass(value?: string | null): string {
+  const normalized = normalizePlatform(value)
+  if (normalized === 'x_twitter') return 'border-gray-900 bg-gray-900 text-white dark:border-gray-100 dark:bg-gray-100 dark:text-gray-950'
+  if (normalized === 'instagram') return 'border-pink-200 bg-pink-50 text-pink-700 dark:border-pink-900/50 dark:bg-pink-900/20 dark:text-pink-300'
+  if (normalized === 'tiktok') return 'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-900/50 dark:bg-cyan-900/20 dark:text-cyan-300'
+  return 'border-gray-200 bg-gray-50 text-gray-700 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-200'
 }
 
 function toAccountStatus(status: string): AccountStatus {
@@ -713,13 +1135,6 @@ function toAccountStatus(status: string): AccountStatus {
     return status
   }
   return 'not_stored'
-}
-
-function toSource(source: string): Source {
-  if (source === 'registered' || source === 'manual_import' || source === 'file_upload') {
-    return source
-  }
-  return 'manual_import'
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -731,3 +1146,20 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url)
 }
 </script>
+
+<style scoped>
+.total-accounts-table :deep(.sticky-col-right::before) {
+  content: none !important;
+  width: 0 !important;
+  background: none !important;
+  transform: none !important;
+}
+
+.total-accounts-table :deep(.sticky-col-right) {
+  box-shadow: -1px 0 0 rgb(229 231 235);
+}
+
+.dark .total-accounts-table :deep(.sticky-col-right) {
+  box-shadow: -1px 0 0 rgb(55 65 81);
+}
+</style>

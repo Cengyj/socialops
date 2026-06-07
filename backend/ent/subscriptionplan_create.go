@@ -28,6 +28,20 @@ func (_c *SubscriptionPlanCreate) SetGroupID(v int64) *SubscriptionPlanCreate {
 	return _c
 }
 
+// SetPlatform sets the "platform" field.
+func (_c *SubscriptionPlanCreate) SetPlatform(v string) *SubscriptionPlanCreate {
+	_c.mutation.SetPlatform(v)
+	return _c
+}
+
+// SetNillablePlatform sets the "platform" field if the given value is not nil.
+func (_c *SubscriptionPlanCreate) SetNillablePlatform(v *string) *SubscriptionPlanCreate {
+	if v != nil {
+		_c.SetPlatform(*v)
+	}
+	return _c
+}
+
 // SetName sets the "name" field.
 func (_c *SubscriptionPlanCreate) SetName(v string) *SubscriptionPlanCreate {
 	_c.mutation.SetName(v)
@@ -152,6 +166,48 @@ func (_c *SubscriptionPlanCreate) SetNillableSortOrder(v *int) *SubscriptionPlan
 	return _c
 }
 
+// SetDailyLimitUsd sets the "daily_limit_usd" field.
+func (_c *SubscriptionPlanCreate) SetDailyLimitUsd(v float64) *SubscriptionPlanCreate {
+	_c.mutation.SetDailyLimitUsd(v)
+	return _c
+}
+
+// SetNillableDailyLimitUsd sets the "daily_limit_usd" field if the given value is not nil.
+func (_c *SubscriptionPlanCreate) SetNillableDailyLimitUsd(v *float64) *SubscriptionPlanCreate {
+	if v != nil {
+		_c.SetDailyLimitUsd(*v)
+	}
+	return _c
+}
+
+// SetWeeklyLimitUsd sets the "weekly_limit_usd" field.
+func (_c *SubscriptionPlanCreate) SetWeeklyLimitUsd(v float64) *SubscriptionPlanCreate {
+	_c.mutation.SetWeeklyLimitUsd(v)
+	return _c
+}
+
+// SetNillableWeeklyLimitUsd sets the "weekly_limit_usd" field if the given value is not nil.
+func (_c *SubscriptionPlanCreate) SetNillableWeeklyLimitUsd(v *float64) *SubscriptionPlanCreate {
+	if v != nil {
+		_c.SetWeeklyLimitUsd(*v)
+	}
+	return _c
+}
+
+// SetMonthlyLimitUsd sets the "monthly_limit_usd" field.
+func (_c *SubscriptionPlanCreate) SetMonthlyLimitUsd(v float64) *SubscriptionPlanCreate {
+	_c.mutation.SetMonthlyLimitUsd(v)
+	return _c
+}
+
+// SetNillableMonthlyLimitUsd sets the "monthly_limit_usd" field if the given value is not nil.
+func (_c *SubscriptionPlanCreate) SetNillableMonthlyLimitUsd(v *float64) *SubscriptionPlanCreate {
+	if v != nil {
+		_c.SetMonthlyLimitUsd(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *SubscriptionPlanCreate) SetCreatedAt(v time.Time) *SubscriptionPlanCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -215,6 +271,10 @@ func (_c *SubscriptionPlanCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *SubscriptionPlanCreate) defaults() {
+	if _, ok := _c.mutation.Platform(); !ok {
+		v := subscriptionplan.DefaultPlatform
+		_c.mutation.SetPlatform(v)
+	}
 	if _, ok := _c.mutation.Description(); !ok {
 		v := subscriptionplan.DefaultDescription
 		_c.mutation.SetDescription(v)
@@ -257,6 +317,14 @@ func (_c *SubscriptionPlanCreate) defaults() {
 func (_c *SubscriptionPlanCreate) check() error {
 	if _, ok := _c.mutation.GroupID(); !ok {
 		return &ValidationError{Name: "group_id", err: errors.New(`ent: missing required field "SubscriptionPlan.group_id"`)}
+	}
+	if _, ok := _c.mutation.Platform(); !ok {
+		return &ValidationError{Name: "platform", err: errors.New(`ent: missing required field "SubscriptionPlan.platform"`)}
+	}
+	if v, ok := _c.mutation.Platform(); ok {
+		if err := subscriptionplan.PlatformValidator(v); err != nil {
+			return &ValidationError{Name: "platform", err: fmt.Errorf(`ent: validator failed for field "SubscriptionPlan.platform": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.Name(); !ok {
 		return &ValidationError{Name: "name", err: errors.New(`ent: missing required field "SubscriptionPlan.name"`)}
@@ -337,6 +405,10 @@ func (_c *SubscriptionPlanCreate) createSpec() (*SubscriptionPlan, *sqlgraph.Cre
 		_spec.SetField(subscriptionplan.FieldGroupID, field.TypeInt64, value)
 		_node.GroupID = value
 	}
+	if value, ok := _c.mutation.Platform(); ok {
+		_spec.SetField(subscriptionplan.FieldPlatform, field.TypeString, value)
+		_node.Platform = value
+	}
 	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(subscriptionplan.FieldName, field.TypeString, value)
 		_node.Name = value
@@ -376,6 +448,18 @@ func (_c *SubscriptionPlanCreate) createSpec() (*SubscriptionPlan, *sqlgraph.Cre
 	if value, ok := _c.mutation.SortOrder(); ok {
 		_spec.SetField(subscriptionplan.FieldSortOrder, field.TypeInt, value)
 		_node.SortOrder = value
+	}
+	if value, ok := _c.mutation.DailyLimitUsd(); ok {
+		_spec.SetField(subscriptionplan.FieldDailyLimitUsd, field.TypeFloat64, value)
+		_node.DailyLimitUsd = &value
+	}
+	if value, ok := _c.mutation.WeeklyLimitUsd(); ok {
+		_spec.SetField(subscriptionplan.FieldWeeklyLimitUsd, field.TypeFloat64, value)
+		_node.WeeklyLimitUsd = &value
+	}
+	if value, ok := _c.mutation.MonthlyLimitUsd(); ok {
+		_spec.SetField(subscriptionplan.FieldMonthlyLimitUsd, field.TypeFloat64, value)
+		_node.MonthlyLimitUsd = &value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(subscriptionplan.FieldCreatedAt, field.TypeTime, value)
@@ -452,6 +536,18 @@ func (u *SubscriptionPlanUpsert) UpdateGroupID() *SubscriptionPlanUpsert {
 // AddGroupID adds v to the "group_id" field.
 func (u *SubscriptionPlanUpsert) AddGroupID(v int64) *SubscriptionPlanUpsert {
 	u.Add(subscriptionplan.FieldGroupID, v)
+	return u
+}
+
+// SetPlatform sets the "platform" field.
+func (u *SubscriptionPlanUpsert) SetPlatform(v string) *SubscriptionPlanUpsert {
+	u.Set(subscriptionplan.FieldPlatform, v)
+	return u
+}
+
+// UpdatePlatform sets the "platform" field to the value that was provided on create.
+func (u *SubscriptionPlanUpsert) UpdatePlatform() *SubscriptionPlanUpsert {
+	u.SetExcluded(subscriptionplan.FieldPlatform)
 	return u
 }
 
@@ -605,6 +701,78 @@ func (u *SubscriptionPlanUpsert) AddSortOrder(v int) *SubscriptionPlanUpsert {
 	return u
 }
 
+// SetDailyLimitUsd sets the "daily_limit_usd" field.
+func (u *SubscriptionPlanUpsert) SetDailyLimitUsd(v float64) *SubscriptionPlanUpsert {
+	u.Set(subscriptionplan.FieldDailyLimitUsd, v)
+	return u
+}
+
+// UpdateDailyLimitUsd sets the "daily_limit_usd" field to the value that was provided on create.
+func (u *SubscriptionPlanUpsert) UpdateDailyLimitUsd() *SubscriptionPlanUpsert {
+	u.SetExcluded(subscriptionplan.FieldDailyLimitUsd)
+	return u
+}
+
+// AddDailyLimitUsd adds v to the "daily_limit_usd" field.
+func (u *SubscriptionPlanUpsert) AddDailyLimitUsd(v float64) *SubscriptionPlanUpsert {
+	u.Add(subscriptionplan.FieldDailyLimitUsd, v)
+	return u
+}
+
+// ClearDailyLimitUsd clears the value of the "daily_limit_usd" field.
+func (u *SubscriptionPlanUpsert) ClearDailyLimitUsd() *SubscriptionPlanUpsert {
+	u.SetNull(subscriptionplan.FieldDailyLimitUsd)
+	return u
+}
+
+// SetWeeklyLimitUsd sets the "weekly_limit_usd" field.
+func (u *SubscriptionPlanUpsert) SetWeeklyLimitUsd(v float64) *SubscriptionPlanUpsert {
+	u.Set(subscriptionplan.FieldWeeklyLimitUsd, v)
+	return u
+}
+
+// UpdateWeeklyLimitUsd sets the "weekly_limit_usd" field to the value that was provided on create.
+func (u *SubscriptionPlanUpsert) UpdateWeeklyLimitUsd() *SubscriptionPlanUpsert {
+	u.SetExcluded(subscriptionplan.FieldWeeklyLimitUsd)
+	return u
+}
+
+// AddWeeklyLimitUsd adds v to the "weekly_limit_usd" field.
+func (u *SubscriptionPlanUpsert) AddWeeklyLimitUsd(v float64) *SubscriptionPlanUpsert {
+	u.Add(subscriptionplan.FieldWeeklyLimitUsd, v)
+	return u
+}
+
+// ClearWeeklyLimitUsd clears the value of the "weekly_limit_usd" field.
+func (u *SubscriptionPlanUpsert) ClearWeeklyLimitUsd() *SubscriptionPlanUpsert {
+	u.SetNull(subscriptionplan.FieldWeeklyLimitUsd)
+	return u
+}
+
+// SetMonthlyLimitUsd sets the "monthly_limit_usd" field.
+func (u *SubscriptionPlanUpsert) SetMonthlyLimitUsd(v float64) *SubscriptionPlanUpsert {
+	u.Set(subscriptionplan.FieldMonthlyLimitUsd, v)
+	return u
+}
+
+// UpdateMonthlyLimitUsd sets the "monthly_limit_usd" field to the value that was provided on create.
+func (u *SubscriptionPlanUpsert) UpdateMonthlyLimitUsd() *SubscriptionPlanUpsert {
+	u.SetExcluded(subscriptionplan.FieldMonthlyLimitUsd)
+	return u
+}
+
+// AddMonthlyLimitUsd adds v to the "monthly_limit_usd" field.
+func (u *SubscriptionPlanUpsert) AddMonthlyLimitUsd(v float64) *SubscriptionPlanUpsert {
+	u.Add(subscriptionplan.FieldMonthlyLimitUsd, v)
+	return u
+}
+
+// ClearMonthlyLimitUsd clears the value of the "monthly_limit_usd" field.
+func (u *SubscriptionPlanUpsert) ClearMonthlyLimitUsd() *SubscriptionPlanUpsert {
+	u.SetNull(subscriptionplan.FieldMonthlyLimitUsd)
+	return u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (u *SubscriptionPlanUpsert) SetUpdatedAt(v time.Time) *SubscriptionPlanUpsert {
 	u.Set(subscriptionplan.FieldUpdatedAt, v)
@@ -680,6 +848,20 @@ func (u *SubscriptionPlanUpsertOne) AddGroupID(v int64) *SubscriptionPlanUpsertO
 func (u *SubscriptionPlanUpsertOne) UpdateGroupID() *SubscriptionPlanUpsertOne {
 	return u.Update(func(s *SubscriptionPlanUpsert) {
 		s.UpdateGroupID()
+	})
+}
+
+// SetPlatform sets the "platform" field.
+func (u *SubscriptionPlanUpsertOne) SetPlatform(v string) *SubscriptionPlanUpsertOne {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.SetPlatform(v)
+	})
+}
+
+// UpdatePlatform sets the "platform" field to the value that was provided on create.
+func (u *SubscriptionPlanUpsertOne) UpdatePlatform() *SubscriptionPlanUpsertOne {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.UpdatePlatform()
 	})
 }
 
@@ -855,6 +1037,90 @@ func (u *SubscriptionPlanUpsertOne) AddSortOrder(v int) *SubscriptionPlanUpsertO
 func (u *SubscriptionPlanUpsertOne) UpdateSortOrder() *SubscriptionPlanUpsertOne {
 	return u.Update(func(s *SubscriptionPlanUpsert) {
 		s.UpdateSortOrder()
+	})
+}
+
+// SetDailyLimitUsd sets the "daily_limit_usd" field.
+func (u *SubscriptionPlanUpsertOne) SetDailyLimitUsd(v float64) *SubscriptionPlanUpsertOne {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.SetDailyLimitUsd(v)
+	})
+}
+
+// AddDailyLimitUsd adds v to the "daily_limit_usd" field.
+func (u *SubscriptionPlanUpsertOne) AddDailyLimitUsd(v float64) *SubscriptionPlanUpsertOne {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.AddDailyLimitUsd(v)
+	})
+}
+
+// UpdateDailyLimitUsd sets the "daily_limit_usd" field to the value that was provided on create.
+func (u *SubscriptionPlanUpsertOne) UpdateDailyLimitUsd() *SubscriptionPlanUpsertOne {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.UpdateDailyLimitUsd()
+	})
+}
+
+// ClearDailyLimitUsd clears the value of the "daily_limit_usd" field.
+func (u *SubscriptionPlanUpsertOne) ClearDailyLimitUsd() *SubscriptionPlanUpsertOne {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.ClearDailyLimitUsd()
+	})
+}
+
+// SetWeeklyLimitUsd sets the "weekly_limit_usd" field.
+func (u *SubscriptionPlanUpsertOne) SetWeeklyLimitUsd(v float64) *SubscriptionPlanUpsertOne {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.SetWeeklyLimitUsd(v)
+	})
+}
+
+// AddWeeklyLimitUsd adds v to the "weekly_limit_usd" field.
+func (u *SubscriptionPlanUpsertOne) AddWeeklyLimitUsd(v float64) *SubscriptionPlanUpsertOne {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.AddWeeklyLimitUsd(v)
+	})
+}
+
+// UpdateWeeklyLimitUsd sets the "weekly_limit_usd" field to the value that was provided on create.
+func (u *SubscriptionPlanUpsertOne) UpdateWeeklyLimitUsd() *SubscriptionPlanUpsertOne {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.UpdateWeeklyLimitUsd()
+	})
+}
+
+// ClearWeeklyLimitUsd clears the value of the "weekly_limit_usd" field.
+func (u *SubscriptionPlanUpsertOne) ClearWeeklyLimitUsd() *SubscriptionPlanUpsertOne {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.ClearWeeklyLimitUsd()
+	})
+}
+
+// SetMonthlyLimitUsd sets the "monthly_limit_usd" field.
+func (u *SubscriptionPlanUpsertOne) SetMonthlyLimitUsd(v float64) *SubscriptionPlanUpsertOne {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.SetMonthlyLimitUsd(v)
+	})
+}
+
+// AddMonthlyLimitUsd adds v to the "monthly_limit_usd" field.
+func (u *SubscriptionPlanUpsertOne) AddMonthlyLimitUsd(v float64) *SubscriptionPlanUpsertOne {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.AddMonthlyLimitUsd(v)
+	})
+}
+
+// UpdateMonthlyLimitUsd sets the "monthly_limit_usd" field to the value that was provided on create.
+func (u *SubscriptionPlanUpsertOne) UpdateMonthlyLimitUsd() *SubscriptionPlanUpsertOne {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.UpdateMonthlyLimitUsd()
+	})
+}
+
+// ClearMonthlyLimitUsd clears the value of the "monthly_limit_usd" field.
+func (u *SubscriptionPlanUpsertOne) ClearMonthlyLimitUsd() *SubscriptionPlanUpsertOne {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.ClearMonthlyLimitUsd()
 	})
 }
 
@@ -1104,6 +1370,20 @@ func (u *SubscriptionPlanUpsertBulk) UpdateGroupID() *SubscriptionPlanUpsertBulk
 	})
 }
 
+// SetPlatform sets the "platform" field.
+func (u *SubscriptionPlanUpsertBulk) SetPlatform(v string) *SubscriptionPlanUpsertBulk {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.SetPlatform(v)
+	})
+}
+
+// UpdatePlatform sets the "platform" field to the value that was provided on create.
+func (u *SubscriptionPlanUpsertBulk) UpdatePlatform() *SubscriptionPlanUpsertBulk {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.UpdatePlatform()
+	})
+}
+
 // SetName sets the "name" field.
 func (u *SubscriptionPlanUpsertBulk) SetName(v string) *SubscriptionPlanUpsertBulk {
 	return u.Update(func(s *SubscriptionPlanUpsert) {
@@ -1276,6 +1556,90 @@ func (u *SubscriptionPlanUpsertBulk) AddSortOrder(v int) *SubscriptionPlanUpsert
 func (u *SubscriptionPlanUpsertBulk) UpdateSortOrder() *SubscriptionPlanUpsertBulk {
 	return u.Update(func(s *SubscriptionPlanUpsert) {
 		s.UpdateSortOrder()
+	})
+}
+
+// SetDailyLimitUsd sets the "daily_limit_usd" field.
+func (u *SubscriptionPlanUpsertBulk) SetDailyLimitUsd(v float64) *SubscriptionPlanUpsertBulk {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.SetDailyLimitUsd(v)
+	})
+}
+
+// AddDailyLimitUsd adds v to the "daily_limit_usd" field.
+func (u *SubscriptionPlanUpsertBulk) AddDailyLimitUsd(v float64) *SubscriptionPlanUpsertBulk {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.AddDailyLimitUsd(v)
+	})
+}
+
+// UpdateDailyLimitUsd sets the "daily_limit_usd" field to the value that was provided on create.
+func (u *SubscriptionPlanUpsertBulk) UpdateDailyLimitUsd() *SubscriptionPlanUpsertBulk {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.UpdateDailyLimitUsd()
+	})
+}
+
+// ClearDailyLimitUsd clears the value of the "daily_limit_usd" field.
+func (u *SubscriptionPlanUpsertBulk) ClearDailyLimitUsd() *SubscriptionPlanUpsertBulk {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.ClearDailyLimitUsd()
+	})
+}
+
+// SetWeeklyLimitUsd sets the "weekly_limit_usd" field.
+func (u *SubscriptionPlanUpsertBulk) SetWeeklyLimitUsd(v float64) *SubscriptionPlanUpsertBulk {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.SetWeeklyLimitUsd(v)
+	})
+}
+
+// AddWeeklyLimitUsd adds v to the "weekly_limit_usd" field.
+func (u *SubscriptionPlanUpsertBulk) AddWeeklyLimitUsd(v float64) *SubscriptionPlanUpsertBulk {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.AddWeeklyLimitUsd(v)
+	})
+}
+
+// UpdateWeeklyLimitUsd sets the "weekly_limit_usd" field to the value that was provided on create.
+func (u *SubscriptionPlanUpsertBulk) UpdateWeeklyLimitUsd() *SubscriptionPlanUpsertBulk {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.UpdateWeeklyLimitUsd()
+	})
+}
+
+// ClearWeeklyLimitUsd clears the value of the "weekly_limit_usd" field.
+func (u *SubscriptionPlanUpsertBulk) ClearWeeklyLimitUsd() *SubscriptionPlanUpsertBulk {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.ClearWeeklyLimitUsd()
+	})
+}
+
+// SetMonthlyLimitUsd sets the "monthly_limit_usd" field.
+func (u *SubscriptionPlanUpsertBulk) SetMonthlyLimitUsd(v float64) *SubscriptionPlanUpsertBulk {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.SetMonthlyLimitUsd(v)
+	})
+}
+
+// AddMonthlyLimitUsd adds v to the "monthly_limit_usd" field.
+func (u *SubscriptionPlanUpsertBulk) AddMonthlyLimitUsd(v float64) *SubscriptionPlanUpsertBulk {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.AddMonthlyLimitUsd(v)
+	})
+}
+
+// UpdateMonthlyLimitUsd sets the "monthly_limit_usd" field to the value that was provided on create.
+func (u *SubscriptionPlanUpsertBulk) UpdateMonthlyLimitUsd() *SubscriptionPlanUpsertBulk {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.UpdateMonthlyLimitUsd()
+	})
+}
+
+// ClearMonthlyLimitUsd clears the value of the "monthly_limit_usd" field.
+func (u *SubscriptionPlanUpsertBulk) ClearMonthlyLimitUsd() *SubscriptionPlanUpsertBulk {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.ClearMonthlyLimitUsd()
 	})
 }
 

@@ -4,19 +4,33 @@
     <div class="flex-shrink-0">
       <div
         class="flex items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 dark:border-dark-600 dark:bg-dark-800"
-        :class="[previewSizeClass, { 'border-solid': !!modelValue }]"
+        :class="[previewSizeClass, { 'border-solid': hasPreviewValue }]"
       >
         <!-- SVG mode: render inline -->
         <span
-          v-if="mode === 'svg' && modelValue"
+          v-if="mode === 'svg' && resolvedPreviewValue"
           class="text-gray-600 dark:text-gray-300 [&>svg]:h-full [&>svg]:w-full"
           :class="innerSizeClass"
           v-html="sanitizedValue"
         ></span>
         <!-- Image mode: show as img -->
         <img
-          v-else-if="mode === 'image' && modelValue"
-          :src="modelValue"
+          v-else-if="mode === 'image' && resolvedPreviewValue"
+          :src="resolvedPreviewValue"
+          alt=""
+          class="h-full w-full object-contain"
+        />
+        <video
+          v-else-if="mode === 'media' && previewType === 'video' && resolvedPreviewValue"
+          :src="resolvedPreviewValue"
+          class="h-full w-full object-cover"
+          controls
+          playsinline
+          muted
+        ></video>
+        <img
+          v-else-if="mode === 'media' && resolvedPreviewValue"
+          :src="resolvedPreviewValue"
           alt=""
           class="h-full w-full object-contain"
         />
@@ -53,7 +67,7 @@
           {{ uploadLabel }}
         </label>
         <button
-          v-if="modelValue"
+          v-if="hasPreviewValue"
           type="button"
           class="btn btn-secondary btn-sm text-red-600 hover:text-red-700 dark:text-red-400"
           @click="$emit('update:modelValue', '')"
@@ -70,17 +84,21 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import { sanitizeSvg } from '@/utils/sanitize'
 
 const props = withDefaults(defineProps<{
   modelValue: string
-  mode?: 'image' | 'svg'
+  mode?: 'image' | 'svg' | 'media'
   size?: 'sm' | 'md'
   uploadLabel?: string
   removeLabel?: string
   hint?: string
   maxSize?: number // bytes
+  previewSrc?: string
+  previewContentType?: string
+  hasValue?: boolean
 }>(), {
   mode: 'image',
   size: 'md',
@@ -88,18 +106,38 @@ const props = withDefaults(defineProps<{
   removeLabel: 'Remove',
   hint: '',
   maxSize: 300 * 1024,
+  previewSrc: '',
+  previewContentType: '',
+  hasValue: undefined,
 })
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
 }>()
 
+const { t } = useI18n()
 const error = ref('')
 
-const acceptTypes = computed(() => props.mode === 'svg' ? '.svg' : 'image/*')
+const acceptTypes = computed(() => {
+  if (props.mode === 'svg') return '.svg'
+  if (props.mode === 'media') return 'image/*,video/mp4'
+  return 'image/*'
+})
+const resolvedPreviewValue = computed(() => String(props.previewSrc || props.modelValue || '').trim())
+const previewType = computed<'image' | 'video'>(() => {
+  const explicitContentType = String(props.previewContentType || '').trim().toLowerCase()
+  if (explicitContentType.startsWith('video/')) return 'video'
+  return resolvedPreviewValue.value.toLowerCase().startsWith('data:video/')
+    ? 'video'
+    : 'image'
+})
+const hasPreviewValue = computed(() => {
+  if (typeof props.hasValue === 'boolean') return props.hasValue
+  return resolvedPreviewValue.value !== ''
+})
 
 const sanitizedValue = computed(() =>
-  props.mode === 'svg' ? sanitizeSvg(props.modelValue ?? '') : ''
+  props.mode === 'svg' ? sanitizeSvg(resolvedPreviewValue.value) : ''
 )
 
 const previewSizeClass = computed(() => props.size === 'sm' ? 'h-14 w-14' : 'h-20 w-20')
@@ -114,7 +152,10 @@ function handleUpload(event: Event) {
   if (!file) return
 
   if (props.maxSize && file.size > props.maxSize) {
-    error.value = `File too large (${(file.size / 1024).toFixed(1)} KB), max ${(props.maxSize / 1024).toFixed(0)} KB`
+    error.value = t('common.imageUpload.fileTooLarge', {
+      size: formatFileSize(file.size),
+      max: formatFileSize(props.maxSize),
+    })
     input.value = ''
     return
   }
@@ -122,25 +163,37 @@ function handleUpload(event: Event) {
   const reader = new FileReader()
   if (props.mode === 'svg') {
     reader.onload = (e) => {
-      const text = e.target?.result as string
+      const text = (e.target?.result ?? reader.result) as string
       if (text) emit('update:modelValue', text.trim())
     }
     reader.readAsText(file)
   } else {
-    if (!file.type.startsWith('image/')) {
-      error.value = 'Please select an image file'
+    const imageFile = file.type.startsWith('image/')
+    const mediaFileAllowed = props.mode === 'media'
+      ? (imageFile || file.type === 'video/mp4')
+      : imageFile
+
+    if (!mediaFileAllowed) {
+      error.value = t(props.mode === 'media' ? 'common.imageUpload.invalidMediaType' : 'common.imageUpload.invalidImageType')
       input.value = ''
       return
     }
     reader.onload = (e) => {
-      emit('update:modelValue', e.target?.result as string)
+      emit('update:modelValue', (e.target?.result ?? reader.result) as string)
     }
     reader.readAsDataURL(file)
   }
 
   reader.onerror = () => {
-    error.value = 'Failed to read file'
+    error.value = t('common.imageUpload.readFailed')
   }
   input.value = ''
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`
+  }
+  return `${(bytes / 1024).toFixed(1)} KB`
 }
 </script>

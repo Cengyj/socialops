@@ -150,31 +150,41 @@ type UpdateProviderInstanceRequest struct {
 	AllowUserRefund *bool             `json:"allow_user_refund"`
 }
 type CreatePlanRequest struct {
-	GroupID       int64    `json:"group_id"`
-	Name          string   `json:"name"`
-	Description   string   `json:"description"`
-	Price         float64  `json:"price"`
-	OriginalPrice *float64 `json:"original_price"`
-	ValidityDays  int      `json:"validity_days"`
-	ValidityUnit  string   `json:"validity_unit"`
-	Features      string   `json:"features"`
-	ProductName   string   `json:"product_name"`
-	ForSale       bool     `json:"for_sale"`
-	SortOrder     int      `json:"sort_order"`
+	GroupID         *int64   `json:"group_id"`
+	Platform        string   `json:"platform"`
+	Name            string   `json:"name"`
+	Description     string   `json:"description"`
+	Price           float64  `json:"price"`
+	OriginalPrice   *float64 `json:"original_price"`
+	ValidityDays    int      `json:"validity_days"`
+	ValidityUnit    string   `json:"validity_unit"`
+	Features        string   `json:"features"`
+	ProductName     string   `json:"product_name"`
+	ForSale         bool     `json:"for_sale"`
+	SortOrder       int      `json:"sort_order"`
+	QuotaUSD        *float64 `json:"quota_usd"`
+	DailyLimitUSD   *float64 `json:"daily_limit_usd"`
+	WeeklyLimitUSD  *float64 `json:"weekly_limit_usd"`
+	MonthlyLimitUSD *float64 `json:"monthly_limit_usd"`
 }
 
 type UpdatePlanRequest struct {
-	GroupID       *int64   `json:"group_id"`
-	Name          *string  `json:"name"`
-	Description   *string  `json:"description"`
-	Price         *float64 `json:"price"`
-	OriginalPrice *float64 `json:"original_price"`
-	ValidityDays  *int     `json:"validity_days"`
-	ValidityUnit  *string  `json:"validity_unit"`
-	Features      *string  `json:"features"`
-	ProductName   *string  `json:"product_name"`
-	ForSale       *bool    `json:"for_sale"`
-	SortOrder     *int     `json:"sort_order"`
+	GroupID         *int64   `json:"group_id"`
+	Platform        *string  `json:"platform"`
+	Name            *string  `json:"name"`
+	Description     *string  `json:"description"`
+	Price           *float64 `json:"price"`
+	OriginalPrice   *float64 `json:"original_price"`
+	ValidityDays    *int     `json:"validity_days"`
+	ValidityUnit    *string  `json:"validity_unit"`
+	Features        *string  `json:"features"`
+	ProductName     *string  `json:"product_name"`
+	ForSale         *bool    `json:"for_sale"`
+	SortOrder       *int     `json:"sort_order"`
+	QuotaUSD        *float64 `json:"quota_usd"`
+	DailyLimitUSD   *float64 `json:"daily_limit_usd"`
+	WeeklyLimitUSD  *float64 `json:"weekly_limit_usd"`
+	MonthlyLimitUSD *float64 `json:"monthly_limit_usd"`
 }
 
 // PaymentConfigService manages payment configuration and CRUD for
@@ -289,53 +299,109 @@ func (s *PaymentConfigService) getStripePublishableKey(ctx context.Context) stri
 // nil-check before serialisation — this is inherent to patch-style update patterns
 // and cannot be meaningfully decomposed without introducing unnecessary abstraction.
 func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req UpdatePaymentConfigRequest) error {
+	m, err := BuildPaymentConfigSettingUpdates(req)
+	if err != nil {
+		return err
+	}
+	return s.settingRepo.SetMultiple(ctx, m)
+}
+
+// BuildPaymentConfigSettingUpdates validates a patch request and returns the settings-table
+// updates without persisting them. Admin system settings uses this to keep a single
+// /admin/settings save from partially committing when payment validation fails.
+func BuildPaymentConfigSettingUpdates(req UpdatePaymentConfigRequest) (map[string]string, error) {
 	if req.BalanceRechargeMultiplier != nil {
 		if math.IsNaN(*req.BalanceRechargeMultiplier) || math.IsInf(*req.BalanceRechargeMultiplier, 0) || *req.BalanceRechargeMultiplier <= 0 {
-			return infraerrors.BadRequest("INVALID_BALANCE_RECHARGE_MULTIPLIER", "balance recharge multiplier must be greater than 0")
+			return nil, infraerrors.BadRequest("INVALID_BALANCE_RECHARGE_MULTIPLIER", "balance recharge multiplier must be greater than 0")
 		}
 	}
 	if req.RechargeFeeRate != nil {
 		v := *req.RechargeFeeRate
 		if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 || v > 100 {
-			return infraerrors.BadRequest("INVALID_RECHARGE_FEE_RATE", "recharge fee rate must be between 0 and 100")
+			return nil, infraerrors.BadRequest("INVALID_RECHARGE_FEE_RATE", "recharge fee rate must be between 0 and 100")
 		}
 		// Enforce max 2 decimal places
 		if math.Round(v*100) != v*100 {
-			return infraerrors.BadRequest("INVALID_RECHARGE_FEE_RATE", "recharge fee rate allows at most 2 decimal places")
+			return nil, infraerrors.BadRequest("INVALID_RECHARGE_FEE_RATE", "recharge fee rate allows at most 2 decimal places")
 		}
 	}
-	m := map[string]string{
-		SettingPaymentEnabled:                    formatBoolOrEmpty(req.Enabled),
-		SettingMinRechargeAmount:                 formatPositiveFloat(req.MinAmount),
-		SettingMaxRechargeAmount:                 formatPositiveFloat(req.MaxAmount),
-		SettingDailyRechargeLimit:                formatPositiveFloat(req.DailyLimit),
-		SettingOrderTimeoutMinutes:               formatPositiveInt(req.OrderTimeoutMin),
-		SettingMaxPendingOrders:                  formatPositiveInt(req.MaxPendingOrders),
-		SettingBalancePayDisabled:                formatBoolOrEmpty(req.BalanceDisabled),
-		SettingBalanceRechargeMult:               formatPositiveFloat(req.BalanceRechargeMultiplier),
-		SettingRechargeFeeRate:                   formatNonNegativeFloat(req.RechargeFeeRate),
-		SettingLoadBalanceStrategy:               derefStr(req.LoadBalanceStrategy),
-		SettingProductNamePrefix:                 derefStr(req.ProductNamePrefix),
-		SettingProductNameSuffix:                 derefStr(req.ProductNameSuffix),
-		SettingHelpImageURL:                      derefStr(req.HelpImageURL),
-		SettingHelpText:                          derefStr(req.HelpText),
-		SettingCancelRateLimitOn:                 formatBoolOrEmpty(req.CancelRateLimitEnabled),
-		SettingCancelRateLimitMax:                formatPositiveInt(req.CancelRateLimitMax),
-		SettingCancelWindowSize:                  formatPositiveInt(req.CancelRateLimitWindow),
-		SettingCancelWindowUnit:                  derefStr(req.CancelRateLimitUnit),
-		SettingCancelWindowMode:                  derefStr(req.CancelRateLimitMode),
-		SettingAlipayForceQRCode:                 formatBoolOrEmpty(req.AlipayForceQRCode),
-		SettingPaymentVisibleMethodAlipaySource:  derefStr(req.VisibleMethodAlipaySource),
-		SettingPaymentVisibleMethodWxpaySource:   derefStr(req.VisibleMethodWxpaySource),
-		SettingPaymentVisibleMethodAlipayEnabled: formatBoolOrEmpty(req.VisibleMethodAlipayEnabled),
-		SettingPaymentVisibleMethodWxpayEnabled:  formatBoolOrEmpty(req.VisibleMethodWxpayEnabled),
+	m := map[string]string{}
+	if req.Enabled != nil {
+		m[SettingPaymentEnabled] = formatBoolOrEmpty(req.Enabled)
+	}
+	if req.MinAmount != nil {
+		m[SettingMinRechargeAmount] = formatPositiveFloat(req.MinAmount)
+	}
+	if req.MaxAmount != nil {
+		m[SettingMaxRechargeAmount] = formatPositiveFloat(req.MaxAmount)
+	}
+	if req.DailyLimit != nil {
+		m[SettingDailyRechargeLimit] = formatPositiveFloat(req.DailyLimit)
+	}
+	if req.OrderTimeoutMin != nil {
+		m[SettingOrderTimeoutMinutes] = formatPositiveInt(req.OrderTimeoutMin)
+	}
+	if req.MaxPendingOrders != nil {
+		m[SettingMaxPendingOrders] = formatPositiveInt(req.MaxPendingOrders)
+	}
+	if req.BalanceDisabled != nil {
+		m[SettingBalancePayDisabled] = formatBoolOrEmpty(req.BalanceDisabled)
+	}
+	if req.BalanceRechargeMultiplier != nil {
+		m[SettingBalanceRechargeMult] = formatPositiveFloat(req.BalanceRechargeMultiplier)
+	}
+	if req.RechargeFeeRate != nil {
+		m[SettingRechargeFeeRate] = formatNonNegativeFloat(req.RechargeFeeRate)
+	}
+	if req.LoadBalanceStrategy != nil {
+		m[SettingLoadBalanceStrategy] = derefStr(req.LoadBalanceStrategy)
+	}
+	if req.ProductNamePrefix != nil {
+		m[SettingProductNamePrefix] = derefStr(req.ProductNamePrefix)
+	}
+	if req.ProductNameSuffix != nil {
+		m[SettingProductNameSuffix] = derefStr(req.ProductNameSuffix)
+	}
+	if req.HelpImageURL != nil {
+		m[SettingHelpImageURL] = derefStr(req.HelpImageURL)
+	}
+	if req.HelpText != nil {
+		m[SettingHelpText] = derefStr(req.HelpText)
+	}
+	if req.CancelRateLimitEnabled != nil {
+		m[SettingCancelRateLimitOn] = formatBoolOrEmpty(req.CancelRateLimitEnabled)
+	}
+	if req.CancelRateLimitMax != nil {
+		m[SettingCancelRateLimitMax] = formatPositiveInt(req.CancelRateLimitMax)
+	}
+	if req.CancelRateLimitWindow != nil {
+		m[SettingCancelWindowSize] = formatPositiveInt(req.CancelRateLimitWindow)
+	}
+	if req.CancelRateLimitUnit != nil {
+		m[SettingCancelWindowUnit] = derefStr(req.CancelRateLimitUnit)
+	}
+	if req.CancelRateLimitMode != nil {
+		m[SettingCancelWindowMode] = derefStr(req.CancelRateLimitMode)
+	}
+	if req.AlipayForceQRCode != nil {
+		m[SettingAlipayForceQRCode] = formatBoolOrEmpty(req.AlipayForceQRCode)
+	}
+	if req.VisibleMethodAlipaySource != nil {
+		m[SettingPaymentVisibleMethodAlipaySource] = derefStr(req.VisibleMethodAlipaySource)
+	}
+	if req.VisibleMethodWxpaySource != nil {
+		m[SettingPaymentVisibleMethodWxpaySource] = derefStr(req.VisibleMethodWxpaySource)
+	}
+	if req.VisibleMethodAlipayEnabled != nil {
+		m[SettingPaymentVisibleMethodAlipayEnabled] = formatBoolOrEmpty(req.VisibleMethodAlipayEnabled)
+	}
+	if req.VisibleMethodWxpayEnabled != nil {
+		m[SettingPaymentVisibleMethodWxpayEnabled] = formatBoolOrEmpty(req.VisibleMethodWxpayEnabled)
 	}
 	if req.EnabledTypes != nil {
 		m[SettingEnabledPaymentTypes] = strings.Join(req.EnabledTypes, ",")
-	} else {
-		m[SettingEnabledPaymentTypes] = ""
 	}
-	return s.settingRepo.SetMultiple(ctx, m)
+	return m, nil
 }
 
 func formatBoolOrEmpty(v *bool) string {

@@ -105,6 +105,48 @@ describe('admin RiskControlView', () => {
     expect(wrapper.text()).toContain('observed')
   })
 
+  it('keeps the localized skeleton notice for disabled stub responses', async () => {
+    getStatus.mockResolvedValue({
+      enabled: false,
+      status: 'disabled',
+      message: 'backend-only English stub message',
+    })
+
+    const wrapper = mount(RiskControlView, {
+      global: {
+        stubs: {
+          AppLayout: AppLayoutStub,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('SocialOps risk control backend is not configured yet')
+    expect(wrapper.text()).not.toContain('backend-only English stub message')
+  })
+
+  it('shows backend runtime messages when risk control is enabled', async () => {
+    getStatus.mockResolvedValue({
+      enabled: true,
+      status: 'enabled',
+      message: 'Runtime policy active',
+    })
+
+    const wrapper = mount(RiskControlView, {
+      global: {
+        stubs: {
+          AppLayout: AppLayoutStub,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Enabled')
+    expect(wrapper.text()).toContain('Runtime policy active')
+  })
+
   it('reports risk-control load failures', async () => {
     getStatus.mockRejectedValue(new Error('network'))
 

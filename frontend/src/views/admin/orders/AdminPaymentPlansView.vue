@@ -24,15 +24,62 @@
       </template>
 
       <template #table>
-        <DataTable :columns="planColumns" :data="filteredPlans" :loading="plansLoading" row-key="id">
-          <template #cell-name="{ value, row }">
-            <div>
-              <div class="font-medium text-gray-900 dark:text-white">{{ value }}</div>
-              <div class="text-xs text-gray-500 dark:text-gray-400">{{ row.description || '-' }}</div>
+        <div
+          v-if="plansError"
+          class="rounded-lg border border-red-200 bg-red-50 px-6 py-8 text-center dark:border-red-900/60 dark:bg-red-950/30"
+        >
+          <Icon name="exclamationTriangle" size="xl" class="mx-auto text-red-500 dark:text-red-400" />
+          <h3 class="mt-3 text-base font-semibold text-red-900 dark:text-red-100">
+            {{ t('payment.admin.failedToLoadPlans') }}
+          </h3>
+          <p class="mx-auto mt-2 max-w-xl text-sm text-red-700 dark:text-red-200">
+            {{ plansError }}
+          </p>
+          <button class="btn btn-secondary mt-4" :disabled="plansLoading" @click="loadPlans">
+            <Icon name="refresh" size="sm" :class="plansLoading ? 'animate-spin' : ''" class="mr-2" />
+            {{ t('common.retry') }}
+          </button>
+        </div>
+
+        <DataTable v-else :columns="planColumns" :data="filteredPlans" :loading="plansLoading" row-key="id">
+          <template #empty>
+            <div class="flex flex-col items-center px-4 py-3">
+              <Icon name="gift" size="xl" class="mb-4 text-gray-400 dark:text-dark-500" />
+              <p class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                {{ t('payment.admin.noPlans') }}
+              </p>
+              <p class="mt-2 max-w-md text-sm text-gray-500 dark:text-gray-400">
+                {{ plans.length === 0 ? t('payment.admin.noPlansHint') : t('payment.admin.noPlansSearchHint') }}
+              </p>
+              <button
+                v-if="plans.length === 0"
+                type="button"
+                class="btn btn-primary mt-4"
+                @click="openPlanEdit(null)"
+              >
+                <Icon name="plus" size="sm" class="mr-2" />
+                {{ t('payment.admin.createPlan') }}
+              </button>
             </div>
           </template>
-          <template #cell-group_id="{ value, row }">
-            <span class="badge badge-primary">{{ row.group_name || `#${value}` }}</span>
+          <template #cell-name="{ value, row }">
+            <SubscriptionPackageBadge
+              :name="String(value || row.name)"
+              :platform="row.platform || row.group_platform || 'social'"
+              :description="row.description || ''"
+              compact
+            />
+          </template>
+          <template #cell-platform="{ row }">
+            <span
+              :class="[
+                'inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium',
+                platformBadgeClass(planPlatform(row))
+              ]"
+            >
+              <SubscriptionPlatformLogo :platform="planPlatform(row)" compact />
+              <span>{{ planPlatformLabel(row) }}</span>
+            </span>
           </template>
           <template #cell-price="{ value, row }">
             <div class="text-sm">
@@ -40,11 +87,16 @@
               <span v-if="row.original_price" class="ml-1 text-xs text-gray-400 line-through">${{ row.original_price.toFixed(2) }}</span>
             </div>
           </template>
-          <template #cell-validity_days="{ value, row }">
-            <span>{{ value }} {{ t(`payment.admin.${row.validity_unit || 'days'}`) }}</span>
+          <template #cell-quota="{ row }">
+            <div class="space-y-1">
+              <div class="font-medium text-gray-900 dark:text-white">{{ formatQuotaAmount(getPlanQuotaAmount(row)) }}</div>
+              <div v-if="formatPlanGuardrails(row)" class="text-xs text-gray-500 dark:text-gray-400">
+                {{ formatPlanGuardrails(row) }}
+              </div>
+            </div>
           </template>
-          <template #cell-features="{ value }">
-            <span class="block max-w-sm truncate text-sm text-gray-600 dark:text-gray-300">{{ featureText(value) || '-' }}</span>
+          <template #cell-validity="{ row }">
+            <span>{{ formatPlanValidity(row) }}</span>
           </template>
           <template #cell-for_sale="{ row }">
             <button type="button" :class="['badge', row.for_sale ? 'badge-success' : 'badge-secondary']" @click="toggleForSale(row)">
@@ -61,7 +113,12 @@
       </template>
     </TablePageLayout>
 
-    <PlanEditDialog :show="showPlanDialog" :plan="editingPlan" @close="showPlanDialog = false" @saved="loadPlans" />
+    <PlanEditDialog
+      :show="showPlanDialog"
+      :plan="editingPlan"
+      @close="showPlanDialog = false"
+      @saved="loadPlans"
+    />
   </AppLayout>
 </template>
 
@@ -78,10 +135,23 @@ import { adminPaymentAPI } from '@/api/admin/payment'
 import type { SubscriptionPlan } from '@/types/payment'
 import PlanEditDialog from './PlanEditDialog.vue'
 import { useAppStore } from '@/stores/app'
+import { extractSafeApiErrorMessage } from '@/utils/apiError'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
+import { getPlanQuotaAmount } from '@/utils/subscriptionQuotaPlans'
+import SubscriptionPackageBadge from '@/components/payment/SubscriptionPackageBadge.vue'
+import SubscriptionPlatformLogo from '@/components/payment/SubscriptionPlatformLogo.vue'
+import { getPlatformColor } from '@/utils/platformColors'
+import {
+  formatSubscriptionPlanGuardrails,
+  formatSubscriptionPlanValidity,
+  formatSubscriptionQuotaAmount,
+  getSubscriptionPlatformLabel,
+} from '@/utils/subscriptionPlanDisplay'
 
 const { t } = useI18n()
 const appStore = useAppStore()
 const plansLoading = ref(false)
+const plansError = ref('')
 const plans = ref<SubscriptionPlan[]>([])
 const searchQuery = ref('')
 const saleFilter = ref<'all' | 'sale' | 'hidden'>('all')
@@ -89,21 +159,24 @@ const showPlanDialog = ref(false)
 const editingPlan = ref<SubscriptionPlan | null>(null)
 
 const planColumns = computed<Column[]>(() => [
-  { key: 'id', label: 'ID', sortable: true },
   { key: 'name', label: t('payment.admin.planName'), sortable: true },
-  { key: 'group_id', label: t('payment.admin.group') },
+  { key: 'quota', label: t('payment.admin.quotaAmount') },
+  { key: 'validity', label: t('payment.admin.validity') },
   { key: 'price', label: t('payment.admin.price'), sortable: true },
-  { key: 'validity_days', label: t('payment.admin.validityDays') },
-  { key: 'features', label: t('payment.admin.features') },
+  { key: 'platform', label: t('payment.admin.platform') },
   { key: 'for_sale', label: t('payment.admin.forSale') },
-  { key: 'sort_order', label: t('payment.admin.sortOrder'), sortable: true },
   { key: 'actions', label: t('common.actions') },
 ])
 
 const filteredPlans = computed(() => {
   const keyword = searchQuery.value.trim().toLowerCase()
   return plans.value.filter(plan => {
-    const matchesKeyword = !keyword || [plan.name, plan.description, String(plan.group_id), plan.group_name ?? ''].some(value => value.toLowerCase().includes(keyword))
+    const matchesKeyword = !keyword || [
+      plan.name,
+      plan.description,
+      plan.platform ?? '',
+      plan.group_platform ?? '',
+    ].some(value => value.toLowerCase().includes(keyword))
     const matchesSale = saleFilter.value === 'all' || (saleFilter.value === 'sale' ? plan.for_sale : !plan.for_sale)
     return matchesKeyword && matchesSale
   })
@@ -111,6 +184,7 @@ const filteredPlans = computed(() => {
 
 async function loadPlans() {
   plansLoading.value = true
+  plansError.value = ''
   try {
     const response = await adminPaymentAPI.getPlans()
     plans.value = (response.data || []).map((plan: Omit<SubscriptionPlan, 'features'> & { features: string | string[] }) => ({
@@ -119,8 +193,11 @@ async function loadPlans() {
         ? plan.features
         : String(plan.features || '').split('\n').map(item => item.trim()).filter(Boolean),
     }))
-  } catch (error: any) {
-    appStore.showError(error?.message || t('common.error'))
+  } catch (error: unknown) {
+    recordClientDiagnostic('admin.payment_plans.load', error)
+    const message = extractSafeApiErrorMessage(error, t('payment.admin.failedToLoadPlans'))
+    plansError.value = message
+    appStore.showError(message)
   } finally {
     plansLoading.value = false
   }
@@ -135,8 +212,9 @@ async function toggleForSale(plan: SubscriptionPlan) {
   try {
     await adminPaymentAPI.updatePlan(plan.id, { for_sale: !plan.for_sale })
     plan.for_sale = !plan.for_sale
-  } catch (error: any) {
-    appStore.showError(error?.message || t('common.error'))
+  } catch (error: unknown) {
+    recordClientDiagnostic('admin.payment_plans.toggle_sale', error)
+    appStore.showError(extractSafeApiErrorMessage(error, t('common.error')))
   }
 }
 
@@ -146,15 +224,40 @@ async function deletePlan(plan: SubscriptionPlan) {
     await adminPaymentAPI.deletePlan(plan.id)
     appStore.showSuccess(t('common.deleted'))
     await loadPlans()
-  } catch (error: any) {
-    appStore.showError(error?.message || t('common.error'))
+  } catch (error: unknown) {
+    recordClientDiagnostic('admin.payment_plans.delete', error)
+    appStore.showError(extractSafeApiErrorMessage(error, t('common.error')))
   }
 }
 
-function featureText(value: unknown): string {
-  if (Array.isArray(value)) return value.join(', ')
-  return String(value || '')
+const formatQuotaAmount = (value: unknown) => formatSubscriptionQuotaAmount(value, t('payment.admin.unlimited'))
+
+function formatPlanGuardrails(plan: SubscriptionPlan): string {
+  return formatSubscriptionPlanGuardrails(plan, t)
 }
 
-onMounted(loadPlans)
+function formatPlanValidity(plan: SubscriptionPlan): string {
+  return formatSubscriptionPlanValidity(plan, t, navigator.language)
+}
+
+function platformLabel(platform: string): string {
+  return getSubscriptionPlatformLabel(platform, t('payment.platformFallback'))
+}
+
+function planPlatform(plan: SubscriptionPlan): string {
+  return String(plan.platform || plan.group_platform || 'social')
+}
+
+function planPlatformLabel(plan: SubscriptionPlan): string {
+  return platformLabel(planPlatform(plan))
+}
+
+function platformBadgeClass(platform: string): string {
+  const colors = getPlatformColor(platform)
+  return `${colors.bg} ${colors.text} ${colors.border}`
+}
+
+onMounted(() => {
+  void loadPlans()
+})
 </script>

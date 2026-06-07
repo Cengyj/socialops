@@ -26,6 +26,25 @@ type resetQuotaUserSubRepoStub struct {
 	resetMonthlyErr    error
 }
 
+type subscriptionCacheInvalidationRecorder struct {
+	billingCacheWorkerStub
+
+	invalidatedSubscriptions []subscriptionCacheInvalidation
+}
+
+type subscriptionCacheInvalidation struct {
+	userID  int64
+	groupID int64
+}
+
+func (r *subscriptionCacheInvalidationRecorder) InvalidateSubscriptionCache(_ context.Context, userID, groupID int64) error {
+	r.invalidatedSubscriptions = append(r.invalidatedSubscriptions, subscriptionCacheInvalidation{
+		userID:  userID,
+		groupID: groupID,
+	})
+	return nil
+}
+
 func (r *resetQuotaUserSubRepoStub) GetByID(_ context.Context, id int64) (*UserSubscription, error) {
 	if r.sub == nil || r.sub.ID != id {
 		return nil, ErrSubscriptionNotFound
@@ -53,8 +72,28 @@ func (r *resetQuotaUserSubRepoStub) ResetMonthlyUsage(_ context.Context, _ int64
 	return r.resetMonthlyErr
 }
 
+func (r *resetQuotaUserSubRepoStub) ExtendExpiry(_ context.Context, _ int64, expiresAt time.Time) error {
+	if r.sub == nil {
+		return ErrSubscriptionNotFound
+	}
+	r.sub.ExpiresAt = expiresAt
+	return nil
+}
+
+func (r *resetQuotaUserSubRepoStub) UpdateStatus(_ context.Context, _ int64, status string) error {
+	if r.sub == nil {
+		return ErrSubscriptionNotFound
+	}
+	r.sub.Status = status
+	return nil
+}
+
 func newResetQuotaSvc(stub *resetQuotaUserSubRepoStub) *SubscriptionService {
 	return NewSubscriptionService(groupRepoNoop{}, stub, nil, nil, nil)
+}
+
+func newResetQuotaSvcWithCache(stub *resetQuotaUserSubRepoStub, cache BillingCache) *SubscriptionService {
+	return NewSubscriptionService(groupRepoNoop{}, stub, &BillingCacheService{cache: cache}, nil, nil)
 }
 
 func TestAdminResetQuota_ResetBoth(t *testing.T) {
@@ -204,4 +243,70 @@ func TestAdminResetQuota_ReturnsRefreshedSub(t *testing.T) {
 	// 服务应返回第二次 GetByID 的刷新值而非初始的 99.9
 	require.Equal(t, float64(0), result.DailyUsageUSD, "返回的订阅应反映已归零的用量")
 	require.True(t, stub.resetDailyCalled)
+}
+
+func TestAdminResetQuotaInvalidatesBillingCacheAfterSuccessfulReset(t *testing.T) {
+	stub := &resetQuotaUserSubRepoStub{
+		sub: &UserSubscription{ID: 10, UserID: 101, GroupID: 202},
+	}
+	cache := &subscriptionCacheInvalidationRecorder{}
+	svc := newResetQuotaSvcWithCache(stub, cache)
+
+	_, err := svc.AdminResetQuota(context.Background(), 10, true, false, false)
+
+	require.NoError(t, err)
+	require.Equal(t, []subscriptionCacheInvalidation{{userID: 101, groupID: 202}}, cache.invalidatedSubscriptions)
+}
+
+func TestResetSubscriptionQuotaInvalidatesBillingCacheAfterSuccessfulReset(t *testing.T) {
+	stub := &resetQuotaUserSubRepoStub{
+		sub: &UserSubscription{ID: 11, UserID: 111, GroupID: 222},
+	}
+	cache := &subscriptionCacheInvalidationRecorder{}
+	svc := newResetQuotaSvcWithCache(stub, cache)
+
+	err := svc.ResetSubscriptionQuota(context.Background(), 11)
+
+	require.NoError(t, err)
+	require.Equal(t, []subscriptionCacheInvalidation{{userID: 111, groupID: 222}}, cache.invalidatedSubscriptions)
+}
+
+func TestExtendSubscriptionInvalidatesBillingCacheAfterSuccessfulAdjustment(t *testing.T) {
+	now := time.Now().UTC()
+	stub := &resetQuotaUserSubRepoStub{
+		sub: &UserSubscription{
+			ID:        12,
+			UserID:    121,
+			GroupID:   242,
+			StartsAt:  now.Add(-time.Hour),
+			ExpiresAt: now.Add(24 * time.Hour),
+			Status:    SubscriptionStatusActive,
+		},
+	}
+	cache := &subscriptionCacheInvalidationRecorder{}
+	svc := newResetQuotaSvcWithCache(stub, cache)
+
+	_, err := svc.ExtendSubscription(context.Background(), 12, 1)
+
+	require.NoError(t, err)
+	require.Equal(t, []subscriptionCacheInvalidation{{userID: 121, groupID: 242}}, cache.invalidatedSubscriptions)
+}
+
+func TestRevokeSubscriptionInvalidatesBillingCacheAfterSuccessfulStatusUpdate(t *testing.T) {
+	stub := &resetQuotaUserSubRepoStub{
+		sub: &UserSubscription{
+			ID:      13,
+			UserID:  131,
+			GroupID: 262,
+			Status:  SubscriptionStatusActive,
+		},
+	}
+	cache := &subscriptionCacheInvalidationRecorder{}
+	svc := newResetQuotaSvcWithCache(stub, cache)
+
+	err := svc.RevokeSubscription(context.Background(), 13)
+
+	require.NoError(t, err)
+	require.Equal(t, SubscriptionStatusRevoked, stub.sub.Status)
+	require.Equal(t, []subscriptionCacheInvalidation{{userID: 131, groupID: 262}}, cache.invalidatedSubscriptions)
 }

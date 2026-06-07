@@ -87,6 +87,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { totpAPI } from '@/api'
+import { showSafeProfileError } from './profileError'
 
 const emit = defineEmits<{
   close: []
@@ -119,8 +120,8 @@ const loadVerificationMethod = async () => {
   try {
     const method = await totpAPI.getVerificationMethod()
     verificationMethod.value = method.method
-  } catch (err: any) {
-    appStore.showError(err.response?.data?.message || t('common.error'))
+  } catch (err: unknown) {
+    showSafeProfileError(appStore, 'profile.totp.disable_load_verification_method', err, t('common.error'))
     emit('close')
   } finally {
     methodLoading.value = false
@@ -147,8 +148,8 @@ const handleSendCode = async () => {
         }
       }
     }, 1000)
-  } catch (err: any) {
-    appStore.showError(err.response?.data?.message || t('profile.totp.sendCodeFailed'))
+  } catch (err: unknown) {
+    showSafeProfileError(appStore, 'profile.totp.disable_send_code', err, t('profile.totp.sendCodeFailed'))
   } finally {
     sendingCode.value = false
   }
@@ -167,8 +168,8 @@ const handleDisable = async () => {
     await totpAPI.disable(request)
     appStore.showSuccess(t('profile.totp.disableSuccess'))
     emit('success')
-  } catch (err: any) {
-    appStore.showError(err.response?.data?.message || t('profile.totp.disableFailed'))
+  } catch (err: unknown) {
+    showSafeProfileError(appStore, 'profile.totp.disable', err, t('profile.totp.disableFailed'))
   } finally {
     loading.value = false
   }

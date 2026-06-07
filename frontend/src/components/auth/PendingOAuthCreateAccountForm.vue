@@ -93,6 +93,8 @@ import { useI18n } from 'vue-i18n'
 import TurnstileWidget from '@/components/TurnstileWidget.vue'
 import { getPublicSettings, sendPendingOAuthVerifyCode } from '@/api/auth'
 import { useAppStore } from '@/stores'
+import { buildSafeAuthErrorMessage } from '@/utils/authError'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 export type PendingOAuthCreateAccountPayload = {
   email: string
@@ -181,11 +183,6 @@ function startCountdown(seconds: number) {
   }, 1000)
 }
 
-function getRequestErrorMessage(error: unknown, fallback: string): string {
-  const err = error as { message?: string; response?: { data?: { detail?: string; message?: string } } }
-  return err.response?.data?.detail || err.response?.data?.message || err.message || fallback
-}
-
 function resetTurnstile() {
   turnstileToken.value = ''
   turnstileRef.value?.reset()
@@ -232,7 +229,10 @@ async function handleSendCode() {
       resetTurnstile()
     }
   } catch (error: unknown) {
-    sendCodeError.value = getRequestErrorMessage(error, t('auth.sendCodeFailed'))
+    recordClientDiagnostic('auth.oauth.create_account.send_code', error)
+    sendCodeError.value = buildSafeAuthErrorMessage(error, {
+      fallback: t('auth.sendCodeFailed')
+    })
   } finally {
     isSendingCode.value = false
   }
@@ -262,7 +262,8 @@ onMounted(async () => {
     invitationCodeEnabled.value = settings.invitation_code_enabled === true
     turnstileEnabled.value = settings.turnstile_enabled === true
     turnstileSiteKey.value = settings.turnstile_site_key || ''
-  } catch {
+  } catch (error) {
+    recordClientDiagnostic('auth.oauth.create_account.load_public_settings', error)
     invitationCodeEnabled.value = false
     turnstileEnabled.value = false
     turnstileSiteKey.value = ''

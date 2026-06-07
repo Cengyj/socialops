@@ -24,6 +24,9 @@ import (
 // menuItemIDPattern validates custom menu item IDs: alphanumeric, hyphens, underscores only.
 var menuItemIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
+// customPageSlugPattern validates internal markdown page slugs used by custom menu items.
+var customPageSlugPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*(/[a-zA-Z0-9][a-zA-Z0-9._-]*)*$`)
+
 // generateMenuItemID generates a short random hex ID for a custom menu item.
 func generateMenuItemID() (string, error) {
 	b := make([]byte, 8)
@@ -31,6 +34,13 @@ func generateMenuItemID() (string, error) {
 		return "", fmt.Errorf("generate menu item ID: %w", err)
 	}
 	return hex.EncodeToString(b), nil
+}
+
+func validateCustomPageSlug(slug string) bool {
+	return slug != "" &&
+		!strings.Contains(slug, "..") &&
+		!strings.Contains(slug, "\\") &&
+		customPageSlugPattern.MatchString(slug)
 }
 
 func scopesContainOpenID(scopes string) bool {
@@ -97,6 +107,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 	defaultSubscriptions := make([]dto.DefaultSubscriptionSetting, 0, len(settings.DefaultSubscriptions))
 	for _, sub := range settings.DefaultSubscriptions {
 		defaultSubscriptions = append(defaultSubscriptions, dto.DefaultSubscriptionSetting{
+			PlanID:       sub.PlanID,
 			GroupID:      sub.GroupID,
 			ValidityDays: sub.ValidityDays,
 		})
@@ -298,6 +309,7 @@ func defaultSubscriptionsToDTO(items []service.DefaultSubscriptionSetting) []dto
 	result := make([]dto.DefaultSubscriptionSetting, 0, len(items))
 	for _, item := range items {
 		result = append(result, dto.DefaultSubscriptionSetting{
+			PlanID:       item.PlanID,
 			GroupID:      item.GroupID,
 			ValidityDays: item.ValidityDays,
 		})
@@ -1460,6 +1472,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		maxCustomMenuItems    = 20
 		maxMenuItemLabelLen   = 50
 		maxMenuItemURLLen     = 2048
+		maxMenuItemPageSlugLen = 64
 		maxMenuItemIconSVGLen = 10 * 1024 // 10KB
 		maxMenuItemIDLen      = 32
 	)
@@ -1480,14 +1493,23 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 				response.BadRequest(c, "Custom menu item label is too long (max 50 characters)")
 				return
 			}
+			pageSlugTrimmed := strings.TrimSpace(item.PageSlug)
 			urlTrimmed := strings.TrimSpace(item.URL)
-			if strings.HasPrefix(urlTrimmed, "md:") {
-				// Markdown page mode: URL = "md:<slug>"
-				slug := strings.TrimPrefix(urlTrimmed, "md:")
-				if slug == "" {
-					response.BadRequest(c, "Custom menu item markdown slug cannot be empty (use md:slug format)")
+			if pageSlugTrimmed != "" {
+				if len(pageSlugTrimmed) > maxMenuItemPageSlugLen || !validateCustomPageSlug(pageSlugTrimmed) {
+					response.BadRequest(c, "Custom menu item page slug contains invalid characters")
 					return
 				}
+				items[i].PageSlug = pageSlugTrimmed
+				items[i].URL = "md:" + pageSlugTrimmed
+			} else if strings.HasPrefix(urlTrimmed, "md:") {
+				slug := strings.TrimSpace(strings.TrimPrefix(urlTrimmed, "md:"))
+				if len(slug) > maxMenuItemPageSlugLen || !validateCustomPageSlug(slug) {
+					response.BadRequest(c, "Custom menu item markdown slug contains invalid characters")
+					return
+				}
+				items[i].PageSlug = slug
+				items[i].URL = "md:" + slug
 			} else {
 				if urlTrimmed == "" {
 					response.BadRequest(c, "Custom menu item URL is required (use md:slug for markdown pages)")
@@ -1501,6 +1523,8 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 					response.BadRequest(c, "Custom menu item URL must be an absolute http(s) URL or md:<slug>")
 					return
 				}
+				items[i].URL = urlTrimmed
+				items[i].PageSlug = ""
 			}
 			if item.Visibility != "user" && item.Visibility != "admin" {
 				response.BadRequest(c, "Custom menu item visibility must be 'user' or 'admin'")
@@ -1595,6 +1619,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	defaultSubscriptions := make([]service.DefaultSubscriptionSetting, 0, len(req.DefaultSubscriptions))
 	for _, sub := range req.DefaultSubscriptions {
 		defaultSubscriptions = append(defaultSubscriptions, service.DefaultSubscriptionSetting{
+			PlanID:       sub.PlanID,
 			GroupID:      sub.GroupID,
 			ValidityDays: sub.ValidityDays,
 		})
@@ -1844,14 +1869,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		},
 		ForceEmailOnThirdPartySignup: boolValueOrDefault(req.ForceEmailOnThirdPartySignup, previousAuthSourceDefaults.ForceEmailOnThirdPartySignup),
 	}
-	if err := h.settingService.UpdateSettingsWithAuthSourceDefaults(c.Request.Context(), settings, authSourceDefaults); err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-
-	// Update payment configuration (integrated into system settings).
-	// Skip if no payment fields were provided (prevents accidental wipe).
-	if h.paymentConfigService != nil && hasPaymentFields(req) {
+	paymentFieldsProvided := h.paymentConfigService != nil && hasPaymentFields(req)
+	var paymentUpdates map[string]string
+	if paymentFieldsProvided {
 		paymentReq := service.UpdatePaymentConfigRequest{
 			Enabled:                   req.PaymentEnabled,
 			MinAmount:                 req.PaymentMinAmount,
@@ -1875,11 +1895,20 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			CancelRateLimitMode:       req.PaymentCancelRateLimitMode,
 			AlipayForceQRCode:         req.PaymentAlipayForceQRCode,
 		}
-		if err := h.paymentConfigService.UpdatePaymentConfig(c.Request.Context(), paymentReq); err != nil {
+		var err error
+		paymentUpdates, err = service.BuildPaymentConfigSettingUpdates(paymentReq)
+		if err != nil {
 			response.ErrorFrom(c, err)
 			return
 		}
-		// Refresh in-memory provider registry so config changes take effect immediately
+	}
+	if err := h.settingService.UpdateSettingsWithAuthSourceDefaultsAndExtra(c.Request.Context(), settings, authSourceDefaults, paymentUpdates); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	// Refresh in-memory provider registry so submitted payment config changes take effect immediately.
+	if paymentFieldsProvided {
 		if h.paymentService != nil {
 			h.paymentService.RefreshProviders(c.Request.Context())
 		}
@@ -1902,6 +1931,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	updatedDefaultSubscriptions := make([]dto.DefaultSubscriptionSetting, 0, len(updatedSettings.DefaultSubscriptions))
 	for _, sub := range updatedSettings.DefaultSubscriptions {
 		updatedDefaultSubscriptions = append(updatedDefaultSubscriptions, dto.DefaultSubscriptionSetting{
+			PlanID:       sub.PlanID,
 			GroupID:      sub.GroupID,
 			ValidityDays: sub.ValidityDays,
 		})
@@ -2510,7 +2540,10 @@ func normalizeDefaultSubscriptions(input []dto.DefaultSubscriptionSetting) []dto
 	}
 	normalized := make([]dto.DefaultSubscriptionSetting, 0, len(input))
 	for _, item := range input {
-		if item.GroupID <= 0 || item.ValidityDays <= 0 {
+		if item.PlanID <= 0 && item.GroupID <= 0 {
+			continue
+		}
+		if item.ValidityDays <= 0 {
 			continue
 		}
 		if item.ValidityDays > service.MaxValidityDays {
@@ -2557,6 +2590,7 @@ func defaultSubscriptionsValueOrDefault(input *[]dto.DefaultSubscriptionSetting,
 	result := make([]service.DefaultSubscriptionSetting, 0, len(*input))
 	for _, item := range *input {
 		result = append(result, service.DefaultSubscriptionSetting{
+			PlanID:       item.PlanID,
 			GroupID:      item.GroupID,
 			ValidityDays: item.ValidityDays,
 		})
@@ -2631,7 +2665,7 @@ func equalDefaultSubscriptions(a, b []service.DefaultSubscriptionSetting) bool {
 		return false
 	}
 	for i := range a {
-		if a[i].GroupID != b[i].GroupID || a[i].ValidityDays != b[i].ValidityDays {
+		if a[i].PlanID != b[i].PlanID || a[i].GroupID != b[i].GroupID || a[i].ValidityDays != b[i].ValidityDays {
 			return false
 		}
 	}
@@ -2674,7 +2708,6 @@ func equalNotifyEmailEntries(a, b []service.NotifyEmailEntry) bool {
 	return true
 }
 
-// TestSMTPRequest 测试SMTP连接请求
 type TestSMTPRequest struct {
 	SMTPHost     string `json:"smtp_host"`
 	SMTPPort     int    `json:"smtp_port"`

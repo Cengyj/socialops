@@ -125,7 +125,6 @@ function checkoutInfoWithPlansFixture() {
           original_price: 0,
           validity_days: 30,
           validity_unit: 'day',
-          rate_multiplier: 1,
           daily_limit_usd: null,
           weekly_limit_usd: null,
           monthly_limit_usd: null,
@@ -134,6 +133,58 @@ function checkoutInfoWithPlansFixture() {
           sort_order: 1,
           for_sale: true,
           group_name: 'X / Twitter',
+        },
+      ],
+    },
+  }
+}
+
+function checkoutInfoWithRenewalChoicesFixture() {
+  return {
+    data: {
+      ...checkoutInfoFixture().data,
+      plans: [
+        {
+          id: 7,
+          group_id: 3,
+          platform: 'x_twitter',
+          group_platform: 'x_twitter',
+          group_name: 'X / Twitter',
+          name: 'X Execute 100 USD',
+          product_name: 'X Execute',
+          description: '',
+          price: 29,
+          original_price: 0,
+          validity_days: 1,
+          validity_unit: 'months',
+          quota_usd: 100,
+          daily_limit_usd: null,
+          weekly_limit_usd: null,
+          monthly_limit_usd: 100,
+          features: [],
+          sort_order: 1,
+          for_sale: true,
+        },
+        {
+          id: 8,
+          group_id: 3,
+          platform: 'x_twitter',
+          group_platform: 'x_twitter',
+          group_name: 'X / Twitter',
+          name: 'X Execute 200 USD',
+          product_name: 'X Execute',
+          description: '',
+          price: 49,
+          original_price: 0,
+          validity_days: 1,
+          validity_unit: 'months',
+          quota_usd: 200,
+          daily_limit_usd: null,
+          weekly_limit_usd: null,
+          monthly_limit_usd: 200,
+          features: [],
+          sort_order: 2,
+          for_sale: true,
         },
       ],
     },
@@ -414,5 +465,49 @@ describe('PaymentView WeChat JSAPI flow', () => {
     expect(showWarning).toHaveBeenCalledWith('payment.errors.mobilePaymentFallbackToQr')
     expect(showError).not.toHaveBeenCalled()
     expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toContain('weixin://wxpay/bizpayurl?pr=fallback-native')
+  })
+
+  it('opens the quota picker when a renewal plan route has multiple quota choices', async () => {
+    routeState.query = {
+      tab: 'subscription',
+      plan_id: '7',
+    }
+    getCheckoutInfo.mockResolvedValue(checkoutInfoWithRenewalChoicesFixture())
+
+    const SubscriptionPlanPickerStub = {
+      name: 'SubscriptionPlanPicker',
+      props: {
+        plans: { type: Array, default: () => [] },
+        activeSubscriptions: { type: Array, default: () => [] },
+        formatAmount: { type: Function, default: null },
+        showActiveSubscriptions: { type: Boolean, default: true },
+        initialSelectedPlanIds: { type: Array, default: () => [] },
+      },
+      template: '<div data-testid="renewal-picker"></div>',
+    }
+
+    const wrapper = shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          Teleport: true,
+          Transition: false,
+          SubscriptionPlanPicker: SubscriptionPlanPickerStub,
+        },
+      },
+    })
+    await flushPromises()
+    await flushPromises()
+
+    const picker = wrapper
+      .findAllComponents({ name: 'SubscriptionPlanPicker' })
+      .find((component) => JSON.stringify(component.props('initialSelectedPlanIds')) === '[7]')
+    expect(picker).toBeTruthy()
+    expect(picker!.props('plans')).toEqual([
+      expect.objectContaining({ id: 7, quota_usd: 100 }),
+      expect.objectContaining({ id: 8, quota_usd: 200 }),
+    ])
+    expect(picker!.props('showActiveSubscriptions')).toBe(false)
+    expect(picker!.props('initialSelectedPlanIds')).toEqual([7])
   })
 })

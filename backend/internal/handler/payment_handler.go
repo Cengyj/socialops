@@ -7,6 +7,7 @@ import (
 	"time"
 
 	dbent "github.com/Wei-Shaw/socialops/ent"
+	"github.com/Wei-Shaw/socialops/internal/handler/dto"
 	"github.com/Wei-Shaw/socialops/internal/payment"
 	infraerrors "github.com/Wei-Shaw/socialops/internal/pkg/errors"
 	"github.com/Wei-Shaw/socialops/internal/pkg/response"
@@ -43,41 +44,8 @@ func (h *PaymentHandler) GetPlans(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	type planWithPlatform struct {
-		ID            int64    `json:"id"`
-		GroupID       int64    `json:"group_id"`
-		GroupPlatform string   `json:"group_platform"`
-		Name          string   `json:"name"`
-		Description   string   `json:"description"`
-		Price         float64  `json:"price"`
-		OriginalPrice *float64 `json:"original_price,omitempty"`
-		ValidityDays  int      `json:"validity_days"`
-		ValidityUnit  string   `json:"validity_unit"`
-		Features      string   `json:"features"`
-		ProductName   string   `json:"product_name"`
-		ForSale       bool     `json:"for_sale"`
-		SortOrder     int      `json:"sort_order"`
-	}
-	platformMap := h.configService.GetGroupPlatformMap(c.Request.Context(), plans)
-	result := make([]planWithPlatform, 0, len(plans))
-	for _, p := range plans {
-		result = append(result, planWithPlatform{
-			ID:            int64(p.ID),
-			GroupID:       p.GroupID,
-			GroupPlatform: platformMap[p.GroupID],
-			Name:          p.Name,
-			Description:   p.Description,
-			Price:         p.Price,
-			OriginalPrice: p.OriginalPrice,
-			ValidityDays:  p.ValidityDays,
-			ValidityUnit:  p.ValidityUnit,
-			Features:      p.Features,
-			ProductName:   p.ProductName,
-			ForSale:       p.ForSale,
-			SortOrder:     p.SortOrder,
-		})
-	}
-	response.Success(c, result)
+	groupInfo := h.configService.GetGroupInfoMap(c.Request.Context(), plans)
+	response.Success(c, dto.AvailableSubscriptionPlansFromEnt(plans, groupInfo))
 }
 
 func (h *PaymentHandler) GetChannels(c *gin.Context) {
@@ -97,31 +65,13 @@ func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 		return
 	}
 
-	plans, _ := h.configService.ListPlansForSale(ctx)
-	groupInfo := h.configService.GetGroupInfoMap(ctx, plans)
-	planList := make([]checkoutPlan, 0, len(plans))
-	for _, p := range plans {
-		gi := groupInfo[p.GroupID]
-		planList = append(planList, checkoutPlan{
-			ID:               int64(p.ID),
-			GroupID:          p.GroupID,
-			GroupPlatform:    gi.Platform,
-			GroupName:        gi.Name,
-			RateMultiplier:   gi.RateMultiplier,
-			DailyLimitUSD:    gi.DailyLimitUSD,
-			WeeklyLimitUSD:   gi.WeeklyLimitUSD,
-			MonthlyLimitUSD:  gi.MonthlyLimitUSD,
-			CapabilityScopes: gi.CapabilityScopes,
-			Name:             p.Name,
-			Description:      p.Description,
-			Price:            p.Price,
-			OriginalPrice:    p.OriginalPrice,
-			ValidityDays:     p.ValidityDays,
-			ValidityUnit:     p.ValidityUnit,
-			Features:         parseFeatures(p.Features),
-			ProductName:      p.ProductName,
-		})
+	plans, err := h.configService.ListPlansForSale(ctx)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
 	}
+	groupInfo := h.configService.GetGroupInfoMap(ctx, plans)
+	planList := dto.AvailableSubscriptionPlansFromEnt(plans, groupInfo)
 
 	response.Success(c, checkoutInfoResponse{
 		Methods:                   limitsResp.Methods,
@@ -142,7 +92,7 @@ type checkoutInfoResponse struct {
 	Methods                   map[string]service.MethodLimits `json:"methods"`
 	GlobalMin                 float64                         `json:"global_min"`
 	GlobalMax                 float64                         `json:"global_max"`
-	Plans                     []checkoutPlan                  `json:"plans"`
+	Plans                     []dto.SubscriptionPlan          `json:"plans"`
 	BalanceDisabled           bool                            `json:"balance_disabled"`
 	BalanceRechargeMultiplier float64                         `json:"balance_recharge_multiplier"`
 	RechargeFeeRate           float64                         `json:"recharge_fee_rate"`
@@ -150,39 +100,6 @@ type checkoutInfoResponse struct {
 	HelpImageURL              string                          `json:"help_image_url"`
 	StripePublishableKey      string                          `json:"stripe_publishable_key"`
 	AlipayForceQRCode         bool                            `json:"alipay_force_qrcode"`
-}
-
-type checkoutPlan struct {
-	ID               int64    `json:"id"`
-	GroupID          int64    `json:"group_id"`
-	GroupPlatform    string   `json:"group_platform"`
-	GroupName        string   `json:"group_name"`
-	RateMultiplier   float64  `json:"rate_multiplier"`
-	DailyLimitUSD    *float64 `json:"daily_limit_usd"`
-	WeeklyLimitUSD   *float64 `json:"weekly_limit_usd"`
-	MonthlyLimitUSD  *float64 `json:"monthly_limit_usd"`
-	CapabilityScopes []string `json:"supported_capability_scopes,omitempty"`
-	Name             string   `json:"name"`
-	Description      string   `json:"description"`
-	Price            float64  `json:"price"`
-	OriginalPrice    *float64 `json:"original_price,omitempty"`
-	ValidityDays     int      `json:"validity_days"`
-	ValidityUnit     string   `json:"validity_unit"`
-	Features         []string `json:"features"`
-	ProductName      string   `json:"product_name"`
-}
-
-func parseFeatures(raw string) []string {
-	var out []string
-	for _, line := range strings.Split(raw, "\n") {
-		if item := strings.TrimSpace(line); item != "" {
-			out = append(out, item)
-		}
-	}
-	if out == nil {
-		return []string{}
-	}
-	return out
 }
 
 func (h *PaymentHandler) GetLimits(c *gin.Context) {

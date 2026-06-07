@@ -345,6 +345,8 @@ import {
   loadOAuthAffiliateCode,
   oauthAffiliatePayload
 } from '@/utils/oauthAffiliate'
+import { buildSafeAuthErrorMessage } from '@/utils/authError'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 const route = useRoute()
 const router = useRouter()
@@ -622,7 +624,7 @@ async function handleBindCurrentAccount() {
     await prepareOAuthBindAccessTokenCookie()
     window.location.href = startURL
   } catch (e: unknown) {
-    errorMessage.value = getRequestErrorMessage(e, t('auth.loginFailed'))
+    errorMessage.value = getRequestErrorMessage(e, t('auth.loginFailed'), 'auth.wechat.bind_current_account')
   }
 }
 
@@ -774,9 +776,9 @@ function switchToCreateAccountMode() {
   accountActionError.value = ''
 }
 
-function getRequestErrorMessage(error: unknown, fallback: string): string {
-  const err = error as { message?: string; response?: { data?: { detail?: string; message?: string } } }
-  return err.response?.data?.detail || err.response?.data?.message || err.message || fallback
+function getRequestErrorMessage(error: unknown, fallback: string, context: string): string {
+  recordClientDiagnostic(context, error)
+  return buildSafeAuthErrorMessage(error, { fallback })
 }
 
 function isCreateAccountRecoveryError(error: unknown): boolean {
@@ -884,9 +886,11 @@ async function handleSubmitInvitation() {
         : await completeWeChatOAuthRegistration(invitationCode.value.trim(), decision)
     await finalizePendingAccountResponse(completion)
   } catch (e: unknown) {
-    const err = e as { message?: string; response?: { data?: { message?: string } } }
-    invitationError.value =
-      err.response?.data?.message || err.message || t('auth.oidc.completeRegistrationFailed')
+    invitationError.value = getRequestErrorMessage(
+      e,
+      t('auth.oidc.completeRegistrationFailed'),
+      'auth.wechat.submit_invitation'
+    )
   } finally {
     isSubmitting.value = false
   }
@@ -898,7 +902,7 @@ async function handleContinueLogin() {
     const completion = await exchangePendingOAuthCompletion(currentAdoptionDecision()) as PendingWeChatCompletion
     await finalizePendingAccountResponse(completion)
   } catch (e: unknown) {
-    errorMessage.value = getRequestErrorMessage(e, t('auth.loginFailed'))
+    errorMessage.value = getRequestErrorMessage(e, t('auth.loginFailed'), 'auth.wechat.continue_login')
     needsAdoptionConfirmation.value = false
   } finally {
     isSubmitting.value = false
@@ -925,7 +929,7 @@ async function handleCreateAccount(payload: PendingOAuthCreateAccountPayload) {
       switchToBindLoginMode(payload.email.trim())
       return
     }
-    accountActionError.value = getRequestErrorMessage(e, t('auth.loginFailed'))
+    accountActionError.value = getRequestErrorMessage(e, t('auth.loginFailed'), 'auth.wechat.create_account')
   } finally {
     isSubmitting.value = false
   }
@@ -946,7 +950,7 @@ async function handleBindLogin() {
     })
     await finalizePendingAccountResponse(data)
   } catch (e: unknown) {
-    accountActionError.value = getRequestErrorMessage(e, t('auth.loginFailed'))
+    accountActionError.value = getRequestErrorMessage(e, t('auth.loginFailed'), 'auth.wechat.bind_login')
   } finally {
     isSubmitting.value = false
   }
@@ -969,7 +973,7 @@ async function handleSubmitTotpChallenge() {
     appStore.showSuccess(t('auth.loginSuccess'))
     await router.replace(redirectTo.value)
   } catch (e: unknown) {
-    totpError.value = getRequestErrorMessage(e, t('auth.loginFailed'))
+    totpError.value = getRequestErrorMessage(e, t('auth.loginFailed'), 'auth.wechat.submit_totp')
   } finally {
     isSubmitting.value = false
   }
@@ -1041,7 +1045,8 @@ onMounted(async () => {
     }
 
     if (error) {
-      errorMessage.value = errorDesc || error
+      recordClientDiagnostic('auth.wechat.callback_param_error', { code: error, message: errorDesc })
+      errorMessage.value = t('auth.loginFailed')
       isProcessing.value = false
       return
     }
@@ -1082,7 +1087,7 @@ onMounted(async () => {
     await finalizeCompletion(completion, completionRedirect)
   } catch (e: unknown) {
     clearPendingAuthSession()
-    errorMessage.value = getRequestErrorMessage(e, t('auth.loginFailed'))
+    errorMessage.value = getRequestErrorMessage(e, t('auth.loginFailed'), 'auth.wechat.callback')
     isProcessing.value = false
   }
 })

@@ -656,8 +656,63 @@ func TestNewUserService_FieldsAssignment(t *testing.T) {
 	require.Equal(t, cache, svc.billingCache)
 }
 
+func TestUpdateProfile_TrimsUsername(t *testing.T) {
+	rawUsername := "  operator  "
+	repo := &mockUserRepo{
+		getByIDUser: &User{
+			ID:       13,
+			Email:    "profile-username@example.com",
+			Username: "old-name",
+		},
+	}
+	svc := NewUserService(repo, nil, nil, nil)
+
+	updated, err := svc.UpdateProfile(context.Background(), 13, UpdateProfileRequest{
+		Username: &rawUsername,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "operator", updated.Username)
+}
+
+func TestUpdateProfile_RejectsBlankUsername(t *testing.T) {
+	rawUsername := " \t "
+	repo := &mockUserRepo{
+		getByIDUser: &User{
+			ID:       14,
+			Email:    "profile-blank@example.com",
+			Username: "old-name",
+		},
+	}
+	svc := NewUserService(repo, nil, nil, nil)
+
+	_, err := svc.UpdateProfile(context.Background(), 14, UpdateProfileRequest{
+		Username: &rawUsername,
+	})
+	require.ErrorIs(t, err, ErrUsernameRequired)
+	require.Zero(t, repo.updateCalls)
+}
+
+func makePNGAvatarBytes(t *testing.T, size int) []byte {
+	t.Helper()
+
+	img := image.NewRGBA(image.Rect(0, 0, size, size))
+	for y := 0; y < size; y++ {
+		for x := 0; x < size; x++ {
+			offset := y*img.Stride + x*4
+			img.Pix[offset] = uint8((x + 1) * 32)
+			img.Pix[offset+1] = uint8((y + 1) * 32)
+			img.Pix[offset+2] = 160
+			img.Pix[offset+3] = 0xff
+		}
+	}
+
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, img))
+	return buf.Bytes()
+}
+
 func TestUpdateProfile_StoresInlineAvatarWithinLimit(t *testing.T) {
-	raw := []byte("small-avatar")
+	raw := makePNGAvatarBytes(t, 2)
 	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(raw)
 	expectedSum := sha256.Sum256(raw)
 	repo := &mockUserRepo{
@@ -683,6 +738,27 @@ func TestUpdateProfile_StoresInlineAvatarWithinLimit(t *testing.T) {
 	require.Equal(t, "image/png", updated.AvatarMIME)
 	require.Equal(t, len(raw), updated.AvatarByteSize)
 	require.Equal(t, hex.EncodeToString(expectedSum[:]), updated.AvatarSHA256)
+}
+
+func TestUpdateProfile_RejectsInlineAvatarWithImageMimeButInvalidBytes(t *testing.T) {
+	raw := []byte("not-an-image")
+	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(raw)
+	repo := &mockUserRepo{
+		getByIDUser: &User{
+			ID:       18,
+			Email:    "invalid-avatar@example.com",
+			Username: "invalid-avatar",
+		},
+	}
+	svc := NewUserService(repo, nil, nil, nil)
+
+	_, err := svc.UpdateProfile(context.Background(), 18, UpdateProfileRequest{
+		AvatarURL: &dataURL,
+	})
+	require.ErrorIs(t, err, ErrAvatarInvalid)
+	require.Empty(t, repo.upsertAvatarArgs)
+	require.Empty(t, repo.deleteAvatarIDs)
+	require.Zero(t, repo.updateCalls)
 }
 
 func TestUpdateProfile_CompressesInlineAvatarToTwentyKilobytes(t *testing.T) {

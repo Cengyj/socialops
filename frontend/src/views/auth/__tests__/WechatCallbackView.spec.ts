@@ -168,6 +168,7 @@ describe('WechatCallbackView', () => {
     prepareOAuthBindAccessTokenCookieMock.mockReset()
     getAuthTokenMock.mockReset()
     fetchPublicSettingsMock.mockReset()
+    window.__SOCIALOPS_CLIENT_DIAGNOSTICS__ = []
     routeState.query = {}
     appStoreState.cachedPublicSettings = null
     appStoreState.publicSettingsLoaded = false
@@ -646,7 +647,10 @@ describe('WechatCallbackView', () => {
     await wrapper.get('[data-testid="existing-account-submit"]').trigger('click').catch(() => undefined)
     await flushPromises()
 
-    expect(showErrorMock).toHaveBeenCalledWith('bind token failed')
+    expect(showErrorMock).toHaveBeenCalledWith('Login failed')
+    expect(window.__SOCIALOPS_CLIENT_DIAGNOSTICS__?.at(-1)?.context).toBe(
+      'auth.wechat.bind_current_account'
+    )
     expect(locationState.current.href).toBe('http://localhost/auth/wechat/callback')
   })
 
@@ -795,8 +799,11 @@ describe('WechatCallbackView', () => {
     await wrapper.get('[data-testid="wechat-create-account-submit"]').trigger('click')
     await flushPromises()
 
-    expect(showErrorMock).toHaveBeenCalledWith('create failed')
+    expect(showErrorMock).toHaveBeenCalledWith('Login failed')
     expect(wrapper.text()).not.toContain('create failed')
+    expect(window.__SOCIALOPS_CLIENT_DIAGNOSTICS__?.at(-1)?.context).toBe(
+      'auth.wechat.create_account'
+    )
   })
 
   it('sends a verify code for pending oauth account creation', async () => {

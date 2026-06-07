@@ -7,6 +7,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	htmlpkg "html"
 	"io"
 	"io/fs"
 	"net/http"
@@ -235,7 +236,7 @@ func injectSiteTitle(html, settingsJSON []byte) []byte {
 		return html
 	}
 
-	newTitle := []byte("<title>" + cfg.SiteName + " - Social Account Operations Platform</title>")
+	newTitle := []byte("<title>" + htmlpkg.EscapeString(cfg.SiteName) + " - Website Account Pool Social Operations Platform</title>")
 	var buf bytes.Buffer
 	buf.Write(html[:titleStart])
 	buf.Write(newTitle)
@@ -309,14 +310,6 @@ func tryServeOverrideFile(c *gin.Context, overrideDir, cleanPath string) bool {
 func shouldBypassEmbeddedFrontend(path string) bool {
 	trimmed := strings.TrimSpace(path)
 	return strings.HasPrefix(trimmed, "/api/") ||
-		trimmed == "/v1" ||
-		strings.HasPrefix(trimmed, "/v1/") ||
-		trimmed == "/v1beta" ||
-		strings.HasPrefix(trimmed, "/v1beta/") ||
-		trimmed == "/antigravity" ||
-		strings.HasPrefix(trimmed, "/antigravity/") ||
-		trimmed == "/sora" ||
-		strings.HasPrefix(trimmed, "/sora/") ||
 		strings.HasPrefix(trimmed, "/setup/") ||
 		trimmed == "/health"
 }

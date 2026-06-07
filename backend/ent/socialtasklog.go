@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/Wei-Shaw/socialops/ent/socialaccount"
 	"github.com/Wei-Shaw/socialops/ent/socialtasklog"
 	"github.com/Wei-Shaw/socialops/ent/user"
+	"github.com/Wei-Shaw/socialops/internal/domain"
 )
 
 // SocialTaskLog is the model entity for the SocialTaskLog schema.
@@ -27,12 +29,16 @@ type SocialTaskLog struct {
 	SocialAccountID int64 `json:"social_account_id,omitempty"`
 	// 执行任务的用户 ID
 	UserID int64 `json:"user_id,omitempty"`
-	// 收费社交操作类型：login_check / follow / message / post / like
+	// Billable social action: login_check / follow / message / post / like / retweet
 	Action string `json:"action,omitempty"`
 	// 操作目标（如目标用户名、URL 等）
 	Target *string `json:"target,omitempty"`
 	// 操作内容（如私信内容、推文内容等）
 	Content *string `json:"content,omitempty"`
+	// Structured execution payload snapshot
+	Payload domain.SocialTaskPayload `json:"payload,omitempty"`
+	// Saved task template snapshot resolved at submission time
+	TemplateSnapshot domain.SocialTaskTemplateSnapshot `json:"template_snapshot,omitempty"`
 	// 执行状态：pending / running / success / failed
 	Status string `json:"status,omitempty"`
 	// 执行结果描述
@@ -99,6 +105,8 @@ func (*SocialTaskLog) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case socialtasklog.FieldPayload, socialtasklog.FieldTemplateSnapshot:
+			values[i] = new([]byte)
 		case socialtasklog.FieldPrice, socialtasklog.FieldChargedAmount:
 			values[i] = new(sql.NullFloat64)
 		case socialtasklog.FieldID, socialtasklog.FieldSocialAccountID, socialtasklog.FieldUserID, socialtasklog.FieldProxyID:
@@ -171,6 +179,22 @@ func (_m *SocialTaskLog) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Content = new(string)
 				*_m.Content = value.String
+			}
+		case socialtasklog.FieldPayload:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field payload", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Payload); err != nil {
+					return fmt.Errorf("unmarshal field payload: %w", err)
+				}
+			}
+		case socialtasklog.FieldTemplateSnapshot:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field template_snapshot", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.TemplateSnapshot); err != nil {
+					return fmt.Errorf("unmarshal field template_snapshot: %w", err)
+				}
 			}
 		case socialtasklog.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -315,6 +339,12 @@ func (_m *SocialTaskLog) String() string {
 		builder.WriteString("content=")
 		builder.WriteString(*v)
 	}
+	builder.WriteString(", ")
+	builder.WriteString("payload=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Payload))
+	builder.WriteString(", ")
+	builder.WriteString("template_snapshot=")
+	builder.WriteString(fmt.Sprintf("%v", _m.TemplateSnapshot))
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)

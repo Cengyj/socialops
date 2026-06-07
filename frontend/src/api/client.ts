@@ -203,6 +203,7 @@ apiClient.interceptors.response.use(
             localStorage.removeItem('refresh_token')
             localStorage.removeItem('auth_user')
             localStorage.removeItem('token_expires_at')
+            localStorage.removeItem('auth_run_mode')
             sessionStorage.setItem('auth_expired', '1')
 
             if (!window.location.pathname.includes('/login')) {
@@ -232,6 +233,7 @@ apiClient.interceptors.response.use(
         localStorage.removeItem('refresh_token')
         localStorage.removeItem('auth_user')
         localStorage.removeItem('token_expires_at')
+        localStorage.removeItem('auth_run_mode')
         if ((hasToken || sentAuth) && !isAuthEndpoint) {
           sessionStorage.setItem('auth_expired', '1')
         }

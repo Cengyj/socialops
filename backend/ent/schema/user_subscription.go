@@ -37,6 +37,27 @@ func (UserSubscription) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int64("user_id"),
 		field.Int64("group_id"),
+		field.Int64("plan_id").
+			Optional().
+			Nillable(),
+		field.String("plan_name").
+			MaxLen(100).
+			Default(""),
+		field.String("plan_platform").
+			MaxLen(50).
+			Default(""),
+		field.Float("daily_limit_usd").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}),
+		field.Float("weekly_limit_usd").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}),
+		field.Float("monthly_limit_usd").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}),
 
 		field.Time("starts_at").
 			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),
@@ -106,6 +127,7 @@ func (UserSubscription) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("user_id"),
 		index.Fields("group_id"),
+		index.Fields("plan_id"),
 		index.Fields("status"),
 		index.Fields("expires_at"),
 		// 活跃订阅查询复合索引（线上由 SQL 迁移创建部分索引，schema 仅用于模型可读性对齐）

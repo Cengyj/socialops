@@ -14,6 +14,7 @@ import (
 	"github.com/Wei-Shaw/socialops/ent/socialaccount"
 	"github.com/Wei-Shaw/socialops/ent/socialtasklog"
 	"github.com/Wei-Shaw/socialops/ent/user"
+	"github.com/Wei-Shaw/socialops/internal/domain"
 )
 
 // SocialTaskLogCreate is the builder for creating a SocialTaskLog entity.
@@ -94,6 +95,34 @@ func (_c *SocialTaskLogCreate) SetContent(v string) *SocialTaskLogCreate {
 func (_c *SocialTaskLogCreate) SetNillableContent(v *string) *SocialTaskLogCreate {
 	if v != nil {
 		_c.SetContent(*v)
+	}
+	return _c
+}
+
+// SetPayload sets the "payload" field.
+func (_c *SocialTaskLogCreate) SetPayload(v domain.SocialTaskPayload) *SocialTaskLogCreate {
+	_c.mutation.SetPayload(v)
+	return _c
+}
+
+// SetNillablePayload sets the "payload" field if the given value is not nil.
+func (_c *SocialTaskLogCreate) SetNillablePayload(v *domain.SocialTaskPayload) *SocialTaskLogCreate {
+	if v != nil {
+		_c.SetPayload(*v)
+	}
+	return _c
+}
+
+// SetTemplateSnapshot sets the "template_snapshot" field.
+func (_c *SocialTaskLogCreate) SetTemplateSnapshot(v domain.SocialTaskTemplateSnapshot) *SocialTaskLogCreate {
+	_c.mutation.SetTemplateSnapshot(v)
+	return _c
+}
+
+// SetNillableTemplateSnapshot sets the "template_snapshot" field if the given value is not nil.
+func (_c *SocialTaskLogCreate) SetNillableTemplateSnapshot(v *domain.SocialTaskTemplateSnapshot) *SocialTaskLogCreate {
+	if v != nil {
+		_c.SetTemplateSnapshot(*v)
 	}
 	return _c
 }
@@ -435,6 +464,14 @@ func (_c *SocialTaskLogCreate) createSpec() (*SocialTaskLog, *sqlgraph.CreateSpe
 		_spec.SetField(socialtasklog.FieldContent, field.TypeString, value)
 		_node.Content = &value
 	}
+	if value, ok := _c.mutation.Payload(); ok {
+		_spec.SetField(socialtasklog.FieldPayload, field.TypeJSON, value)
+		_node.Payload = value
+	}
+	if value, ok := _c.mutation.TemplateSnapshot(); ok {
+		_spec.SetField(socialtasklog.FieldTemplateSnapshot, field.TypeJSON, value)
+		_node.TemplateSnapshot = value
+	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(socialtasklog.FieldStatus, field.TypeString, value)
 		_node.Status = value
@@ -646,6 +683,42 @@ func (u *SocialTaskLogUpsert) UpdateContent() *SocialTaskLogUpsert {
 // ClearContent clears the value of the "content" field.
 func (u *SocialTaskLogUpsert) ClearContent() *SocialTaskLogUpsert {
 	u.SetNull(socialtasklog.FieldContent)
+	return u
+}
+
+// SetPayload sets the "payload" field.
+func (u *SocialTaskLogUpsert) SetPayload(v domain.SocialTaskPayload) *SocialTaskLogUpsert {
+	u.Set(socialtasklog.FieldPayload, v)
+	return u
+}
+
+// UpdatePayload sets the "payload" field to the value that was provided on create.
+func (u *SocialTaskLogUpsert) UpdatePayload() *SocialTaskLogUpsert {
+	u.SetExcluded(socialtasklog.FieldPayload)
+	return u
+}
+
+// ClearPayload clears the value of the "payload" field.
+func (u *SocialTaskLogUpsert) ClearPayload() *SocialTaskLogUpsert {
+	u.SetNull(socialtasklog.FieldPayload)
+	return u
+}
+
+// SetTemplateSnapshot sets the "template_snapshot" field.
+func (u *SocialTaskLogUpsert) SetTemplateSnapshot(v domain.SocialTaskTemplateSnapshot) *SocialTaskLogUpsert {
+	u.Set(socialtasklog.FieldTemplateSnapshot, v)
+	return u
+}
+
+// UpdateTemplateSnapshot sets the "template_snapshot" field to the value that was provided on create.
+func (u *SocialTaskLogUpsert) UpdateTemplateSnapshot() *SocialTaskLogUpsert {
+	u.SetExcluded(socialtasklog.FieldTemplateSnapshot)
+	return u
+}
+
+// ClearTemplateSnapshot clears the value of the "template_snapshot" field.
+func (u *SocialTaskLogUpsert) ClearTemplateSnapshot() *SocialTaskLogUpsert {
+	u.SetNull(socialtasklog.FieldTemplateSnapshot)
 	return u
 }
 
@@ -981,6 +1054,48 @@ func (u *SocialTaskLogUpsertOne) UpdateContent() *SocialTaskLogUpsertOne {
 func (u *SocialTaskLogUpsertOne) ClearContent() *SocialTaskLogUpsertOne {
 	return u.Update(func(s *SocialTaskLogUpsert) {
 		s.ClearContent()
+	})
+}
+
+// SetPayload sets the "payload" field.
+func (u *SocialTaskLogUpsertOne) SetPayload(v domain.SocialTaskPayload) *SocialTaskLogUpsertOne {
+	return u.Update(func(s *SocialTaskLogUpsert) {
+		s.SetPayload(v)
+	})
+}
+
+// UpdatePayload sets the "payload" field to the value that was provided on create.
+func (u *SocialTaskLogUpsertOne) UpdatePayload() *SocialTaskLogUpsertOne {
+	return u.Update(func(s *SocialTaskLogUpsert) {
+		s.UpdatePayload()
+	})
+}
+
+// ClearPayload clears the value of the "payload" field.
+func (u *SocialTaskLogUpsertOne) ClearPayload() *SocialTaskLogUpsertOne {
+	return u.Update(func(s *SocialTaskLogUpsert) {
+		s.ClearPayload()
+	})
+}
+
+// SetTemplateSnapshot sets the "template_snapshot" field.
+func (u *SocialTaskLogUpsertOne) SetTemplateSnapshot(v domain.SocialTaskTemplateSnapshot) *SocialTaskLogUpsertOne {
+	return u.Update(func(s *SocialTaskLogUpsert) {
+		s.SetTemplateSnapshot(v)
+	})
+}
+
+// UpdateTemplateSnapshot sets the "template_snapshot" field to the value that was provided on create.
+func (u *SocialTaskLogUpsertOne) UpdateTemplateSnapshot() *SocialTaskLogUpsertOne {
+	return u.Update(func(s *SocialTaskLogUpsert) {
+		s.UpdateTemplateSnapshot()
+	})
+}
+
+// ClearTemplateSnapshot clears the value of the "template_snapshot" field.
+func (u *SocialTaskLogUpsertOne) ClearTemplateSnapshot() *SocialTaskLogUpsertOne {
+	return u.Update(func(s *SocialTaskLogUpsert) {
+		s.ClearTemplateSnapshot()
 	})
 }
 
@@ -1514,6 +1629,48 @@ func (u *SocialTaskLogUpsertBulk) UpdateContent() *SocialTaskLogUpsertBulk {
 func (u *SocialTaskLogUpsertBulk) ClearContent() *SocialTaskLogUpsertBulk {
 	return u.Update(func(s *SocialTaskLogUpsert) {
 		s.ClearContent()
+	})
+}
+
+// SetPayload sets the "payload" field.
+func (u *SocialTaskLogUpsertBulk) SetPayload(v domain.SocialTaskPayload) *SocialTaskLogUpsertBulk {
+	return u.Update(func(s *SocialTaskLogUpsert) {
+		s.SetPayload(v)
+	})
+}
+
+// UpdatePayload sets the "payload" field to the value that was provided on create.
+func (u *SocialTaskLogUpsertBulk) UpdatePayload() *SocialTaskLogUpsertBulk {
+	return u.Update(func(s *SocialTaskLogUpsert) {
+		s.UpdatePayload()
+	})
+}
+
+// ClearPayload clears the value of the "payload" field.
+func (u *SocialTaskLogUpsertBulk) ClearPayload() *SocialTaskLogUpsertBulk {
+	return u.Update(func(s *SocialTaskLogUpsert) {
+		s.ClearPayload()
+	})
+}
+
+// SetTemplateSnapshot sets the "template_snapshot" field.
+func (u *SocialTaskLogUpsertBulk) SetTemplateSnapshot(v domain.SocialTaskTemplateSnapshot) *SocialTaskLogUpsertBulk {
+	return u.Update(func(s *SocialTaskLogUpsert) {
+		s.SetTemplateSnapshot(v)
+	})
+}
+
+// UpdateTemplateSnapshot sets the "template_snapshot" field to the value that was provided on create.
+func (u *SocialTaskLogUpsertBulk) UpdateTemplateSnapshot() *SocialTaskLogUpsertBulk {
+	return u.Update(func(s *SocialTaskLogUpsert) {
+		s.UpdateTemplateSnapshot()
+	})
+}
+
+// ClearTemplateSnapshot clears the value of the "template_snapshot" field.
+func (u *SocialTaskLogUpsertBulk) ClearTemplateSnapshot() *SocialTaskLogUpsertBulk {
+	return u.Update(func(s *SocialTaskLogUpsert) {
+		s.ClearTemplateSnapshot()
 	})
 }
 

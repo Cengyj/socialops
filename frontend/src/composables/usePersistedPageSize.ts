@@ -1,4 +1,5 @@
 import { getConfiguredTableDefaultPageSize, normalizeTablePageSize } from '@/utils/tablePreferences'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 const STORAGE_KEY = 'table-page-size'
 const STORAGE_SOURCE_KEY = 'table-page-size-source'
@@ -17,7 +18,7 @@ export function getPersistedPageSize(fallback = getConfiguredTableDefaultPageSiz
         }
       }
     } catch (error) {
-      console.warn('Failed to read persisted page size:', error)
+      recordClientDiagnostic('tablePageSize.readPersisted', error)
     }
   }
   return normalizeTablePageSize(getConfiguredTableDefaultPageSize() || fallback)
@@ -29,6 +30,6 @@ export function setPersistedPageSize(size: number): void {
     window.localStorage.setItem(STORAGE_KEY, String(size))
     window.localStorage.removeItem(STORAGE_SOURCE_KEY)
   } catch (error) {
-    console.warn('Failed to persist page size:', error)
+    recordClientDiagnostic('tablePageSize.writePersisted', error)
   }
 }

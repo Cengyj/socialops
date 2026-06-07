@@ -1,5 +1,5 @@
 [Unit]
-Description=SocialOps - Social Account Rental & Task Distribution Platform
+Description=SocialOps - Website Account Pool Social Operations Platform
 Documentation=https://github.com/Wei-Shaw/socialops
 After=network.target postgresql.service redis.service
 Wants=postgresql.service redis.service
@@ -25,7 +25,7 @@ ReadWritePaths=/opt/socialops
 
 # Environment - Server configuration
 # Modify these values to change listen address and port
-Environment=GIN_MODE=release
+Environment=SERVER_MODE=release
 Environment=SERVER_HOST=0.0.0.0
 Environment=SERVER_PORT=8080
 

@@ -90,9 +90,19 @@ func NameKey(v string) predicate.SocialAccount {
 	return predicate.SocialAccount(sql.FieldEQ(FieldNameKey, v))
 }
 
-// AccountID applies equality check predicate on the "account_id" field. It's identical to AccountIDEQ.
-func AccountID(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldEQ(FieldAccountID, v))
+// IdentityKind applies equality check predicate on the "identity_kind" field. It's identical to IdentityKindEQ.
+func IdentityKind(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldIdentityKind, v))
+}
+
+// IdentityKey applies equality check predicate on the "identity_key" field. It's identical to IdentityKeyEQ.
+func IdentityKey(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldIdentityKey, v))
+}
+
+// PlatformUserID applies equality check predicate on the "platform_user_id" field. It's identical to PlatformUserIDEQ.
+func PlatformUserID(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldPlatformUserID, v))
 }
 
 // Password applies equality check predicate on the "password" field. It's identical to PasswordEQ.
@@ -115,6 +125,41 @@ func EmailPassword(v string) predicate.SocialAccount {
 	return predicate.SocialAccount(sql.FieldEQ(FieldEmailPassword, v))
 }
 
+// TwoFactor applies equality check predicate on the "two_factor" field. It's identical to TwoFactorEQ.
+func TwoFactor(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldTwoFactor, v))
+}
+
+// BackupCode applies equality check predicate on the "backup_code" field. It's identical to BackupCodeEQ.
+func BackupCode(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldBackupCode, v))
+}
+
+// EmailClientID applies equality check predicate on the "email_client_id" field. It's identical to EmailClientIDEQ.
+func EmailClientID(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldEmailClientID, v))
+}
+
+// EmailToken applies equality check predicate on the "email_token" field. It's identical to EmailTokenEQ.
+func EmailToken(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldEmailToken, v))
+}
+
+// RegistrationIP applies equality check predicate on the "registration_ip" field. It's identical to RegistrationIPEQ.
+func RegistrationIP(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldRegistrationIP, v))
+}
+
+// AuthCookie applies equality check predicate on the "auth_cookie" field. It's identical to AuthCookieEQ.
+func AuthCookie(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldAuthCookie, v))
+}
+
+// ExecutionAuth applies equality check predicate on the "execution_auth" field. It's identical to ExecutionAuthEQ.
+func ExecutionAuth(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldExecutionAuth, v))
+}
+
 // AccountStatus applies equality check predicate on the "account_status" field. It's identical to AccountStatusEQ.
 func AccountStatus(v string) predicate.SocialAccount {
 	return predicate.SocialAccount(sql.FieldEQ(FieldAccountStatus, v))
@@ -130,19 +175,19 @@ func TaskMessage(v string) predicate.SocialAccount {
 	return predicate.SocialAccount(sql.FieldEQ(FieldTaskMessage, v))
 }
 
-// Source applies equality check predicate on the "source" field. It's identical to SourceEQ.
-func Source(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldEQ(FieldSource, v))
-}
-
-// BoundIP applies equality check predicate on the "bound_ip" field. It's identical to BoundIPEQ.
-func BoundIP(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldEQ(FieldBoundIP, v))
+// DefaultProxySnapshot applies equality check predicate on the "default_proxy_snapshot" field. It's identical to DefaultProxySnapshotEQ.
+func DefaultProxySnapshot(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldDefaultProxySnapshot, v))
 }
 
 // AssignedUserID applies equality check predicate on the "assigned_user_id" field. It's identical to AssignedUserIDEQ.
 func AssignedUserID(v int64) predicate.SocialAccount {
 	return predicate.SocialAccount(sql.FieldEQ(FieldAssignedUserID, v))
+}
+
+// UserWorkbenchDeletedAt applies equality check predicate on the "user_workbench_deleted_at" field. It's identical to UserWorkbenchDeletedAtEQ.
+func UserWorkbenchDeletedAt(v time.Time) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldUserWorkbenchDeletedAt, v))
 }
 
 // Remark applies equality check predicate on the "remark" field. It's identical to RemarkEQ.
@@ -540,79 +585,209 @@ func NameKeyContainsFold(v string) predicate.SocialAccount {
 	return predicate.SocialAccount(sql.FieldContainsFold(FieldNameKey, v))
 }
 
-// AccountIDEQ applies the EQ predicate on the "account_id" field.
-func AccountIDEQ(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldEQ(FieldAccountID, v))
+// IdentityKindEQ applies the EQ predicate on the "identity_kind" field.
+func IdentityKindEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldIdentityKind, v))
 }
 
-// AccountIDNEQ applies the NEQ predicate on the "account_id" field.
-func AccountIDNEQ(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldNEQ(FieldAccountID, v))
+// IdentityKindNEQ applies the NEQ predicate on the "identity_kind" field.
+func IdentityKindNEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNEQ(FieldIdentityKind, v))
 }
 
-// AccountIDIn applies the In predicate on the "account_id" field.
-func AccountIDIn(vs ...string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldIn(FieldAccountID, vs...))
+// IdentityKindIn applies the In predicate on the "identity_kind" field.
+func IdentityKindIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIn(FieldIdentityKind, vs...))
 }
 
-// AccountIDNotIn applies the NotIn predicate on the "account_id" field.
-func AccountIDNotIn(vs ...string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldNotIn(FieldAccountID, vs...))
+// IdentityKindNotIn applies the NotIn predicate on the "identity_kind" field.
+func IdentityKindNotIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotIn(FieldIdentityKind, vs...))
 }
 
-// AccountIDGT applies the GT predicate on the "account_id" field.
-func AccountIDGT(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldGT(FieldAccountID, v))
+// IdentityKindGT applies the GT predicate on the "identity_kind" field.
+func IdentityKindGT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGT(FieldIdentityKind, v))
 }
 
-// AccountIDGTE applies the GTE predicate on the "account_id" field.
-func AccountIDGTE(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldGTE(FieldAccountID, v))
+// IdentityKindGTE applies the GTE predicate on the "identity_kind" field.
+func IdentityKindGTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGTE(FieldIdentityKind, v))
 }
 
-// AccountIDLT applies the LT predicate on the "account_id" field.
-func AccountIDLT(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldLT(FieldAccountID, v))
+// IdentityKindLT applies the LT predicate on the "identity_kind" field.
+func IdentityKindLT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLT(FieldIdentityKind, v))
 }
 
-// AccountIDLTE applies the LTE predicate on the "account_id" field.
-func AccountIDLTE(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldLTE(FieldAccountID, v))
+// IdentityKindLTE applies the LTE predicate on the "identity_kind" field.
+func IdentityKindLTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLTE(FieldIdentityKind, v))
 }
 
-// AccountIDContains applies the Contains predicate on the "account_id" field.
-func AccountIDContains(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldContains(FieldAccountID, v))
+// IdentityKindContains applies the Contains predicate on the "identity_kind" field.
+func IdentityKindContains(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContains(FieldIdentityKind, v))
 }
 
-// AccountIDHasPrefix applies the HasPrefix predicate on the "account_id" field.
-func AccountIDHasPrefix(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldHasPrefix(FieldAccountID, v))
+// IdentityKindHasPrefix applies the HasPrefix predicate on the "identity_kind" field.
+func IdentityKindHasPrefix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasPrefix(FieldIdentityKind, v))
 }
 
-// AccountIDHasSuffix applies the HasSuffix predicate on the "account_id" field.
-func AccountIDHasSuffix(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldHasSuffix(FieldAccountID, v))
+// IdentityKindHasSuffix applies the HasSuffix predicate on the "identity_kind" field.
+func IdentityKindHasSuffix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasSuffix(FieldIdentityKind, v))
 }
 
-// AccountIDIsNil applies the IsNil predicate on the "account_id" field.
-func AccountIDIsNil() predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldIsNull(FieldAccountID))
+// IdentityKindEqualFold applies the EqualFold predicate on the "identity_kind" field.
+func IdentityKindEqualFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEqualFold(FieldIdentityKind, v))
 }
 
-// AccountIDNotNil applies the NotNil predicate on the "account_id" field.
-func AccountIDNotNil() predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldNotNull(FieldAccountID))
+// IdentityKindContainsFold applies the ContainsFold predicate on the "identity_kind" field.
+func IdentityKindContainsFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContainsFold(FieldIdentityKind, v))
 }
 
-// AccountIDEqualFold applies the EqualFold predicate on the "account_id" field.
-func AccountIDEqualFold(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldEqualFold(FieldAccountID, v))
+// IdentityKeyEQ applies the EQ predicate on the "identity_key" field.
+func IdentityKeyEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldIdentityKey, v))
 }
 
-// AccountIDContainsFold applies the ContainsFold predicate on the "account_id" field.
-func AccountIDContainsFold(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldContainsFold(FieldAccountID, v))
+// IdentityKeyNEQ applies the NEQ predicate on the "identity_key" field.
+func IdentityKeyNEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNEQ(FieldIdentityKey, v))
+}
+
+// IdentityKeyIn applies the In predicate on the "identity_key" field.
+func IdentityKeyIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIn(FieldIdentityKey, vs...))
+}
+
+// IdentityKeyNotIn applies the NotIn predicate on the "identity_key" field.
+func IdentityKeyNotIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotIn(FieldIdentityKey, vs...))
+}
+
+// IdentityKeyGT applies the GT predicate on the "identity_key" field.
+func IdentityKeyGT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGT(FieldIdentityKey, v))
+}
+
+// IdentityKeyGTE applies the GTE predicate on the "identity_key" field.
+func IdentityKeyGTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGTE(FieldIdentityKey, v))
+}
+
+// IdentityKeyLT applies the LT predicate on the "identity_key" field.
+func IdentityKeyLT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLT(FieldIdentityKey, v))
+}
+
+// IdentityKeyLTE applies the LTE predicate on the "identity_key" field.
+func IdentityKeyLTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLTE(FieldIdentityKey, v))
+}
+
+// IdentityKeyContains applies the Contains predicate on the "identity_key" field.
+func IdentityKeyContains(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContains(FieldIdentityKey, v))
+}
+
+// IdentityKeyHasPrefix applies the HasPrefix predicate on the "identity_key" field.
+func IdentityKeyHasPrefix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasPrefix(FieldIdentityKey, v))
+}
+
+// IdentityKeyHasSuffix applies the HasSuffix predicate on the "identity_key" field.
+func IdentityKeyHasSuffix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasSuffix(FieldIdentityKey, v))
+}
+
+// IdentityKeyEqualFold applies the EqualFold predicate on the "identity_key" field.
+func IdentityKeyEqualFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEqualFold(FieldIdentityKey, v))
+}
+
+// IdentityKeyContainsFold applies the ContainsFold predicate on the "identity_key" field.
+func IdentityKeyContainsFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContainsFold(FieldIdentityKey, v))
+}
+
+// PlatformUserIDEQ applies the EQ predicate on the "platform_user_id" field.
+func PlatformUserIDEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldPlatformUserID, v))
+}
+
+// PlatformUserIDNEQ applies the NEQ predicate on the "platform_user_id" field.
+func PlatformUserIDNEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNEQ(FieldPlatformUserID, v))
+}
+
+// PlatformUserIDIn applies the In predicate on the "platform_user_id" field.
+func PlatformUserIDIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIn(FieldPlatformUserID, vs...))
+}
+
+// PlatformUserIDNotIn applies the NotIn predicate on the "platform_user_id" field.
+func PlatformUserIDNotIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotIn(FieldPlatformUserID, vs...))
+}
+
+// PlatformUserIDGT applies the GT predicate on the "platform_user_id" field.
+func PlatformUserIDGT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGT(FieldPlatformUserID, v))
+}
+
+// PlatformUserIDGTE applies the GTE predicate on the "platform_user_id" field.
+func PlatformUserIDGTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGTE(FieldPlatformUserID, v))
+}
+
+// PlatformUserIDLT applies the LT predicate on the "platform_user_id" field.
+func PlatformUserIDLT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLT(FieldPlatformUserID, v))
+}
+
+// PlatformUserIDLTE applies the LTE predicate on the "platform_user_id" field.
+func PlatformUserIDLTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLTE(FieldPlatformUserID, v))
+}
+
+// PlatformUserIDContains applies the Contains predicate on the "platform_user_id" field.
+func PlatformUserIDContains(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContains(FieldPlatformUserID, v))
+}
+
+// PlatformUserIDHasPrefix applies the HasPrefix predicate on the "platform_user_id" field.
+func PlatformUserIDHasPrefix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasPrefix(FieldPlatformUserID, v))
+}
+
+// PlatformUserIDHasSuffix applies the HasSuffix predicate on the "platform_user_id" field.
+func PlatformUserIDHasSuffix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasSuffix(FieldPlatformUserID, v))
+}
+
+// PlatformUserIDIsNil applies the IsNil predicate on the "platform_user_id" field.
+func PlatformUserIDIsNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIsNull(FieldPlatformUserID))
+}
+
+// PlatformUserIDNotNil applies the NotNil predicate on the "platform_user_id" field.
+func PlatformUserIDNotNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotNull(FieldPlatformUserID))
+}
+
+// PlatformUserIDEqualFold applies the EqualFold predicate on the "platform_user_id" field.
+func PlatformUserIDEqualFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEqualFold(FieldPlatformUserID, v))
+}
+
+// PlatformUserIDContainsFold applies the ContainsFold predicate on the "platform_user_id" field.
+func PlatformUserIDContainsFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContainsFold(FieldPlatformUserID, v))
 }
 
 // PasswordEQ applies the EQ predicate on the "password" field.
@@ -915,6 +1090,531 @@ func EmailPasswordContainsFold(v string) predicate.SocialAccount {
 	return predicate.SocialAccount(sql.FieldContainsFold(FieldEmailPassword, v))
 }
 
+// TwoFactorEQ applies the EQ predicate on the "two_factor" field.
+func TwoFactorEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldTwoFactor, v))
+}
+
+// TwoFactorNEQ applies the NEQ predicate on the "two_factor" field.
+func TwoFactorNEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNEQ(FieldTwoFactor, v))
+}
+
+// TwoFactorIn applies the In predicate on the "two_factor" field.
+func TwoFactorIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIn(FieldTwoFactor, vs...))
+}
+
+// TwoFactorNotIn applies the NotIn predicate on the "two_factor" field.
+func TwoFactorNotIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotIn(FieldTwoFactor, vs...))
+}
+
+// TwoFactorGT applies the GT predicate on the "two_factor" field.
+func TwoFactorGT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGT(FieldTwoFactor, v))
+}
+
+// TwoFactorGTE applies the GTE predicate on the "two_factor" field.
+func TwoFactorGTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGTE(FieldTwoFactor, v))
+}
+
+// TwoFactorLT applies the LT predicate on the "two_factor" field.
+func TwoFactorLT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLT(FieldTwoFactor, v))
+}
+
+// TwoFactorLTE applies the LTE predicate on the "two_factor" field.
+func TwoFactorLTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLTE(FieldTwoFactor, v))
+}
+
+// TwoFactorContains applies the Contains predicate on the "two_factor" field.
+func TwoFactorContains(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContains(FieldTwoFactor, v))
+}
+
+// TwoFactorHasPrefix applies the HasPrefix predicate on the "two_factor" field.
+func TwoFactorHasPrefix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasPrefix(FieldTwoFactor, v))
+}
+
+// TwoFactorHasSuffix applies the HasSuffix predicate on the "two_factor" field.
+func TwoFactorHasSuffix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasSuffix(FieldTwoFactor, v))
+}
+
+// TwoFactorIsNil applies the IsNil predicate on the "two_factor" field.
+func TwoFactorIsNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIsNull(FieldTwoFactor))
+}
+
+// TwoFactorNotNil applies the NotNil predicate on the "two_factor" field.
+func TwoFactorNotNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotNull(FieldTwoFactor))
+}
+
+// TwoFactorEqualFold applies the EqualFold predicate on the "two_factor" field.
+func TwoFactorEqualFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEqualFold(FieldTwoFactor, v))
+}
+
+// TwoFactorContainsFold applies the ContainsFold predicate on the "two_factor" field.
+func TwoFactorContainsFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContainsFold(FieldTwoFactor, v))
+}
+
+// BackupCodeEQ applies the EQ predicate on the "backup_code" field.
+func BackupCodeEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldBackupCode, v))
+}
+
+// BackupCodeNEQ applies the NEQ predicate on the "backup_code" field.
+func BackupCodeNEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNEQ(FieldBackupCode, v))
+}
+
+// BackupCodeIn applies the In predicate on the "backup_code" field.
+func BackupCodeIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIn(FieldBackupCode, vs...))
+}
+
+// BackupCodeNotIn applies the NotIn predicate on the "backup_code" field.
+func BackupCodeNotIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotIn(FieldBackupCode, vs...))
+}
+
+// BackupCodeGT applies the GT predicate on the "backup_code" field.
+func BackupCodeGT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGT(FieldBackupCode, v))
+}
+
+// BackupCodeGTE applies the GTE predicate on the "backup_code" field.
+func BackupCodeGTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGTE(FieldBackupCode, v))
+}
+
+// BackupCodeLT applies the LT predicate on the "backup_code" field.
+func BackupCodeLT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLT(FieldBackupCode, v))
+}
+
+// BackupCodeLTE applies the LTE predicate on the "backup_code" field.
+func BackupCodeLTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLTE(FieldBackupCode, v))
+}
+
+// BackupCodeContains applies the Contains predicate on the "backup_code" field.
+func BackupCodeContains(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContains(FieldBackupCode, v))
+}
+
+// BackupCodeHasPrefix applies the HasPrefix predicate on the "backup_code" field.
+func BackupCodeHasPrefix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasPrefix(FieldBackupCode, v))
+}
+
+// BackupCodeHasSuffix applies the HasSuffix predicate on the "backup_code" field.
+func BackupCodeHasSuffix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasSuffix(FieldBackupCode, v))
+}
+
+// BackupCodeIsNil applies the IsNil predicate on the "backup_code" field.
+func BackupCodeIsNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIsNull(FieldBackupCode))
+}
+
+// BackupCodeNotNil applies the NotNil predicate on the "backup_code" field.
+func BackupCodeNotNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotNull(FieldBackupCode))
+}
+
+// BackupCodeEqualFold applies the EqualFold predicate on the "backup_code" field.
+func BackupCodeEqualFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEqualFold(FieldBackupCode, v))
+}
+
+// BackupCodeContainsFold applies the ContainsFold predicate on the "backup_code" field.
+func BackupCodeContainsFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContainsFold(FieldBackupCode, v))
+}
+
+// EmailClientIDEQ applies the EQ predicate on the "email_client_id" field.
+func EmailClientIDEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldEmailClientID, v))
+}
+
+// EmailClientIDNEQ applies the NEQ predicate on the "email_client_id" field.
+func EmailClientIDNEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNEQ(FieldEmailClientID, v))
+}
+
+// EmailClientIDIn applies the In predicate on the "email_client_id" field.
+func EmailClientIDIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIn(FieldEmailClientID, vs...))
+}
+
+// EmailClientIDNotIn applies the NotIn predicate on the "email_client_id" field.
+func EmailClientIDNotIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotIn(FieldEmailClientID, vs...))
+}
+
+// EmailClientIDGT applies the GT predicate on the "email_client_id" field.
+func EmailClientIDGT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGT(FieldEmailClientID, v))
+}
+
+// EmailClientIDGTE applies the GTE predicate on the "email_client_id" field.
+func EmailClientIDGTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGTE(FieldEmailClientID, v))
+}
+
+// EmailClientIDLT applies the LT predicate on the "email_client_id" field.
+func EmailClientIDLT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLT(FieldEmailClientID, v))
+}
+
+// EmailClientIDLTE applies the LTE predicate on the "email_client_id" field.
+func EmailClientIDLTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLTE(FieldEmailClientID, v))
+}
+
+// EmailClientIDContains applies the Contains predicate on the "email_client_id" field.
+func EmailClientIDContains(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContains(FieldEmailClientID, v))
+}
+
+// EmailClientIDHasPrefix applies the HasPrefix predicate on the "email_client_id" field.
+func EmailClientIDHasPrefix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasPrefix(FieldEmailClientID, v))
+}
+
+// EmailClientIDHasSuffix applies the HasSuffix predicate on the "email_client_id" field.
+func EmailClientIDHasSuffix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasSuffix(FieldEmailClientID, v))
+}
+
+// EmailClientIDIsNil applies the IsNil predicate on the "email_client_id" field.
+func EmailClientIDIsNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIsNull(FieldEmailClientID))
+}
+
+// EmailClientIDNotNil applies the NotNil predicate on the "email_client_id" field.
+func EmailClientIDNotNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotNull(FieldEmailClientID))
+}
+
+// EmailClientIDEqualFold applies the EqualFold predicate on the "email_client_id" field.
+func EmailClientIDEqualFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEqualFold(FieldEmailClientID, v))
+}
+
+// EmailClientIDContainsFold applies the ContainsFold predicate on the "email_client_id" field.
+func EmailClientIDContainsFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContainsFold(FieldEmailClientID, v))
+}
+
+// EmailTokenEQ applies the EQ predicate on the "email_token" field.
+func EmailTokenEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldEmailToken, v))
+}
+
+// EmailTokenNEQ applies the NEQ predicate on the "email_token" field.
+func EmailTokenNEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNEQ(FieldEmailToken, v))
+}
+
+// EmailTokenIn applies the In predicate on the "email_token" field.
+func EmailTokenIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIn(FieldEmailToken, vs...))
+}
+
+// EmailTokenNotIn applies the NotIn predicate on the "email_token" field.
+func EmailTokenNotIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotIn(FieldEmailToken, vs...))
+}
+
+// EmailTokenGT applies the GT predicate on the "email_token" field.
+func EmailTokenGT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGT(FieldEmailToken, v))
+}
+
+// EmailTokenGTE applies the GTE predicate on the "email_token" field.
+func EmailTokenGTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGTE(FieldEmailToken, v))
+}
+
+// EmailTokenLT applies the LT predicate on the "email_token" field.
+func EmailTokenLT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLT(FieldEmailToken, v))
+}
+
+// EmailTokenLTE applies the LTE predicate on the "email_token" field.
+func EmailTokenLTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLTE(FieldEmailToken, v))
+}
+
+// EmailTokenContains applies the Contains predicate on the "email_token" field.
+func EmailTokenContains(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContains(FieldEmailToken, v))
+}
+
+// EmailTokenHasPrefix applies the HasPrefix predicate on the "email_token" field.
+func EmailTokenHasPrefix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasPrefix(FieldEmailToken, v))
+}
+
+// EmailTokenHasSuffix applies the HasSuffix predicate on the "email_token" field.
+func EmailTokenHasSuffix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasSuffix(FieldEmailToken, v))
+}
+
+// EmailTokenIsNil applies the IsNil predicate on the "email_token" field.
+func EmailTokenIsNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIsNull(FieldEmailToken))
+}
+
+// EmailTokenNotNil applies the NotNil predicate on the "email_token" field.
+func EmailTokenNotNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotNull(FieldEmailToken))
+}
+
+// EmailTokenEqualFold applies the EqualFold predicate on the "email_token" field.
+func EmailTokenEqualFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEqualFold(FieldEmailToken, v))
+}
+
+// EmailTokenContainsFold applies the ContainsFold predicate on the "email_token" field.
+func EmailTokenContainsFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContainsFold(FieldEmailToken, v))
+}
+
+// RegistrationIPEQ applies the EQ predicate on the "registration_ip" field.
+func RegistrationIPEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldRegistrationIP, v))
+}
+
+// RegistrationIPNEQ applies the NEQ predicate on the "registration_ip" field.
+func RegistrationIPNEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNEQ(FieldRegistrationIP, v))
+}
+
+// RegistrationIPIn applies the In predicate on the "registration_ip" field.
+func RegistrationIPIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIn(FieldRegistrationIP, vs...))
+}
+
+// RegistrationIPNotIn applies the NotIn predicate on the "registration_ip" field.
+func RegistrationIPNotIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotIn(FieldRegistrationIP, vs...))
+}
+
+// RegistrationIPGT applies the GT predicate on the "registration_ip" field.
+func RegistrationIPGT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGT(FieldRegistrationIP, v))
+}
+
+// RegistrationIPGTE applies the GTE predicate on the "registration_ip" field.
+func RegistrationIPGTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGTE(FieldRegistrationIP, v))
+}
+
+// RegistrationIPLT applies the LT predicate on the "registration_ip" field.
+func RegistrationIPLT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLT(FieldRegistrationIP, v))
+}
+
+// RegistrationIPLTE applies the LTE predicate on the "registration_ip" field.
+func RegistrationIPLTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLTE(FieldRegistrationIP, v))
+}
+
+// RegistrationIPContains applies the Contains predicate on the "registration_ip" field.
+func RegistrationIPContains(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContains(FieldRegistrationIP, v))
+}
+
+// RegistrationIPHasPrefix applies the HasPrefix predicate on the "registration_ip" field.
+func RegistrationIPHasPrefix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasPrefix(FieldRegistrationIP, v))
+}
+
+// RegistrationIPHasSuffix applies the HasSuffix predicate on the "registration_ip" field.
+func RegistrationIPHasSuffix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasSuffix(FieldRegistrationIP, v))
+}
+
+// RegistrationIPIsNil applies the IsNil predicate on the "registration_ip" field.
+func RegistrationIPIsNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIsNull(FieldRegistrationIP))
+}
+
+// RegistrationIPNotNil applies the NotNil predicate on the "registration_ip" field.
+func RegistrationIPNotNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotNull(FieldRegistrationIP))
+}
+
+// RegistrationIPEqualFold applies the EqualFold predicate on the "registration_ip" field.
+func RegistrationIPEqualFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEqualFold(FieldRegistrationIP, v))
+}
+
+// RegistrationIPContainsFold applies the ContainsFold predicate on the "registration_ip" field.
+func RegistrationIPContainsFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContainsFold(FieldRegistrationIP, v))
+}
+
+// AuthCookieEQ applies the EQ predicate on the "auth_cookie" field.
+func AuthCookieEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldAuthCookie, v))
+}
+
+// AuthCookieNEQ applies the NEQ predicate on the "auth_cookie" field.
+func AuthCookieNEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNEQ(FieldAuthCookie, v))
+}
+
+// AuthCookieIn applies the In predicate on the "auth_cookie" field.
+func AuthCookieIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIn(FieldAuthCookie, vs...))
+}
+
+// AuthCookieNotIn applies the NotIn predicate on the "auth_cookie" field.
+func AuthCookieNotIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotIn(FieldAuthCookie, vs...))
+}
+
+// AuthCookieGT applies the GT predicate on the "auth_cookie" field.
+func AuthCookieGT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGT(FieldAuthCookie, v))
+}
+
+// AuthCookieGTE applies the GTE predicate on the "auth_cookie" field.
+func AuthCookieGTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGTE(FieldAuthCookie, v))
+}
+
+// AuthCookieLT applies the LT predicate on the "auth_cookie" field.
+func AuthCookieLT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLT(FieldAuthCookie, v))
+}
+
+// AuthCookieLTE applies the LTE predicate on the "auth_cookie" field.
+func AuthCookieLTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLTE(FieldAuthCookie, v))
+}
+
+// AuthCookieContains applies the Contains predicate on the "auth_cookie" field.
+func AuthCookieContains(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContains(FieldAuthCookie, v))
+}
+
+// AuthCookieHasPrefix applies the HasPrefix predicate on the "auth_cookie" field.
+func AuthCookieHasPrefix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasPrefix(FieldAuthCookie, v))
+}
+
+// AuthCookieHasSuffix applies the HasSuffix predicate on the "auth_cookie" field.
+func AuthCookieHasSuffix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasSuffix(FieldAuthCookie, v))
+}
+
+// AuthCookieIsNil applies the IsNil predicate on the "auth_cookie" field.
+func AuthCookieIsNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIsNull(FieldAuthCookie))
+}
+
+// AuthCookieNotNil applies the NotNil predicate on the "auth_cookie" field.
+func AuthCookieNotNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotNull(FieldAuthCookie))
+}
+
+// AuthCookieEqualFold applies the EqualFold predicate on the "auth_cookie" field.
+func AuthCookieEqualFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEqualFold(FieldAuthCookie, v))
+}
+
+// AuthCookieContainsFold applies the ContainsFold predicate on the "auth_cookie" field.
+func AuthCookieContainsFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContainsFold(FieldAuthCookie, v))
+}
+
+// ExecutionAuthEQ applies the EQ predicate on the "execution_auth" field.
+func ExecutionAuthEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldExecutionAuth, v))
+}
+
+// ExecutionAuthNEQ applies the NEQ predicate on the "execution_auth" field.
+func ExecutionAuthNEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNEQ(FieldExecutionAuth, v))
+}
+
+// ExecutionAuthIn applies the In predicate on the "execution_auth" field.
+func ExecutionAuthIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIn(FieldExecutionAuth, vs...))
+}
+
+// ExecutionAuthNotIn applies the NotIn predicate on the "execution_auth" field.
+func ExecutionAuthNotIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotIn(FieldExecutionAuth, vs...))
+}
+
+// ExecutionAuthGT applies the GT predicate on the "execution_auth" field.
+func ExecutionAuthGT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGT(FieldExecutionAuth, v))
+}
+
+// ExecutionAuthGTE applies the GTE predicate on the "execution_auth" field.
+func ExecutionAuthGTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGTE(FieldExecutionAuth, v))
+}
+
+// ExecutionAuthLT applies the LT predicate on the "execution_auth" field.
+func ExecutionAuthLT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLT(FieldExecutionAuth, v))
+}
+
+// ExecutionAuthLTE applies the LTE predicate on the "execution_auth" field.
+func ExecutionAuthLTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLTE(FieldExecutionAuth, v))
+}
+
+// ExecutionAuthContains applies the Contains predicate on the "execution_auth" field.
+func ExecutionAuthContains(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContains(FieldExecutionAuth, v))
+}
+
+// ExecutionAuthHasPrefix applies the HasPrefix predicate on the "execution_auth" field.
+func ExecutionAuthHasPrefix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasPrefix(FieldExecutionAuth, v))
+}
+
+// ExecutionAuthHasSuffix applies the HasSuffix predicate on the "execution_auth" field.
+func ExecutionAuthHasSuffix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasSuffix(FieldExecutionAuth, v))
+}
+
+// ExecutionAuthIsNil applies the IsNil predicate on the "execution_auth" field.
+func ExecutionAuthIsNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIsNull(FieldExecutionAuth))
+}
+
+// ExecutionAuthNotNil applies the NotNil predicate on the "execution_auth" field.
+func ExecutionAuthNotNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotNull(FieldExecutionAuth))
+}
+
+// ExecutionAuthEqualFold applies the EqualFold predicate on the "execution_auth" field.
+func ExecutionAuthEqualFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEqualFold(FieldExecutionAuth, v))
+}
+
+// ExecutionAuthContainsFold applies the ContainsFold predicate on the "execution_auth" field.
+func ExecutionAuthContainsFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContainsFold(FieldExecutionAuth, v))
+}
+
 // AccountStatusEQ applies the EQ predicate on the "account_status" field.
 func AccountStatusEQ(v string) predicate.SocialAccount {
 	return predicate.SocialAccount(sql.FieldEQ(FieldAccountStatus, v))
@@ -1120,144 +1820,79 @@ func TaskMessageContainsFold(v string) predicate.SocialAccount {
 	return predicate.SocialAccount(sql.FieldContainsFold(FieldTaskMessage, v))
 }
 
-// SourceEQ applies the EQ predicate on the "source" field.
-func SourceEQ(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldEQ(FieldSource, v))
+// DefaultProxySnapshotEQ applies the EQ predicate on the "default_proxy_snapshot" field.
+func DefaultProxySnapshotEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldDefaultProxySnapshot, v))
 }
 
-// SourceNEQ applies the NEQ predicate on the "source" field.
-func SourceNEQ(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldNEQ(FieldSource, v))
+// DefaultProxySnapshotNEQ applies the NEQ predicate on the "default_proxy_snapshot" field.
+func DefaultProxySnapshotNEQ(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNEQ(FieldDefaultProxySnapshot, v))
 }
 
-// SourceIn applies the In predicate on the "source" field.
-func SourceIn(vs ...string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldIn(FieldSource, vs...))
+// DefaultProxySnapshotIn applies the In predicate on the "default_proxy_snapshot" field.
+func DefaultProxySnapshotIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIn(FieldDefaultProxySnapshot, vs...))
 }
 
-// SourceNotIn applies the NotIn predicate on the "source" field.
-func SourceNotIn(vs ...string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldNotIn(FieldSource, vs...))
+// DefaultProxySnapshotNotIn applies the NotIn predicate on the "default_proxy_snapshot" field.
+func DefaultProxySnapshotNotIn(vs ...string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotIn(FieldDefaultProxySnapshot, vs...))
 }
 
-// SourceGT applies the GT predicate on the "source" field.
-func SourceGT(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldGT(FieldSource, v))
+// DefaultProxySnapshotGT applies the GT predicate on the "default_proxy_snapshot" field.
+func DefaultProxySnapshotGT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGT(FieldDefaultProxySnapshot, v))
 }
 
-// SourceGTE applies the GTE predicate on the "source" field.
-func SourceGTE(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldGTE(FieldSource, v))
+// DefaultProxySnapshotGTE applies the GTE predicate on the "default_proxy_snapshot" field.
+func DefaultProxySnapshotGTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGTE(FieldDefaultProxySnapshot, v))
 }
 
-// SourceLT applies the LT predicate on the "source" field.
-func SourceLT(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldLT(FieldSource, v))
+// DefaultProxySnapshotLT applies the LT predicate on the "default_proxy_snapshot" field.
+func DefaultProxySnapshotLT(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLT(FieldDefaultProxySnapshot, v))
 }
 
-// SourceLTE applies the LTE predicate on the "source" field.
-func SourceLTE(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldLTE(FieldSource, v))
+// DefaultProxySnapshotLTE applies the LTE predicate on the "default_proxy_snapshot" field.
+func DefaultProxySnapshotLTE(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLTE(FieldDefaultProxySnapshot, v))
 }
 
-// SourceContains applies the Contains predicate on the "source" field.
-func SourceContains(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldContains(FieldSource, v))
+// DefaultProxySnapshotContains applies the Contains predicate on the "default_proxy_snapshot" field.
+func DefaultProxySnapshotContains(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContains(FieldDefaultProxySnapshot, v))
 }
 
-// SourceHasPrefix applies the HasPrefix predicate on the "source" field.
-func SourceHasPrefix(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldHasPrefix(FieldSource, v))
+// DefaultProxySnapshotHasPrefix applies the HasPrefix predicate on the "default_proxy_snapshot" field.
+func DefaultProxySnapshotHasPrefix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasPrefix(FieldDefaultProxySnapshot, v))
 }
 
-// SourceHasSuffix applies the HasSuffix predicate on the "source" field.
-func SourceHasSuffix(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldHasSuffix(FieldSource, v))
+// DefaultProxySnapshotHasSuffix applies the HasSuffix predicate on the "default_proxy_snapshot" field.
+func DefaultProxySnapshotHasSuffix(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldHasSuffix(FieldDefaultProxySnapshot, v))
 }
 
-// SourceEqualFold applies the EqualFold predicate on the "source" field.
-func SourceEqualFold(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldEqualFold(FieldSource, v))
+// DefaultProxySnapshotIsNil applies the IsNil predicate on the "default_proxy_snapshot" field.
+func DefaultProxySnapshotIsNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIsNull(FieldDefaultProxySnapshot))
 }
 
-// SourceContainsFold applies the ContainsFold predicate on the "source" field.
-func SourceContainsFold(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldContainsFold(FieldSource, v))
+// DefaultProxySnapshotNotNil applies the NotNil predicate on the "default_proxy_snapshot" field.
+func DefaultProxySnapshotNotNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotNull(FieldDefaultProxySnapshot))
 }
 
-// BoundIPEQ applies the EQ predicate on the "bound_ip" field.
-func BoundIPEQ(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldEQ(FieldBoundIP, v))
+// DefaultProxySnapshotEqualFold applies the EqualFold predicate on the "default_proxy_snapshot" field.
+func DefaultProxySnapshotEqualFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEqualFold(FieldDefaultProxySnapshot, v))
 }
 
-// BoundIPNEQ applies the NEQ predicate on the "bound_ip" field.
-func BoundIPNEQ(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldNEQ(FieldBoundIP, v))
-}
-
-// BoundIPIn applies the In predicate on the "bound_ip" field.
-func BoundIPIn(vs ...string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldIn(FieldBoundIP, vs...))
-}
-
-// BoundIPNotIn applies the NotIn predicate on the "bound_ip" field.
-func BoundIPNotIn(vs ...string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldNotIn(FieldBoundIP, vs...))
-}
-
-// BoundIPGT applies the GT predicate on the "bound_ip" field.
-func BoundIPGT(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldGT(FieldBoundIP, v))
-}
-
-// BoundIPGTE applies the GTE predicate on the "bound_ip" field.
-func BoundIPGTE(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldGTE(FieldBoundIP, v))
-}
-
-// BoundIPLT applies the LT predicate on the "bound_ip" field.
-func BoundIPLT(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldLT(FieldBoundIP, v))
-}
-
-// BoundIPLTE applies the LTE predicate on the "bound_ip" field.
-func BoundIPLTE(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldLTE(FieldBoundIP, v))
-}
-
-// BoundIPContains applies the Contains predicate on the "bound_ip" field.
-func BoundIPContains(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldContains(FieldBoundIP, v))
-}
-
-// BoundIPHasPrefix applies the HasPrefix predicate on the "bound_ip" field.
-func BoundIPHasPrefix(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldHasPrefix(FieldBoundIP, v))
-}
-
-// BoundIPHasSuffix applies the HasSuffix predicate on the "bound_ip" field.
-func BoundIPHasSuffix(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldHasSuffix(FieldBoundIP, v))
-}
-
-// BoundIPIsNil applies the IsNil predicate on the "bound_ip" field.
-func BoundIPIsNil() predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldIsNull(FieldBoundIP))
-}
-
-// BoundIPNotNil applies the NotNil predicate on the "bound_ip" field.
-func BoundIPNotNil() predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldNotNull(FieldBoundIP))
-}
-
-// BoundIPEqualFold applies the EqualFold predicate on the "bound_ip" field.
-func BoundIPEqualFold(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldEqualFold(FieldBoundIP, v))
-}
-
-// BoundIPContainsFold applies the ContainsFold predicate on the "bound_ip" field.
-func BoundIPContainsFold(v string) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldContainsFold(FieldBoundIP, v))
+// DefaultProxySnapshotContainsFold applies the ContainsFold predicate on the "default_proxy_snapshot" field.
+func DefaultProxySnapshotContainsFold(v string) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldContainsFold(FieldDefaultProxySnapshot, v))
 }
 
 // AssignedUserIDEQ applies the EQ predicate on the "assigned_user_id" field.
@@ -1288,6 +1923,56 @@ func AssignedUserIDIsNil() predicate.SocialAccount {
 // AssignedUserIDNotNil applies the NotNil predicate on the "assigned_user_id" field.
 func AssignedUserIDNotNil() predicate.SocialAccount {
 	return predicate.SocialAccount(sql.FieldNotNull(FieldAssignedUserID))
+}
+
+// UserWorkbenchDeletedAtEQ applies the EQ predicate on the "user_workbench_deleted_at" field.
+func UserWorkbenchDeletedAtEQ(v time.Time) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldEQ(FieldUserWorkbenchDeletedAt, v))
+}
+
+// UserWorkbenchDeletedAtNEQ applies the NEQ predicate on the "user_workbench_deleted_at" field.
+func UserWorkbenchDeletedAtNEQ(v time.Time) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNEQ(FieldUserWorkbenchDeletedAt, v))
+}
+
+// UserWorkbenchDeletedAtIn applies the In predicate on the "user_workbench_deleted_at" field.
+func UserWorkbenchDeletedAtIn(vs ...time.Time) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIn(FieldUserWorkbenchDeletedAt, vs...))
+}
+
+// UserWorkbenchDeletedAtNotIn applies the NotIn predicate on the "user_workbench_deleted_at" field.
+func UserWorkbenchDeletedAtNotIn(vs ...time.Time) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotIn(FieldUserWorkbenchDeletedAt, vs...))
+}
+
+// UserWorkbenchDeletedAtGT applies the GT predicate on the "user_workbench_deleted_at" field.
+func UserWorkbenchDeletedAtGT(v time.Time) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGT(FieldUserWorkbenchDeletedAt, v))
+}
+
+// UserWorkbenchDeletedAtGTE applies the GTE predicate on the "user_workbench_deleted_at" field.
+func UserWorkbenchDeletedAtGTE(v time.Time) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldGTE(FieldUserWorkbenchDeletedAt, v))
+}
+
+// UserWorkbenchDeletedAtLT applies the LT predicate on the "user_workbench_deleted_at" field.
+func UserWorkbenchDeletedAtLT(v time.Time) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLT(FieldUserWorkbenchDeletedAt, v))
+}
+
+// UserWorkbenchDeletedAtLTE applies the LTE predicate on the "user_workbench_deleted_at" field.
+func UserWorkbenchDeletedAtLTE(v time.Time) predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldLTE(FieldUserWorkbenchDeletedAt, v))
+}
+
+// UserWorkbenchDeletedAtIsNil applies the IsNil predicate on the "user_workbench_deleted_at" field.
+func UserWorkbenchDeletedAtIsNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldIsNull(FieldUserWorkbenchDeletedAt))
+}
+
+// UserWorkbenchDeletedAtNotNil applies the NotNil predicate on the "user_workbench_deleted_at" field.
+func UserWorkbenchDeletedAtNotNil() predicate.SocialAccount {
+	return predicate.SocialAccount(sql.FieldNotNull(FieldUserWorkbenchDeletedAt))
 }
 
 // RemarkEQ applies the EQ predicate on the "remark" field.

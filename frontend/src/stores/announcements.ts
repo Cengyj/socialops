@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { announcementsAPI } from '@/api'
 import type { UserAnnouncement } from '@/types'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 const THROTTLE_MS = 20 * 60 * 1000 // 20 minutes
 
@@ -36,10 +37,10 @@ export const useAnnouncementStore = defineStore('announcements', () => {
       const all = await announcementsAPI.list(false)
       announcements.value = all.slice(0, 20)
       enqueueNewPopups()
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Revert throttle timestamp on failure so retry is allowed
       lastFetchTime.value = 0
-      console.error('Failed to fetch announcements:', err)
+      recordClientDiagnostic('announcements.fetch', err)
     } finally {
       loading.value = false
     }
@@ -77,7 +78,7 @@ export const useAnnouncementStore = defineStore('announcements', () => {
     currentPopup.value = null
 
     // Mark as read (fire-and-forget, UI already updated)
-    markAsRead(id)
+    void markAsRead(id).catch(() => undefined)
 
     // Show next popup after a short delay
     if (popupQueue.value.length > 0) {
@@ -92,8 +93,9 @@ export const useAnnouncementStore = defineStore('announcements', () => {
       if (ann) {
         ann.read_at = new Date().toISOString()
       }
-    } catch (err: any) {
-      console.error('Failed to mark announcement as read:', err)
+    } catch (err: unknown) {
+      recordClientDiagnostic('announcements.markRead', err)
+      throw err
     }
   }
 
@@ -109,8 +111,8 @@ export const useAnnouncementStore = defineStore('announcements', () => {
           a.read_at = new Date().toISOString()
         }
       })
-    } catch (err: any) {
-      console.error('Failed to mark all as read:', err)
+    } catch (err: unknown) {
+      recordClientDiagnostic('announcements.markAllRead', err)
       throw err
     } finally {
       loading.value = false

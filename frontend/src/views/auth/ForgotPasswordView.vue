@@ -132,6 +132,8 @@ import Icon from '@/components/icons/Icon.vue'
 import TurnstileWidget from '@/components/TurnstileWidget.vue'
 import { useAppStore } from '@/stores'
 import { getPublicSettings, forgotPassword } from '@/api/auth'
+import { buildSafeAuthErrorMessage } from '@/utils/authError'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 const { t } = useI18n()
 
@@ -178,7 +180,7 @@ onMounted(async () => {
     turnstileEnabled.value = settings.turnstile_enabled
     turnstileSiteKey.value = settings.turnstile_site_key || ''
   } catch (error) {
-    console.error('Failed to load public settings:', error)
+    recordClientDiagnostic('auth.forgot_password.load_public_settings', error)
   }
 })
 
@@ -251,15 +253,9 @@ async function handleSubmit(): Promise<void> {
       turnstileToken.value = ''
     }
 
-    const err = error as { message?: string; response?: { data?: { detail?: string } } }
-
-    if (err.response?.data?.detail) {
-      errorMessage.value = err.response.data.detail
-    } else if (err.message) {
-      errorMessage.value = err.message
-    } else {
-      errorMessage.value = t('auth.sendResetLinkFailed')
-    }
+    errorMessage.value = buildSafeAuthErrorMessage(error, {
+      fallback: t('auth.sendResetLinkFailed')
+    })
 
     appStore.showError(errorMessage.value)
   } finally {

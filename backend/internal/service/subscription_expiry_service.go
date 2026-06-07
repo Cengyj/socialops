@@ -46,5 +46,5 @@ func (s *SubscriptionExpiryService) sendExpiryReminders(ctx context.Context) {
 	if s == nil || !s.expiryReminderEnabled(ctx) || s.userSubRepo == nil {
 		return
 	}
-	_, _, _ = s.userSubRepo.List(ctx, pagination.PaginationParams{Page: 1, PageSize: 100}, nil, nil, "", "", "", "")
+	_, _, _ = s.userSubRepo.List(ctx, pagination.PaginationParams{Page: 1, PageSize: 100}, nil, nil, nil, "", "", "", "")
 }

@@ -231,6 +231,42 @@ func TestAdminAPIKeyHandler_UpdateGroup_NegativeGroupID(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "INVALID_GROUP_ID")
 }
 
+func TestAdminAPIKeyHandler_UpdateGroup_DoesNotResetUsageWhenGroupUpdateFails(t *testing.T) {
+	svc := &trackingAPIKeyMutationService{
+		stubAdminService: newStubAdminService(),
+		updateErr:        infraerrors.BadRequest("INVALID_GROUP_ID", "group_id must be non-negative"),
+	}
+	router := setupAPIKeyHandler(svc)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/api-keys/10", bytes.NewBufferString(`{"group_id": -5, "reset_rate_limit_usage": true}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "INVALID_GROUP_ID")
+	require.Equal(t, 1, svc.combinedCalls)
+	require.Zero(t, svc.updateCalls, "combined group/reset requests must not be split into a separate group mutation")
+	require.Zero(t, svc.resetCalls, "failed group updates must not clear rate-limit usage")
+}
+
+func TestAdminAPIKeyHandler_UpdateGroup_UsesCombinedMutationWhenResetAlsoRequested(t *testing.T) {
+	svc := &trackingAPIKeyMutationService{
+		stubAdminService: newStubAdminService(),
+	}
+	router := setupAPIKeyHandler(svc)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/api-keys/10", bytes.NewBufferString(`{"group_id": 2, "reset_rate_limit_usage": true}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, 1, svc.combinedCalls)
+	require.Zero(t, svc.updateCalls, "combined group/reset requests must not be split into a separate group mutation")
+	require.Zero(t, svc.resetCalls, "combined group/reset requests must not be split into a separate reset mutation")
+}
+
 // failingUpdateGroupService overrides AdminUpdateAPIKeyGroupID to return an error.
 type failingUpdateGroupService struct {
 	*stubAdminService
@@ -239,4 +275,51 @@ type failingUpdateGroupService struct {
 
 func (f *failingUpdateGroupService) AdminUpdateAPIKeyGroupID(_ context.Context, _ int64, _ *int64) (*service.AdminUpdateAPIKeyGroupIDResult, error) {
 	return nil, f.err
+}
+
+type trackingAPIKeyMutationService struct {
+	*stubAdminService
+	updateErr     error
+	resetErr      error
+	updateCalls   int
+	resetCalls    int
+	combinedCalls int
+}
+
+func (s *trackingAPIKeyMutationService) AdminUpdateAPIKeyGroupID(ctx context.Context, keyID int64, groupID *int64) (*service.AdminUpdateAPIKeyGroupIDResult, error) {
+	s.updateCalls++
+	if s.updateErr != nil {
+		return nil, s.updateErr
+	}
+	return s.stubAdminService.AdminUpdateAPIKeyGroupID(ctx, keyID, groupID)
+}
+
+func (s *trackingAPIKeyMutationService) AdminResetAPIKeyRateLimitUsage(ctx context.Context, keyID int64) (*service.APIKey, error) {
+	s.resetCalls++
+	if s.resetErr != nil {
+		return nil, s.resetErr
+	}
+	return s.stubAdminService.AdminResetAPIKeyRateLimitUsage(ctx, keyID)
+}
+
+func (s *trackingAPIKeyMutationService) AdminUpdateAPIKeyGroupAndRateLimitUsage(ctx context.Context, keyID int64, groupID *int64, resetRateLimitUsage bool) (*service.AdminUpdateAPIKeyGroupIDResult, error) {
+	s.combinedCalls++
+	if s.updateErr != nil {
+		return nil, s.updateErr
+	}
+	result, err := s.stubAdminService.AdminUpdateAPIKeyGroupID(ctx, keyID, groupID)
+	if err != nil {
+		return nil, err
+	}
+	if resetRateLimitUsage {
+		if s.resetErr != nil {
+			return nil, s.resetErr
+		}
+		key, err := s.stubAdminService.AdminResetAPIKeyRateLimitUsage(ctx, keyID)
+		if err != nil {
+			return nil, err
+		}
+		result.APIKey = key
+	}
+	return result, nil
 }

@@ -96,6 +96,11 @@ onUnmounted(() => {
   @apply h-auto overflow-visible border-none shadow-none bg-transparent;
 }
 
+.table-page-layout.mobile-mode {
+  height: auto;
+  min-height: calc(100vh - 64px - 2rem);
+}
+
 .table-page-layout.mobile-mode .layout-section-scrollable {
   @apply flex-none min-h-fit;
 }

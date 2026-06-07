@@ -4,17 +4,26 @@ package middleware
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
+	dbent "github.com/Wei-Shaw/socialops/ent"
+	"github.com/Wei-Shaw/socialops/ent/enttest"
 	"github.com/Wei-Shaw/socialops/internal/config"
+	"github.com/Wei-Shaw/socialops/internal/repository"
 	"github.com/Wei-Shaw/socialops/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	"entgo.io/ent/dialect"
+	entsql "entgo.io/ent/dialect/sql"
+	_ "modernc.org/sqlite"
 )
 
 // stubJWTUserRepo 实现 UserRepository 的最小子集，仅支持 GetByID。
@@ -302,6 +311,78 @@ func TestJWTAuth_TokenVersionMismatch(t *testing.T) {
 
 	token, err := authSvc.GenerateToken(userForToken)
 	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+	var body ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	require.Equal(t, "TOKEN_REVOKED", body.Code)
+}
+
+func TestJWTAuth_RevokeAllUserTokensInvalidatesPersistedAccessTokens(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx := context.Background()
+
+	db, err := sql.Open("sqlite", "file:"+url.QueryEscape(t.Name())+"?mode=memory&cache=shared&_fk=1")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	require.NoError(t, err)
+
+	drv := entsql.OpenDB(dialect.SQLite, db)
+	client := enttest.NewClient(t, enttest.WithOptions(dbent.Driver(drv)))
+	t.Cleanup(func() { _ = client.Close() })
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS user_avatars (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			storage_provider TEXT NOT NULL DEFAULT 'database',
+			storage_key TEXT NOT NULL DEFAULT '',
+			url TEXT NOT NULL DEFAULT '',
+			content_type TEXT NOT NULL DEFAULT '',
+			byte_size INTEGER NOT NULL DEFAULT 0,
+			sha256 TEXT NOT NULL DEFAULT '',
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE UNIQUE INDEX IF NOT EXISTS user_avatars_user_id_key ON user_avatars (user_id);
+	`)
+	require.NoError(t, err)
+
+	userRepo := repository.NewUserRepository(client, db)
+	userSvc := service.NewUserService(userRepo, nil, nil, nil)
+	cfg := &config.Config{}
+	cfg.JWT.Secret = "test-jwt-secret-32bytes-long!!!"
+	cfg.JWT.AccessTokenExpireMinutes = 60
+	authSvc := service.NewAuthService(nil, userRepo, nil, nil, cfg, nil, nil, nil, nil, nil, nil, nil)
+
+	entUser, err := client.User.Create().
+		SetEmail("revoke-persisted@example.com").
+		SetPasswordHash("stable-password-hash").
+		SetRole(service.RoleUser).
+		SetStatus(service.StatusActive).
+		SetConcurrency(1).
+		Save(ctx)
+	require.NoError(t, err)
+
+	user, err := userSvc.GetByID(ctx, entUser.ID)
+	require.NoError(t, err)
+
+	token, err := authSvc.GenerateToken(user)
+	require.NoError(t, err)
+
+	require.NoError(t, authSvc.RevokeAllUserTokens(ctx, user.ID))
+
+	router := gin.New()
+	router.Use(jwtAuth(authSvc, userSvc, nil))
+	router.GET("/protected", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)

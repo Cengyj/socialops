@@ -111,6 +111,7 @@ type RedeemCode struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 
 	GroupID      *int64  `json:"group_id"`
+	PlanID       *int64  `json:"plan_id"`
 	ValidityDays int     `json:"validity_days"`
 	Notes        *string `json:"notes,omitempty"`
 
@@ -167,6 +168,7 @@ type BatchUpdateRedeemCodeFields struct {
 	ExpiresAt NullableTimeField  `json:"expires_at,omitempty"`
 	Notes     *string            `json:"notes,omitempty"`
 	GroupID   NullableInt64Field `json:"group_id,omitempty"`
+	PlanID    NullableInt64Field `json:"plan_id,omitempty"`
 
 	Type  *string  `json:"type,omitempty"`
 	Value *float64 `json:"value,omitempty"`
@@ -213,9 +215,16 @@ type Setting struct {
 }
 
 type UserSubscription struct {
-	ID      int64 `json:"id"`
-	UserID  int64 `json:"user_id"`
-	GroupID int64 `json:"group_id"`
+	ID              int64    `json:"id"`
+	UserID          int64    `json:"user_id"`
+	GroupID         int64    `json:"group_id"`
+	PlanID          *int64   `json:"plan_id,omitempty"`
+	PlanName        string   `json:"plan_name"`
+	PlanPlatform    string   `json:"plan_platform"`
+	QuotaUSD        *float64 `json:"quota_usd,omitempty"`
+	DailyLimitUSD   *float64 `json:"daily_limit_usd,omitempty"`
+	WeeklyLimitUSD  *float64 `json:"weekly_limit_usd,omitempty"`
+	MonthlyLimitUSD *float64 `json:"monthly_limit_usd,omitempty"`
 
 	StartsAt  time.Time `json:"starts_at"`
 	ExpiresAt time.Time `json:"expires_at"`

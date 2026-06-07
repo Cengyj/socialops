@@ -7,10 +7,12 @@ import (
 	"errors"
 	"math"
 	"testing"
+	"time"
 
 	dbent "github.com/Wei-Shaw/socialops/ent"
 	"github.com/Wei-Shaw/socialops/internal/payment"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type paymentFulfillmentTestProvider struct {
@@ -417,4 +419,155 @@ func TestPaymentAmountToleranceForThreeDecimalCurrency(t *testing.T) {
 	assert.Equal(t, amountToleranceCNY, paymentAmountToleranceForCurrency("CNY"))
 	assert.Equal(t, amountToleranceCNY, paymentAmountToleranceForCurrency("JPY"))
 	assert.InDelta(t, 0.0005, paymentAmountToleranceForCurrency("KWD"), 1e-12)
+}
+
+func TestPaymentAuditLogSchemaEnforcesOrderActionIdempotency(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentOrderLifecycleTestClient(t)
+
+	_, err := client.PaymentAuditLog.Create().
+		SetOrderID("audit-order-unique").
+		SetAction("RECHARGE_SUCCESS").
+		SetDetail(`{"attempt":1}`).
+		SetOperator("system").
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = client.PaymentAuditLog.Create().
+		SetOrderID("audit-order-unique").
+		SetAction("RECHARGE_SUCCESS").
+		SetDetail(`{"attempt":2}`).
+		SetOperator("system").
+		Save(ctx)
+	require.Error(t, err)
+}
+
+func TestHandlePaymentNotificationAcksDuplicateWhileOrderIsRecharging(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentOrderLifecycleTestClient(t)
+
+	user, err := client.User.Create().
+		SetEmail("payment-recharging-duplicate@example.com").
+		SetPasswordHash("hash").
+		SetUsername("payment-recharging-duplicate").
+		Save(ctx)
+	require.NoError(t, err)
+
+	order, err := client.PaymentOrder.Create().
+		SetUserID(user.ID).
+		SetUserEmail(user.Email).
+		SetUserName(user.Username).
+		SetAmount(25).
+		SetPayAmount(25).
+		SetFeeRate(0).
+		SetRechargeCode("RECHARGING-DUPLICATE").
+		SetOutTradeNo("sub2_recharging_duplicate").
+		SetPaymentType(payment.TypeStripe).
+		SetPaymentTradeNo("pi_recharging_duplicate").
+		SetOrderType(payment.OrderTypeBalance).
+		SetStatus(OrderStatusRecharging).
+		SetPaidAt(time.Now().Add(-time.Minute)).
+		SetExpiresAt(time.Now().Add(time.Hour)).
+		SetClientIP("127.0.0.1").
+		SetSrcHost("api.example.com").
+		Save(ctx)
+	require.NoError(t, err)
+
+	svc := &PaymentService{entClient: client}
+
+	err = svc.HandlePaymentNotification(ctx, &payment.PaymentNotification{
+		OrderID:  order.OutTradeNo,
+		TradeNo:  order.PaymentTradeNo,
+		Amount:   order.PayAmount,
+		Status:   payment.NotificationStatusSuccess,
+		Metadata: map[string]string{"currency": "CNY"},
+	}, payment.TypeStripe)
+	require.NoError(t, err)
+
+	reloaded, err := client.PaymentOrder.Get(ctx, order.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusRecharging, reloaded.Status)
+}
+
+func TestExecuteSubscriptionFulfillmentDoesNotExtendAgainWhenOrderNoteAlreadyApplied(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentOrderLifecycleTestClient(t)
+
+	user, err := client.User.Create().
+		SetEmail("subscription-retry@example.com").
+		SetPasswordHash("hash").
+		SetUsername("subscription-retry-user").
+		Save(ctx)
+	require.NoError(t, err)
+
+	order, err := client.PaymentOrder.Create().
+		SetUserID(user.ID).
+		SetUserEmail(user.Email).
+		SetUserName(user.Username).
+		SetAmount(30).
+		SetPayAmount(30).
+		SetFeeRate(0).
+		SetRechargeCode("SUBSCRIPTION-RETRY-NOTE").
+		SetOutTradeNo("sub2_subscription_retry_note").
+		SetPaymentType(payment.TypeStripe).
+		SetPaymentTradeNo("pi_subscription_retry").
+		SetOrderType(payment.OrderTypeSubscription).
+		SetSubscriptionGroupID(1).
+		SetSubscriptionDays(30).
+		SetStatus(OrderStatusFailed).
+		SetExpiresAt(time.Now().Add(time.Hour)).
+		SetClientIP("127.0.0.1").
+		SetSrcHost("api.example.com").
+		Save(ctx)
+	require.NoError(t, err)
+
+	start := time.Now().UTC().Add(-time.Hour)
+	originalExpiresAt := start.AddDate(0, 0, 30)
+	subRepo := newSubscriptionUserSubRepoStub()
+	subRepo.seed(&UserSubscription{
+		ID:        77,
+		UserID:    user.ID,
+		GroupID:   1,
+		StartsAt:  start,
+		ExpiresAt: originalExpiresAt,
+		Status:    SubscriptionStatusActive,
+		Notes:     "payment order " + strconvFormatInt(order.ID),
+	})
+
+	svc := &PaymentService{
+		entClient: client,
+		groupRepo: &subscriptionGroupRepoStub{
+			group: &Group{ID: 1, Status: payment.EntityStatusActive, SubscriptionType: SubscriptionTypeSubscription},
+		},
+		subscriptionSvc: NewSubscriptionService(
+			&subscriptionGroupRepoStub{
+				group: &Group{ID: 1, Status: payment.EntityStatusActive, SubscriptionType: SubscriptionTypeSubscription},
+			},
+			subRepo,
+			nil,
+			nil,
+			nil,
+		),
+	}
+
+	require.NoError(t, svc.ExecuteSubscriptionFulfillment(ctx, order.ID))
+
+	reloadedSub, err := subRepo.GetByID(ctx, 77)
+	require.NoError(t, err)
+	require.Equal(t, originalExpiresAt, reloadedSub.ExpiresAt)
+	require.Equal(t, "payment order "+strconvFormatInt(order.ID), reloadedSub.Notes)
+
+	reloadedOrder, err := client.PaymentOrder.Get(ctx, order.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusCompleted, reloadedOrder.Status)
+}
+
+func TestSubscriptionNotesContainExactLine(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, subscriptionNotesContainExactLine("initial\npayment order 42\nrenewal", "payment order 42"))
+	require.True(t, subscriptionNotesContainExactLine("initial\r\n payment order 42 \r\nrenewal", "payment order 42"))
+	require.False(t, subscriptionNotesContainExactLine("payment order 420", "payment order 42"))
+	require.False(t, subscriptionNotesContainExactLine("", "payment order 42"))
+	require.False(t, subscriptionNotesContainExactLine("payment order 42", ""))
 }

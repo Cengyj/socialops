@@ -98,7 +98,7 @@ type AffiliateRepository interface {
 	EnsureUserAffiliate(ctx context.Context, userID int64) (*AffiliateSummary, error)
 	GetAffiliateByCode(ctx context.Context, code string) (*AffiliateSummary, error)
 	BindInviter(ctx context.Context, userID, inviterID int64) (bool, error)
-	AccrueQuota(ctx context.Context, inviterID, inviteeUserID int64, amount float64, freezeHours int, sourceOrderID *int64) (bool, error)
+	AccrueQuota(ctx context.Context, inviterID, inviteeUserID int64, amount float64, freezeHours int, sourceOrderID *int64, perInviteeCap float64) (bool, error)
 	GetAccruedRebateFromInvitee(ctx context.Context, inviterID, inviteeUserID int64) (float64, error)
 	ThawFrozenQuota(ctx context.Context, userID int64) (float64, error)
 	TransferQuotaToBalance(ctx context.Context, userID int64) (float64, float64, error)
@@ -108,6 +108,7 @@ type AffiliateRepository interface {
 	UpdateUserAffCode(ctx context.Context, userID int64, newCode string) error
 	ResetUserAffCode(ctx context.Context, userID int64) (string, error)
 	SetUserRebateRate(ctx context.Context, userID int64, ratePercent *float64) error
+	ClearUserAffiliateSettings(ctx context.Context, userID int64) (string, error)
 	BatchSetUserRebateRate(ctx context.Context, userIDs []int64, ratePercent *float64) error
 	ListUsersWithCustomSettings(ctx context.Context, filter AffiliateAdminFilter) ([]AffiliateAdminEntry, int64, error)
 	ListAffiliateInviteRecords(ctx context.Context, filter AffiliateRecordFilter) ([]AffiliateInviteRecord, int64, error)
@@ -167,6 +168,7 @@ type AffiliateRebateRecord struct {
 	InviteeUsername string    `json:"invitee_username"`
 	OrderAmount     float64   `json:"order_amount"`
 	PayAmount       float64   `json:"pay_amount"`
+	Currency        string    `json:"currency"`
 	RebateAmount    float64   `json:"rebate_amount"`
 	PaymentType     string    `json:"payment_type"`
 	OrderStatus     string    `json:"order_status"`
@@ -355,9 +357,11 @@ func (s *AffiliateService) AccrueInviteRebateForOrder(ctx context.Context, invit
 		return 0, nil
 	}
 
-	// 单人上限检查：精确截断到剩余额度
+	var perInviteeCap float64
+	// 单人上限检查：精确截断到剩余额度。Repository 会在同一事务内再次校验，
+	// 这里保留提前返回以减少明显已达上限时的写事务开销。
 	if s.settingService != nil {
-		if perInviteeCap := s.settingService.GetAffiliateRebatePerInviteeCap(ctx); perInviteeCap > 0 {
+		if perInviteeCap = s.settingService.GetAffiliateRebatePerInviteeCap(ctx); perInviteeCap > 0 {
 			existing, err := s.repo.GetAccruedRebateFromInvitee(ctx, *inviteeSummary.InviterID, inviteeUserID)
 			if err != nil {
 				return 0, err
@@ -376,7 +380,7 @@ func (s *AffiliateService) AccrueInviteRebateForOrder(ctx context.Context, invit
 		freezeHours = s.settingService.GetAffiliateRebateFreezeHours(ctx)
 	}
 
-	applied, err := s.repo.AccrueQuota(ctx, *inviteeSummary.InviterID, inviteeUserID, rebate, freezeHours, sourceOrderID)
+	applied, err := s.repo.AccrueQuota(ctx, *inviteeSummary.InviterID, inviteeUserID, rebate, freezeHours, sourceOrderID, perInviteeCap)
 	if err != nil {
 		return 0, err
 	}
@@ -526,6 +530,15 @@ func (s *AffiliateService) AdminResetUserAffCode(ctx context.Context, userID int
 		return "", infraerrors.ServiceUnavailable("SERVICE_UNAVAILABLE", "affiliate service unavailable")
 	}
 	return s.repo.ResetUserAffCode(ctx, userID)
+}
+
+// AdminClearUserSettings atomically clears all custom affiliate settings for a user.
+func (s *AffiliateService) AdminClearUserSettings(ctx context.Context, userID int64) error {
+	if s == nil || s.repo == nil {
+		return infraerrors.ServiceUnavailable("SERVICE_UNAVAILABLE", "affiliate service unavailable")
+	}
+	_, err := s.repo.ClearUserAffiliateSettings(ctx, userID)
+	return err
 }
 
 // AdminSetUserRebateRate 设置/清除用户专属返利比例。ratePercent==nil 表示清除。

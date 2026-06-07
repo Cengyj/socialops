@@ -366,6 +366,7 @@ func (s *AuthService) loadOAuthRegistrationInvitation(ctx context.Context, invit
 			CreatedAt:    entity.CreatedAt,
 			ExpiresAt:    entity.ExpiresAt,
 			GroupID:      entity.GroupID,
+			PlanID:       entity.PlanID,
 			ValidityDays: entity.ValidityDays,
 		}, nil
 	}
@@ -426,6 +427,11 @@ func (s *AuthService) updateOAuthRegistrationInvitation(ctx context.Context, cod
 			update = update.SetGroupID(*code.GroupID)
 		} else {
 			update = update.ClearGroupID()
+		}
+		if code.PlanID != nil {
+			update = update.SetPlanID(*code.PlanID)
+		} else {
+			update = update.ClearPlanID()
 		}
 		_, err := update.Save(ctx)
 		return err

@@ -244,13 +244,16 @@
 </template>
 
 <script setup lang="ts">
-// @ts-nocheck
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { adminAPI } from '@/api/admin'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
+import {
+  getAnnouncementTargetingValidationMessage,
+  validateAnnouncementTargeting
+} from '@/utils/announcementTargeting'
 import type { AdminGroup, Announcement, AnnouncementTargeting } from '@/types'
 import type { Column } from '@/components/common/types'
 
@@ -428,8 +431,8 @@ const subscriptionGroups = ref<AdminGroup[]>([])
 
 async function loadSubscriptionGroups() {
   try {
-    const all = await Promise.resolve([])
-    subscriptionGroups.value = (all || []).filter((g) => g.subscription_type === 'subscription')
+    const all = await adminAPI.groups.getAll({ subscription_type: 'subscription' })
+    subscriptionGroups.value = all || []
   } catch (error: any) {
     console.error('Error loading groups:', error)
     // not fatal
@@ -523,17 +526,10 @@ function buildUpdatePayload(original: Announcement) {
 
 async function handleSave() {
   // Frontend validation for targeting (to avoid ANNOUNCEMENT_INVALID_TARGET)
-  const anyOf = form.targeting?.any_of ?? []
-  if (anyOf.length > 50) {
-    appStore.showError(t('admin.announcements.failedToCreate'))
+  const targetingError = validateAnnouncementTargeting(form.targeting)
+  if (targetingError) {
+    appStore.showError(getAnnouncementTargetingValidationMessage(targetingError, t))
     return
-  }
-  for (const g of anyOf) {
-    const allOf = g?.all_of ?? []
-    if (allOf.length > 50) {
-      appStore.showError(t('admin.announcements.failedToCreate'))
-      return
-    }
   }
 
   saving.value = true

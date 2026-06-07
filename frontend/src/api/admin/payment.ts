@@ -7,7 +7,6 @@ import { apiClient } from '../client'
 import type {
   DashboardStats,
   PaymentOrder,
-  PaymentChannel,
   SubscriptionPlan,
   ProviderInstance
 } from '@/types/payment'
@@ -24,11 +23,23 @@ export interface AdminPaymentConfig {
   enabled_payment_types: string[]
   balance_disabled: boolean
   balance_recharge_multiplier: number
+  recharge_fee_rate: number
   load_balance_strategy: string
   product_name_prefix: string
   product_name_suffix: string
   help_image_url: string
   help_text: string
+  stripe_publishable_key?: string
+  cancel_rate_limit_enabled: boolean
+  cancel_rate_limit_max: number
+  cancel_rate_limit_window: number
+  cancel_rate_limit_unit: string
+  cancel_rate_limit_window_mode: string
+  alipay_force_qrcode: boolean
+  payment_visible_method_alipay_source?: string
+  payment_visible_method_wxpay_source?: string
+  payment_visible_method_alipay_enabled?: boolean
+  payment_visible_method_wxpay_enabled?: boolean
 }
 
 /** Fields accepted by PUT /admin/payment/config (all optional via pointer semantics) */
@@ -42,11 +53,54 @@ export interface UpdatePaymentConfigRequest {
   enabled_payment_types?: string[]
   balance_disabled?: boolean
   balance_recharge_multiplier?: number
+  recharge_fee_rate?: number
   load_balance_strategy?: string
   product_name_prefix?: string
   product_name_suffix?: string
   help_image_url?: string
   help_text?: string
+  cancel_rate_limit_enabled?: boolean
+  cancel_rate_limit_max?: number
+  cancel_rate_limit_window?: number
+  cancel_rate_limit_unit?: string
+  cancel_rate_limit_window_mode?: string
+  alipay_force_qrcode?: boolean
+  payment_visible_method_alipay_source?: string
+  payment_visible_method_wxpay_source?: string
+  payment_visible_method_alipay_enabled?: boolean
+  payment_visible_method_wxpay_enabled?: boolean
+}
+
+export interface AdminPaymentOrderDetail {
+  order: PaymentOrder
+  auditLogs?: PaymentAuditLog[]
+  audit_logs?: PaymentAuditLog[]
+}
+
+export interface PaymentAuditLog {
+  id: number
+  action: string
+  detail: string | null
+  operator: string | null
+  created_at: string
+}
+
+export interface SubscriptionPlanPayload {
+  group_id?: number
+  platform?: string
+  name?: string
+  description?: string
+  price?: number
+  original_price?: number
+  validity_days?: number
+  validity_unit?: string
+  quota_usd?: number
+  daily_limit_usd?: number
+  weekly_limit_usd?: number
+  product_name?: string
+  features?: string
+  for_sale?: boolean
+  sort_order?: number
 }
 
 export const adminPaymentAPI = {
@@ -90,7 +144,7 @@ export const adminPaymentAPI = {
 
   /** Get a specific order by ID */
   getOrder(id: number) {
-    return apiClient.get<PaymentOrder>(`/admin/payment/orders/${id}`)
+    return apiClient.get<AdminPaymentOrderDetail>(`/admin/payment/orders/${id}`)
   },
 
   /** Cancel an order (admin) */
@@ -108,28 +162,6 @@ export const adminPaymentAPI = {
     return apiClient.post(`/admin/payment/orders/${id}/refund`, data)
   },
 
-  // ==================== Channels ====================
-
-  /** Get all payment channels */
-  getChannels() {
-    return apiClient.get<PaymentChannel[]>('/admin/payment/channels')
-  },
-
-  /** Create a payment channel */
-  createChannel(data: Partial<PaymentChannel>) {
-    return apiClient.post<PaymentChannel>('/admin/payment/channels', data)
-  },
-
-  /** Update a payment channel */
-  updateChannel(id: number, data: Partial<PaymentChannel>) {
-    return apiClient.put<PaymentChannel>(`/admin/payment/channels/${id}`, data)
-  },
-
-  /** Delete a payment channel */
-  deleteChannel(id: number) {
-    return apiClient.delete(`/admin/payment/channels/${id}`)
-  },
-
   // ==================== Subscription Plans ====================
 
   /** Get all subscription plans */
@@ -138,12 +170,12 @@ export const adminPaymentAPI = {
   },
 
   /** Create a subscription plan */
-  createPlan(data: Record<string, unknown>) {
+  createPlan(data: SubscriptionPlanPayload) {
     return apiClient.post<SubscriptionPlan>('/admin/payment/plans', data)
   },
 
   /** Update a subscription plan */
-  updatePlan(id: number, data: Record<string, unknown>) {
+  updatePlan(id: number, data: SubscriptionPlanPayload) {
     return apiClient.put<SubscriptionPlan>(`/admin/payment/plans/${id}`, data)
   },
 

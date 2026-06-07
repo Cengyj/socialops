@@ -40,14 +40,16 @@ This directory contains the Vue Router configuration for the SocialOps frontend 
 | `/admin/dashboard`      | AdminDashboardView          | Admin dashboard                 |
 | `/admin/users`          | AdminUsersView              | User management                 |
 | `/admin/subscriptions`  | AdminSubscriptionsView      | Subscription management         |
-| `/admin/accounts`       | AdminAccountOnboardingView  | Total social account pool       |
-| `/admin/proxies`        | AdminProxiesView            | Execution proxy management      |
+| `/accounts`             | AccountWorkbenchRoute       | Unified account workbench       |
+| `/admin/accounts`       | -                           | Redirects to `/accounts`        |
+| `/admin/total-accounts` | AdminTotalAccountsView      | Total social account pool       |
+| `/proxies`              | ProxiesView                 | User proxy management           |
+| `/task-settings`        | TaskSettingsView            | Execution parameter templates   |
 | `/admin/announcements`  | AdminAnnouncementsView      | Announcement management         |
 | `/admin/risk-control`   | AdminRiskControlView        | Risk control center             |
 | `/admin/redeem`         | AdminRedeemView             | Redeem code management          |
 | `/admin/promo-codes`    | AdminPromoCodesView         | Promo code management           |
 | `/admin/settings`       | AdminSettingsView           | System settings                 |
-| `/admin/usage`          | AdminUsageView              | Usage administration            |
 
 ### Special Routes
 

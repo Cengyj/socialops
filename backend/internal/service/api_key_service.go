@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -167,11 +168,11 @@ type CreateAPIKeyRequest struct {
 
 // UpdateAPIKeyRequest 更新API Key请求
 type UpdateAPIKeyRequest struct {
-	Name        *string  `json:"name"`
-	GroupID     *int64   `json:"group_id"`
-	Status      *string  `json:"status"`
-	IPWhitelist []string `json:"ip_whitelist"` // IP 白名单（空数组清空）
-	IPBlacklist []string `json:"ip_blacklist"` // IP 黑名单（空数组清空）
+	Name        *string   `json:"name"`
+	GroupID     *int64    `json:"group_id"`
+	Status      *string   `json:"status"`
+	IPWhitelist *[]string `json:"ip_whitelist"` // IP 白名单（nil = 不变，空数组清空）
+	IPBlacklist *[]string `json:"ip_blacklist"` // IP 黑名单（nil = 不变，空数组清空）
 
 	// Quota fields
 	Quota           *float64   `json:"quota"`       // Quota limit in USD (nil = no change, 0 = unlimited)
@@ -315,7 +316,7 @@ func (s *APIKeyService) incrementAPIKeyErrorCount(ctx context.Context, userID in
 // Create 创建API Key
 func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIKeyRequest) (*APIKey, error) {
 	// 验证用户存在
-	_, err := s.userRepo.GetByID(ctx, userID)
+	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("get user: %w", err)
 	}
@@ -369,12 +370,17 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		}
 	}
 
+	groupID, group, err := s.resolveUserAPIKeyGroup(ctx, user, req.GroupID)
+	if err != nil {
+		return nil, err
+	}
+
 	// 创建API Key记录
 	apiKey := &APIKey{
 		UserID:      userID,
 		Key:         key,
 		Name:        req.Name,
-		GroupID:     nil,
+		GroupID:     groupID,
 		Status:      StatusActive,
 		IPWhitelist: req.IPWhitelist,
 		IPBlacklist: req.IPBlacklist,
@@ -397,6 +403,7 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 
 	s.InvalidateAuthCacheByKey(ctx, apiKey.Key)
 	s.compileAPIKeyIPRules(apiKey)
+	apiKey.Group = group
 
 	return apiKey, nil
 }
@@ -497,15 +504,15 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	}
 
 	// 验证 IP 白名单格式
-	if len(req.IPWhitelist) > 0 {
-		if invalid := ip.ValidateIPPatterns(req.IPWhitelist); len(invalid) > 0 {
+	if req.IPWhitelist != nil && len(*req.IPWhitelist) > 0 {
+		if invalid := ip.ValidateIPPatterns(*req.IPWhitelist); len(invalid) > 0 {
 			return nil, fmt.Errorf("%w: %v", ErrInvalidIPPattern, invalid)
 		}
 	}
 
 	// 验证 IP 黑名单格式
-	if len(req.IPBlacklist) > 0 {
-		if invalid := ip.ValidateIPPatterns(req.IPBlacklist); len(invalid) > 0 {
+	if req.IPBlacklist != nil && len(*req.IPBlacklist) > 0 {
+		if invalid := ip.ValidateIPPatterns(*req.IPBlacklist); len(invalid) > 0 {
 			return nil, fmt.Errorf("%w: %v", ErrInvalidIPPattern, invalid)
 		}
 	}
@@ -521,6 +528,18 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 		if s.cache != nil {
 			_ = s.cache.DeleteCreateAttemptCount(ctx, apiKey.UserID)
 		}
+	}
+	if req.GroupID != nil {
+		user, err := s.userRepo.GetByID(ctx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("get user: %w", err)
+		}
+		groupID, group, err := s.resolveUserAPIKeyGroup(ctx, user, req.GroupID)
+		if err != nil {
+			return nil, err
+		}
+		apiKey.GroupID = groupID
+		apiKey.Group = group
 	}
 
 	// Update quota fields
@@ -552,9 +571,13 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 		}
 	}
 
-	// 更新 IP 限制（空数组会清空设置）
-	apiKey.IPWhitelist = req.IPWhitelist
-	apiKey.IPBlacklist = req.IPBlacklist
+	// 更新 IP 限制：省略字段保持原值，显式空数组清空设置。
+	if req.IPWhitelist != nil {
+		apiKey.IPWhitelist = *req.IPWhitelist
+	}
+	if req.IPBlacklist != nil {
+		apiKey.IPBlacklist = *req.IPBlacklist
+	}
 
 	// Update rate limit configuration
 	if req.RateLimit5h != nil {
@@ -589,6 +612,40 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	}
 
 	return apiKey, nil
+}
+
+func (s *APIKeyService) resolveUserAPIKeyGroup(ctx context.Context, user *User, groupID *int64) (*int64, *Group, error) {
+	if groupID == nil || *groupID == 0 {
+		return nil, nil, nil
+	}
+	if *groupID < 0 {
+		return nil, nil, infraerrors.BadRequest("INVALID_GROUP_ID", "group_id must be non-negative")
+	}
+	if s.groupRepo == nil {
+		return nil, nil, infraerrors.InternalServer("GROUP_REPOSITORY_UNAVAILABLE", "group repository is unavailable")
+	}
+	group, err := s.groupRepo.GetByID(ctx, *groupID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !group.IsActive() {
+		return nil, nil, infraerrors.BadRequest("GROUP_NOT_ACTIVE", "target group is not active")
+	}
+	if group.IsSubscriptionType() {
+		if s.userSubRepo == nil {
+			return nil, nil, infraerrors.InternalServer("SUBSCRIPTION_REPOSITORY_UNAVAILABLE", "subscription repository is unavailable")
+		}
+		if _, err := s.userSubRepo.GetActiveByUserIDAndGroupID(ctx, user.ID, *groupID); err != nil {
+			if errors.Is(err, ErrSubscriptionNotFound) {
+				return nil, nil, ErrGroupNotAllowed
+			}
+			return nil, nil, err
+		}
+	} else if user == nil || !user.CanBindGroup(*groupID, group.IsExclusive) {
+		return nil, nil, ErrGroupNotAllowed
+	}
+	gid := *groupID
+	return &gid, group, nil
 }
 
 // Delete 删除API Key

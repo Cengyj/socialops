@@ -15,7 +15,7 @@
   <!-- Default Home Page -->
   <div
     v-else
-    class="relative flex min-h-screen flex-col overflow-hidden bg-gradient-to-br from-gray-50 via-primary-50/30 to-gray-100 dark:from-dark-950 dark:via-dark-900 dark:to-dark-950"
+    class="relative flex min-h-screen w-full max-w-full flex-col overflow-hidden bg-gradient-to-br from-gray-50 via-primary-50/30 to-gray-100 dark:from-dark-950 dark:via-dark-900 dark:to-dark-950"
   >
     <!-- Background Decorations -->
     <div class="pointer-events-none absolute inset-0 overflow-hidden">
@@ -37,17 +37,17 @@
     </div>
 
     <!-- Header -->
-    <header class="relative z-20 px-6 py-4">
-      <nav class="mx-auto flex max-w-6xl items-center justify-between">
+    <header class="relative z-20 px-4 py-4 sm:px-6">
+      <nav class="mx-auto flex w-full max-w-6xl items-center justify-between gap-3">
         <!-- Logo -->
-        <div class="flex items-center">
+        <div class="flex shrink-0 items-center">
           <div class="h-10 w-10 overflow-hidden rounded-xl shadow-md">
             <img :src="siteLogo || '/logo.png'" alt="Logo" class="h-full w-full object-contain" />
           </div>
         </div>
 
         <!-- Nav Actions -->
-        <div class="flex items-center gap-3">
+        <div class="flex min-w-0 items-center gap-2 sm:gap-3">
           <!-- Language Switcher -->
           <LocaleSwitcher />
 
@@ -111,18 +111,22 @@
     </header>
 
     <!-- Main Content -->
-    <main class="relative z-10 flex-1 px-6 py-16">
-      <div class="mx-auto max-w-6xl">
+    <main class="relative z-10 flex-1 px-4 py-12 sm:px-6 sm:py-16">
+      <div class="mx-auto w-full max-w-6xl">
         <!-- Hero Section - Left/Right Layout -->
-        <div class="mb-12 flex flex-col items-center justify-between gap-12 lg:flex-row lg:gap-16">
+        <div
+          class="mb-12 flex w-full min-w-0 flex-col items-center justify-between gap-10 lg:flex-row lg:gap-16"
+        >
           <!-- Left: Text Content -->
-          <div class="flex-1 text-center lg:text-left">
+          <div class="w-full min-w-0 flex-1 text-center lg:text-left">
             <h1
-              class="mb-4 text-4xl font-bold text-gray-900 dark:text-white md:text-5xl lg:text-6xl"
+              class="mb-4 break-words text-3xl font-bold text-gray-900 dark:text-white sm:text-4xl md:text-5xl lg:text-6xl"
             >
               {{ siteName }}
             </h1>
-            <p class="mb-8 text-lg text-gray-600 dark:text-dark-300 md:text-xl">
+            <p
+              class="mx-auto mb-8 max-w-[22rem] text-base text-gray-600 [overflow-wrap:anywhere] dark:text-dark-300 sm:text-lg md:text-xl lg:mx-0 lg:max-w-xl"
+            >
               {{ siteSubtitle }}
             </p>
 
@@ -130,7 +134,7 @@
             <div>
               <router-link
                 :to="isAuthenticated ? dashboardPath : '/login'"
-                class="btn btn-primary px-8 py-3 text-base shadow-lg shadow-primary-500/30"
+                class="btn btn-primary max-w-full justify-center px-6 py-3 text-base shadow-lg shadow-primary-500/30 sm:px-8"
               >
                 {{ isAuthenticated ? t('home.goToDashboard') : t('home.getStarted') }}
                 <Icon name="arrowRight" size="md" class="ml-2" :stroke-width="2" />
@@ -139,7 +143,7 @@
           </div>
 
           <!-- Right: Terminal Animation -->
-          <div class="flex flex-1 justify-center lg:justify-end">
+          <div class="flex w-full min-w-0 flex-1 justify-center lg:justify-end">
             <div class="terminal-container">
               <div class="terminal-window">
                 <!-- Window header -->
@@ -157,7 +161,7 @@
                     <span class="code-prompt">$</span>
                     <span class="code-cmd">curl</span>
                     <span class="code-flag">-X POST</span>
-                    <span class="code-url">/social-accounts/tasks</span>
+                    <span class="code-url">{{ '/accounts' + '/tasks' }}</span>
                   </div>
                   <div class="code-line line-2">
                     <span class="code-comment"># 执行任务中...</span>
@@ -177,28 +181,36 @@
         </div>
 
         <!-- Feature Tags - Centered -->
-        <div class="mb-12 flex flex-wrap items-center justify-center gap-4 md:gap-6">
+        <div
+          class="mb-12 flex w-full min-w-0 flex-wrap items-center justify-center gap-3 sm:gap-4 md:gap-6"
+        >
           <div
-            class="inline-flex items-center gap-2.5 rounded-full border border-gray-200/50 bg-white/80 px-5 py-2.5 shadow-sm backdrop-blur-sm dark:border-dark-700/50 dark:bg-dark-800/80"
+            class="inline-flex w-full max-w-[22rem] min-w-0 items-center justify-center gap-2.5 rounded-full border border-gray-200/50 bg-white/80 px-4 py-2.5 shadow-sm backdrop-blur-sm dark:border-dark-700/50 dark:bg-dark-800/80 sm:w-auto sm:px-5"
           >
-            <Icon name="swap" size="sm" class="text-primary-500" />
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">{{
+            <Icon name="swap" size="sm" class="shrink-0 text-primary-500" />
+            <span
+              class="min-w-0 text-center text-sm font-medium text-gray-700 [overflow-wrap:anywhere] dark:text-dark-200"
+              >{{
               t('home.tags.subscriptionToApi')
             }}</span>
           </div>
           <div
-            class="inline-flex items-center gap-2.5 rounded-full border border-gray-200/50 bg-white/80 px-5 py-2.5 shadow-sm backdrop-blur-sm dark:border-dark-700/50 dark:bg-dark-800/80"
+            class="inline-flex w-full max-w-[22rem] min-w-0 items-center justify-center gap-2.5 rounded-full border border-gray-200/50 bg-white/80 px-4 py-2.5 shadow-sm backdrop-blur-sm dark:border-dark-700/50 dark:bg-dark-800/80 sm:w-auto sm:px-5"
           >
-            <Icon name="shield" size="sm" class="text-primary-500" />
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">{{
+            <Icon name="shield" size="sm" class="shrink-0 text-primary-500" />
+            <span
+              class="min-w-0 text-center text-sm font-medium text-gray-700 [overflow-wrap:anywhere] dark:text-dark-200"
+              >{{
               t('home.tags.stickySession')
             }}</span>
           </div>
           <div
-            class="inline-flex items-center gap-2.5 rounded-full border border-gray-200/50 bg-white/80 px-5 py-2.5 shadow-sm backdrop-blur-sm dark:border-dark-700/50 dark:bg-dark-800/80"
+            class="inline-flex w-full max-w-[22rem] min-w-0 items-center justify-center gap-2.5 rounded-full border border-gray-200/50 bg-white/80 px-4 py-2.5 shadow-sm backdrop-blur-sm dark:border-dark-700/50 dark:bg-dark-800/80 sm:w-auto sm:px-5"
           >
-            <Icon name="chart" size="sm" class="text-primary-500" />
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">{{
+            <Icon name="chart" size="sm" class="shrink-0 text-primary-500" />
+            <span
+              class="min-w-0 text-center text-sm font-medium text-gray-700 [overflow-wrap:anywhere] dark:text-dark-200"
+              >{{
               t('home.tags.realtimeBilling')
             }}</span>
           </div>
@@ -395,12 +407,16 @@ onMounted(() => {
 /* Terminal Container */
 .terminal-container {
   position: relative;
-  display: inline-block;
+  display: block;
+  width: 100%;
+  max-width: min(420px, calc(100vw - 2rem));
+  min-width: 0;
 }
 
 /* Terminal Window */
 .terminal-window {
-  width: 420px;
+  width: 100%;
+  max-width: 100%;
   background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
   border-radius: 14px;
   box-shadow:
@@ -461,6 +477,7 @@ onMounted(() => {
   font-family: ui-monospace, 'Fira Code', monospace;
   font-size: 14px;
   line-height: 2;
+  min-width: 0;
 }
 
 .code-line {
@@ -468,8 +485,16 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  min-width: 0;
   opacity: 0;
   animation: line-appear 0.5s ease forwards;
+}
+
+.code-url,
+.code-comment,
+.code-response {
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .line-1 {
@@ -551,5 +576,22 @@ onMounted(() => {
     0 0 0 1px rgba(20, 184, 166, 0.2),
     0 0 40px rgba(20, 184, 166, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 640px) {
+  .terminal-window,
+  .terminal-window:hover {
+    transform: none;
+  }
+
+  .terminal-header {
+    padding: 10px 12px;
+  }
+
+  .terminal-body {
+    padding: 16px;
+    font-size: 12px;
+    line-height: 1.85;
+  }
 }
 </style>

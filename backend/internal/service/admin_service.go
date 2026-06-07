@@ -147,6 +147,7 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 		if err := user.SetPassword(input.Password); err != nil {
 			return nil, err
 		}
+		user.TokenVersion++
 	}
 	if input.Username != nil {
 		user.Username = strings.TrimSpace(*input.Username)
@@ -188,7 +189,13 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 			return nil, err
 		}
 	}
-	if s.authCacheInvalidator != nil && (oldConcurrency != user.Concurrency || oldStatus != user.Status || oldRPMLimit != user.RPMLimit || input.Password != "") {
+	authCacheNeedsInvalidation := oldConcurrency != user.Concurrency ||
+		oldStatus != user.Status ||
+		oldRPMLimit != user.RPMLimit ||
+		input.Password != "" ||
+		input.AllowedGroups != nil ||
+		(input.GroupRates != nil && s.userGroupRateRepo != nil)
+	if s.authCacheInvalidator != nil && authCacheNeedsInvalidation {
 		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, user.ID)
 	}
 	if oldConcurrency != user.Concurrency && s.redeemCodeRepo != nil {
@@ -254,6 +261,7 @@ func (s *adminServiceImpl) BatchUpdateConcurrency(ctx context.Context, userIDs [
 	if len(cleaned) == 0 {
 		return 0, nil
 	}
+	beforeByUserID := s.snapshotUserConcurrency(ctx, cleaned)
 	var (
 		affected int
 		err      error
@@ -274,6 +282,7 @@ func (s *adminServiceImpl) BatchUpdateConcurrency(ctx context.Context, userIDs [
 			s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
 		}
 	}
+	s.createBatchConcurrencyAdjustmentRecords(ctx, beforeByUserID, value, mode)
 	return affected, nil
 }
 
@@ -293,7 +302,7 @@ func (s *adminServiceImpl) GetUserUsageStats(ctx context.Context, userID int64, 
 	var totalRequests int64
 	var chargedAmount float64
 	rows, err := s.entClient.QueryContext(ctx, `
-SELECT COUNT(*), COALESCE(SUM(charged_amount), 0)::double precision
+SELECT COUNT(*), COALESCE(SUM(CASE WHEN status = 'success' AND charge_status = 'charged' THEN charged_amount ELSE 0 END), 0)::double precision
 FROM social_task_logs
 WHERE user_id = $1`, userID)
 	if err != nil {
@@ -356,11 +365,21 @@ func (s *adminServiceImpl) GetUserRPMStatus(ctx context.Context, userID int64) (
 }
 
 func (s *adminServiceImpl) GetUserBalanceHistory(ctx context.Context, userID int64, page, pageSize int, codeType string) ([]RedeemCode, int64, float64, error) {
-	if codeType == RedeemTypeAffiliateBalance {
-		totalRecharged, err := s.redeemCodeRepo.SumPositiveBalanceByUser(ctx, userID)
-		return []RedeemCode{}, 0, totalRecharged, err
-	}
 	params := pagination.PaginationParams{Page: page, PageSize: pageSize}
+	if codeType == RedeemTypeAffiliateBalance {
+		codes, total, err := s.listAffiliateBalanceHistory(ctx, userID, params)
+		if err != nil {
+			return nil, 0, 0, err
+		}
+		totalRecharged, err := s.redeemCodeRepo.SumPositiveBalanceByUser(ctx, userID)
+		if err != nil {
+			return nil, 0, 0, err
+		}
+		return codes, total, totalRecharged, nil
+	}
+	if codeType == "" {
+		return s.getAllUserBalanceHistory(ctx, userID, params)
+	}
 	codes, result, err := s.redeemCodeRepo.ListByUserPaginated(ctx, userID, params, codeType)
 	if err != nil {
 		return nil, 0, 0, err
@@ -519,21 +538,21 @@ func (s *adminServiceImpl) GenerateRedeemCodes(ctx context.Context, input *Gener
 	if input.ExpiresAt != nil && !input.ExpiresAt.After(time.Now()) {
 		return nil, ErrRedeemCodeExpired
 	}
-	codeType := strings.TrimSpace(input.Type)
-	if codeType == "" {
-		codeType = RedeemTypeBalance
+	codeType, err := normalizeRedeemCodeCreationType(input.Type)
+	if err != nil {
+		return nil, err
 	}
+	redeemValue := input.Value
+	if codeType == RedeemTypeSubscription || codeType == RedeemTypeInvitation {
+		redeemValue = 0
+	}
+	var subscriptionTarget *generateRedeemSubscriptionTarget
 	if codeType == RedeemTypeSubscription {
-		if input.GroupID == nil {
-			return nil, infraerrors.BadRequest("GROUP_REQUIRED", "group_id is required for subscription redeem codes")
-		}
-		group, err := s.groupRepo.GetByID(ctx, *input.GroupID)
+		target, err := s.resolveGenerateRedeemSubscriptionTarget(ctx, input)
 		if err != nil {
 			return nil, err
 		}
-		if !group.IsSubscriptionType() {
-			return nil, ErrGroupNotSubscriptionType
-		}
+		subscriptionTarget = target
 	}
 	codes := make([]RedeemCode, 0, input.Count)
 	for i := 0; i < input.Count; i++ {
@@ -544,14 +563,17 @@ func (s *adminServiceImpl) GenerateRedeemCodes(ctx context.Context, input *Gener
 		code := RedeemCode{
 			Code:         value,
 			Type:         codeType,
-			Value:        input.Value,
+			Value:        redeemValue,
 			Status:       StatusUnused,
 			GroupID:      input.GroupID,
+			PlanID:       input.PlanID,
 			ValidityDays: input.ValidityDays,
 			ExpiresAt:    input.ExpiresAt,
 		}
-		if code.Type == RedeemTypeSubscription && code.ValidityDays <= 0 {
-			code.ValidityDays = 30
+		if subscriptionTarget != nil {
+			code.GroupID = subscriptionTarget.GroupID
+			code.PlanID = subscriptionTarget.PlanID
+			code.ValidityDays = subscriptionTarget.ValidityDays
 		}
 		if err := s.redeemCodeRepo.Create(ctx, &code); err != nil {
 			return nil, err
@@ -561,14 +583,106 @@ func (s *adminServiceImpl) GenerateRedeemCodes(ctx context.Context, input *Gener
 	return codes, nil
 }
 
+type generateRedeemSubscriptionTarget struct {
+	GroupID      *int64
+	PlanID       *int64
+	ValidityDays int
+}
+
+func (s *adminServiceImpl) resolveGenerateRedeemSubscriptionTarget(ctx context.Context, input *GenerateRedeemCodesInput) (*generateRedeemSubscriptionTarget, error) {
+	if input.PlanID != nil && *input.PlanID <= 0 {
+		return nil, infraerrors.BadRequest("PLAN_REQUIRED", "plan_id must be positive")
+	}
+	if input.GroupID != nil && *input.GroupID <= 0 {
+		return nil, infraerrors.BadRequest("GROUP_REQUIRED", "group_id must be positive")
+	}
+
+	if input.PlanID != nil {
+		if s.entClient == nil {
+			return nil, infraerrors.InternalServer("PLAN_CATALOG_UNAVAILABLE", "subscription plan catalog is unavailable")
+		}
+		plan, err := s.entClient.SubscriptionPlan.Get(ctx, *input.PlanID)
+		if err != nil {
+			return nil, infraerrors.NotFound("PLAN_NOT_FOUND", "subscription plan not found")
+		}
+		groupID := plan.GroupID
+		if input.GroupID != nil && *input.GroupID != groupID {
+			return nil, infraerrors.BadRequest("PLAN_GROUP_MISMATCH", "plan_id does not match group_id")
+		}
+		if err := s.validateRedeemSubscriptionGroup(ctx, groupID); err != nil {
+			return nil, err
+		}
+		planID := plan.ID
+		validityDays := input.ValidityDays
+		if validityDays == 0 {
+			validityDays = plan.ValidityDays
+		}
+		if validityDays == 0 {
+			validityDays = 30
+		}
+		return &generateRedeemSubscriptionTarget{GroupID: &groupID, PlanID: &planID, ValidityDays: validityDays}, nil
+	}
+
+	if input.GroupID == nil {
+		return nil, infraerrors.BadRequest("SUBSCRIPTION_PACKAGE_REQUIRED", "plan_id or group_id is required for subscription redeem codes")
+	}
+	if err := s.validateRedeemSubscriptionGroup(ctx, *input.GroupID); err != nil {
+		return nil, err
+	}
+	validityDays := input.ValidityDays
+	if validityDays == 0 {
+		validityDays = 30
+	}
+	return &generateRedeemSubscriptionTarget{GroupID: input.GroupID, ValidityDays: validityDays}, nil
+}
+
+func (s *adminServiceImpl) validateRedeemSubscriptionGroup(ctx context.Context, groupID int64) error {
+	if s.groupRepo == nil {
+		return infraerrors.InternalServer("GROUP_REPOSITORY_UNAVAILABLE", "group repository is unavailable")
+	}
+	group, err := s.groupRepo.GetByID(ctx, groupID)
+	if err != nil {
+		return err
+	}
+	if !group.IsSubscriptionType() {
+		return ErrGroupNotSubscriptionType
+	}
+	return nil
+}
+
 func (s *adminServiceImpl) DeleteRedeemCode(ctx context.Context, id int64) error {
+	code, err := s.redeemCodeRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := ensureRedeemCodeDeletable(code); err != nil {
+		return err
+	}
 	return s.redeemCodeRepo.Delete(ctx, id)
 }
 
 func (s *adminServiceImpl) BatchDeleteRedeemCodes(ctx context.Context, ids []int64) (int64, error) {
+	cleaned := cleanPositiveIDs(ids)
+	deletableIDs := make([]int64, 0, len(cleaned))
+	for _, id := range cleaned {
+		code, err := s.redeemCodeRepo.GetByID(ctx, id)
+		if err != nil {
+			if errors.Is(err, ErrRedeemCodeNotFound) {
+				continue
+			}
+			return 0, err
+		}
+		if err := ensureRedeemCodeDeletable(code); err != nil {
+			return 0, err
+		}
+		deletableIDs = append(deletableIDs, id)
+	}
+
 	var deleted int64
-	for _, id := range cleanPositiveIDs(ids) {
-		if err := s.redeemCodeRepo.Delete(ctx, id); err == nil {
+	for _, id := range deletableIDs {
+		if err := s.redeemCodeRepo.Delete(ctx, id); err != nil {
+			return deleted, err
+		} else {
 			deleted++
 		}
 	}
@@ -666,17 +780,89 @@ func (s *adminServiceImpl) AdminResetAPIKeyRateLimitUsage(ctx context.Context, k
 	return apiKey, nil
 }
 
+func (s *adminServiceImpl) AdminUpdateAPIKeyGroupAndRateLimitUsage(ctx context.Context, keyID int64, groupID *int64, resetRateLimitUsage bool) (*AdminUpdateAPIKeyGroupIDResult, error) {
+	apiKey, err := s.apiKeyRepo.GetByID(ctx, keyID)
+	if err != nil {
+		return nil, err
+	}
+	result := &AdminUpdateAPIKeyGroupIDResult{APIKey: apiKey}
+
+	if groupID != nil {
+		if *groupID < 0 {
+			return nil, infraerrors.BadRequest("INVALID_GROUP_ID", "group_id must be non-negative")
+		}
+		if *groupID == 0 {
+			apiKey.GroupID = nil
+			apiKey.Group = nil
+		} else {
+			group, err := s.groupRepo.GetByID(ctx, *groupID)
+			if err != nil {
+				return nil, err
+			}
+			if !group.IsActive() {
+				return nil, infraerrors.BadRequest("GROUP_NOT_ACTIVE", "target group is not active")
+			}
+			if group.IsSubscriptionType() {
+				if s.userSubRepo == nil {
+					return nil, infraerrors.InternalServer("SUBSCRIPTION_REPOSITORY_UNAVAILABLE", "subscription repository is unavailable")
+				}
+				if _, err := s.userSubRepo.GetActiveByUserIDAndGroupID(ctx, apiKey.UserID, *groupID); err != nil {
+					if errors.Is(err, ErrSubscriptionNotFound) {
+						return nil, infraerrors.BadRequest("SUBSCRIPTION_REQUIRED", "user does not have an active subscription for this group")
+					}
+					return nil, err
+				}
+			}
+			gid := *groupID
+			apiKey.GroupID = &gid
+			apiKey.Group = group
+			if group.IsExclusive && !group.IsSubscriptionType() {
+				if err := s.userRepo.AddGroupToAllowedGroups(ctx, apiKey.UserID, gid); err != nil {
+					return nil, err
+				}
+				result.AutoGrantedGroupAccess = true
+				result.GrantedGroupID = &gid
+				result.GrantedGroupName = group.Name
+			}
+		}
+	}
+
+	if resetRateLimitUsage {
+		apiKey.Usage5h = 0
+		apiKey.Usage1d = 0
+		apiKey.Usage7d = 0
+		apiKey.Window5hStart = nil
+		apiKey.Window1dStart = nil
+		apiKey.Window7dStart = nil
+	}
+	if groupID == nil && !resetRateLimitUsage {
+		return result, nil
+	}
+	if err := s.apiKeyRepo.Update(ctx, apiKey); err != nil {
+		return nil, err
+	}
+	if s.authCacheInvalidator != nil {
+		s.authCacheInvalidator.InvalidateAuthCacheByKey(ctx, apiKey.Key)
+	}
+	if resetRateLimitUsage && s.billingCacheService != nil {
+		_ = s.billingCacheService.InvalidateAPIKeyRateLimit(ctx, apiKey.ID)
+	}
+	result.APIKey = apiKey
+	return result, nil
+}
+
 func (s *adminServiceImpl) assignDefaultSubscriptions(ctx context.Context, userID int64) {
 	if s.settingService == nil || s.defaultSubAssigner == nil || userID <= 0 {
 		return
 	}
 	for _, item := range s.settingService.GetDefaultSubscriptions(ctx) {
-		if item.GroupID <= 0 || item.ValidityDays == 0 {
+		if (item.GroupID <= 0 && item.PlanID <= 0) || item.ValidityDays == 0 {
 			continue
 		}
 		_, _, _ = s.defaultSubAssigner.AssignOrExtendSubscription(ctx, &AssignSubscriptionInput{
 			UserID:       userID,
 			GroupID:      item.GroupID,
+			PlanID:       positiveInt64Ptr(item.PlanID),
 			ValidityDays: item.ValidityDays,
 			Notes:        "auto assigned by default user subscriptions setting",
 		})
@@ -729,6 +915,46 @@ func cleanPositiveIDs(ids []int64) []int64 {
 		out = append(out, id)
 	}
 	return out
+}
+
+func (s *adminServiceImpl) snapshotUserConcurrency(ctx context.Context, userIDs []int64) map[int64]int {
+	out := make(map[int64]int, len(userIDs))
+	if s == nil || s.userRepo == nil {
+		return out
+	}
+	for _, userID := range userIDs {
+		user, err := s.userRepo.GetByID(ctx, userID)
+		if err != nil || user == nil {
+			continue
+		}
+		out[userID] = user.Concurrency
+	}
+	return out
+}
+
+func (s *adminServiceImpl) createBatchConcurrencyAdjustmentRecords(ctx context.Context, beforeByUserID map[int64]int, value int, mode string) {
+	for userID, before := range beforeByUserID {
+		after := before
+		switch mode {
+		case "set":
+			after = value
+			if after < 0 {
+				after = 0
+			}
+		case "add":
+			after = before + value
+			if after < 0 {
+				after = 0
+			}
+		default:
+			continue
+		}
+		diff := after - before
+		if diff == 0 {
+			continue
+		}
+		_ = s.createAdjustmentRecord(ctx, userID, adminConcurrencyAdjustmentType, float64(diff), "")
+	}
 }
 
 func normalizeAdminProviderType(value string) string {

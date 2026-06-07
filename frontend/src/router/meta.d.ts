@@ -4,6 +4,7 @@
  */
 
 import 'vue-router'
+import type { RegisteredFeatureFlag } from '@/utils/featureFlags'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -54,6 +55,12 @@ declare module 'vue-router' {
      * @default false
      */
     requiresRiskControl?: boolean
+
+    /**
+     * Existing public-settings feature flag required by this route.
+     * Keeps direct URL access aligned with sidebar feature-flag filtering.
+     */
+    requiresFeatureFlag?: RegisteredFeatureFlag
 
     /**
      * i18n key for the page title

@@ -25,12 +25,13 @@ const createMockRouter = (): Router => {
 
   const routes: Partial<RouteRecordNormalized>[] = [
     { path: '/admin/dashboard', components: { default: mockImportFn } },
-    { path: '/admin/accounts', components: { default: mockImportFn } },
-    { path: '/admin/proxies', components: { default: mockImportFn } },
     { path: '/admin/users', components: { default: mockImportFn } },
     { path: '/admin/subscriptions', components: { default: mockImportFn } },
     { path: '/admin/redeem', components: { default: mockImportFn } },
     { path: '/dashboard', components: { default: mockImportFn } },
+    { path: '/accounts', components: { default: mockImportFn } },
+    { path: '/task-settings', components: { default: mockImportFn } },
+    { path: '/proxies', components: { default: mockImportFn } },
     { path: '/usage', components: { default: mockImportFn } },
     { path: '/subscriptions', components: { default: mockImportFn } },
     { path: '/redeem', components: { default: mockImportFn } },
@@ -75,13 +76,14 @@ describe('useRoutePrefetch', () => {
       expect(_isAdminRoute('/admin/dashboard')).toBe(true)
       expect(_isAdminRoute('/admin/users')).toBe(true)
       expect(_isAdminRoute('/admin/accounts')).toBe(true)
-      expect(_isAdminRoute('/admin/proxies')).toBe(true)
     })
 
     it('应该正确识别非管理员路由', () => {
       const { _isAdminRoute } = useRoutePrefetch(mockRouter)
       expect(_isAdminRoute('/dashboard')).toBe(false)
       expect(_isAdminRoute('/usage')).toBe(false)
+      expect(_isAdminRoute('/proxies')).toBe(false)
+      expect(_isAdminRoute('/task-settings')).toBe(false)
       expect(_isAdminRoute('/usage')).toBe(false)
     })
   })
@@ -192,6 +194,9 @@ describe('useRoutePrefetch', () => {
     it('管理员预加载映射表应该包含正确的路由', () => {
       expect(_adminPrefetchMap).toHaveProperty('/admin/dashboard')
       expect(_adminPrefetchMap['/admin/dashboard']).toHaveLength(2)
+      expect(_adminPrefetchMap['/admin/dashboard']).toContain('/accounts')
+      expect(_adminPrefetchMap['/admin/dashboard']).not.toContain('/admin/accounts')
+      expect(_adminPrefetchMap).not.toHaveProperty('/admin' + '/proxies')
     })
 
     it('用户预加载映射表应该包含正确的路由', () => {

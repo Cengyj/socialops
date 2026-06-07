@@ -2,10 +2,12 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { adminAPI } from '@/api'
 import type { CustomMenuItem } from '@/types'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 export const useAdminSettingsStore = defineStore('adminSettings', () => {
   const loaded = ref(false)
   const loading = ref(false)
+  let fetchPromise: Promise<void> | null = null
 
   const readCachedBool = (key: string, defaultValue: boolean): boolean => {
     try {
@@ -31,27 +33,32 @@ export const useAdminSettingsStore = defineStore('adminSettings', () => {
 
   async function fetch(force = false): Promise<void> {
     if (loaded.value && !force) return
-    if (loading.value) return
+    if (fetchPromise) return fetchPromise
 
-    loading.value = true
-    try {
-      const [settings, paymentConfigResp] = await Promise.all([
-        adminAPI.settings.getSettings(),
-        adminAPI.payment.getConfig()
-      ])
-      customMenuItems.value = Array.isArray(settings.custom_menu_items) ? settings.custom_menu_items : []
+    fetchPromise = (async () => {
+      loading.value = true
+      try {
+        const [settings, paymentConfigResp] = await Promise.all([
+          adminAPI.settings.getSettings(),
+          adminAPI.payment.getConfig()
+        ])
+        customMenuItems.value = Array.isArray(settings.custom_menu_items) ? settings.custom_menu_items : []
 
-      paymentEnabled.value = paymentConfigResp.data?.enabled ?? false
-      writeCachedBool('payment_enabled_cached', paymentEnabled.value)
+        paymentEnabled.value = paymentConfigResp.data?.enabled ?? false
+        writeCachedBool('payment_enabled_cached', paymentEnabled.value)
 
-      loaded.value = true
-    } catch (err) {
-      // Keep cached/default value: do not "flip" the UI based on a transient fetch failure.
-      loaded.value = true
-      console.error('[adminSettings] Failed to fetch settings:', err)
-    } finally {
-      loading.value = false
-    }
+        loaded.value = true
+      } catch (err) {
+        // Keep cached/default value: do not "flip" the UI based on a transient fetch failure.
+        loaded.value = true
+        recordClientDiagnostic('adminSettings.fetch', err)
+      } finally {
+        loading.value = false
+        fetchPromise = null
+      }
+    })()
+
+    return fetchPromise
   }
 
   function setPaymentEnabledLocal(value: boolean) {

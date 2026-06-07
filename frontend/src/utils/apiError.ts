@@ -17,6 +17,8 @@ interface ApiErrorLike {
       detail?: string
       message?: string
       code?: number | string
+      reason?: string
+      error?: string
     }
   }
 }
@@ -31,7 +33,7 @@ interface ApiErrorLike {
 export function extractApiErrorCode(err: unknown): string | undefined {
   if (!err || typeof err !== 'object') return undefined
   const e = err as ApiErrorLike
-  const code = e.reason ?? e.code ?? e.response?.data?.code
+  const code = e.reason ?? e.code ?? e.response?.data?.reason ?? e.response?.data?.code ?? e.response?.data?.error
   return code != null ? String(code) : undefined
 }
 
@@ -98,6 +100,16 @@ export function extractI18nErrorMessage(
   namespace: string,
   fallback: string,
 ): string {
+  const localized = resolveI18nErrorMessage(err, t, namespace)
+  if (localized) return localized
+  return extractApiErrorMessage(err, fallback)
+}
+
+function resolveI18nErrorMessage(
+  err: unknown,
+  t: TranslateFn,
+  namespace: string,
+): string | undefined {
   const code = extractApiErrorCode(err)
   if (code) {
     const key = `${namespace}.${code}`
@@ -110,7 +122,35 @@ export function extractI18nErrorMessage(
     const te = (t as TranslateWithExistsFn).te
     if (te && te(key)) return translated
   }
-  return extractApiErrorMessage(err, fallback)
+  return undefined
+}
+
+/**
+ * Extract a localized user-facing error message without falling back to raw
+ * backend/provider/SDK details. Use this on ordinary user surfaces where
+ * internal diagnostics must stay out of the UI.
+ */
+export function extractSafeI18nErrorMessage(
+  err: unknown,
+  t: TranslateFn,
+  namespace: string,
+  fallback: string,
+): string {
+  return resolveI18nErrorMessage(err, t, namespace) ?? fallback
+}
+
+/**
+ * Extract a safe display message by known code only. Unknown errors return the
+ * fallback instead of exposing raw `message`, `detail`, or Error.message text.
+ */
+export function extractSafeApiErrorMessage(
+  err: unknown,
+  fallback = 'Unknown error',
+  i18nMap?: Record<string, string>,
+): string {
+  if (!i18nMap) return fallback
+  const code = extractApiErrorCode(err)
+  return code && i18nMap[code] ? i18nMap[code] : fallback
 }
 
 /**

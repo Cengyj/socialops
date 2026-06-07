@@ -103,9 +103,27 @@
 
               <div v-if="cond.type === 'subscription'" class="flex-1">
                 <label class="input-label">{{ t('admin.announcements.form.selectPackages') }}</label>
-                  v-model="subscriptionSelections[groupIndex][condIndex]"
-                  :groups="groups"
-                />
+                <div class="max-h-44 overflow-y-auto rounded-xl border border-gray-200 bg-white p-2 dark:border-dark-700 dark:bg-dark-800">
+                  <label
+                    v-for="groupOption in groups"
+                    :key="groupOption.id"
+                    class="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-dark-700"
+                  >
+                    <input
+                      type="checkbox"
+                      class="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      :checked="isSubscriptionGroupSelected(groupIndex, condIndex, groupOption.id)"
+                      @change="(event) => toggleSubscriptionGroup(groupIndex, condIndex, groupOption.id, (event.target as HTMLInputElement).checked)"
+                    />
+                    <span class="min-w-0">
+                      <span class="block truncate font-medium">{{ groupOption.name }}</span>
+                      <span class="block text-xs text-gray-500 dark:text-dark-400">{{ groupOption.platform }}</span>
+                    </span>
+                  </label>
+                  <div v-if="groups.length === 0" class="px-2 py-3 text-sm text-gray-500 dark:text-dark-400">
+                    {{ t('empty.noData') }}
+                  </div>
+                </div>
               </div>
 
               <div v-else class="flex flex-1 flex-col gap-3 sm:flex-row">
@@ -174,6 +192,10 @@ import type {
   AnnouncementConditionType,
   AnnouncementOperator
 } from '@/types'
+import {
+  getAnnouncementTargetingValidationMessage,
+  validateAnnouncementTargeting
+} from '@/utils/announcementTargeting'
 
 import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -320,6 +342,23 @@ function ensureSelectionPath(groupIndex: number, condIndex: number) {
   if (!subscriptionSelections[groupIndex][condIndex]) subscriptionSelections[groupIndex][condIndex] = []
 }
 
+function isSubscriptionGroupSelected(groupIndex: number, condIndex: number, groupID: number): boolean {
+  ensureSelectionPath(groupIndex, condIndex)
+  return subscriptionSelections[groupIndex][condIndex].includes(groupID)
+}
+
+function toggleSubscriptionGroup(groupIndex: number, condIndex: number, groupID: number, checked: boolean) {
+  ensureSelectionPath(groupIndex, condIndex)
+  const selected = subscriptionSelections[groupIndex][condIndex]
+  if (checked) {
+    if (!selected.includes(groupID)) {
+      subscriptionSelections[groupIndex][condIndex] = [...selected, groupID]
+    }
+    return
+  }
+  subscriptionSelections[groupIndex][condIndex] = selected.filter((id) => id !== groupID)
+}
+
 // Sync from modelValue to subscriptionSelections (one-way: model -> local state)
 watch(
   () => props.modelValue,
@@ -383,23 +422,7 @@ watch(
 const validationError = computed(() => {
   if (mode.value !== 'custom') return ''
 
-  const groups = anyOf.value
-  if (groups.length === 0) return t('admin.announcements.form.addOrGroup')
-
-  if (groups.length > 50) return 'any_of > 50'
-
-  for (const g of groups) {
-    const allOf = g?.all_of ?? []
-    if (allOf.length === 0) return t('admin.announcements.form.addAndCondition')
-    if (allOf.length > 50) return 'all_of > 50'
-
-    for (const c of allOf) {
-      if (c.type === 'subscription') {
-        if (!c.group_ids || c.group_ids.length === 0) return t('admin.announcements.form.selectPackages')
-      }
-    }
-  }
-
-  return ''
+  const error = validateAnnouncementTargeting(props.modelValue)
+  return error ? getAnnouncementTargetingValidationMessage(error, t) : ''
 })
 </script>

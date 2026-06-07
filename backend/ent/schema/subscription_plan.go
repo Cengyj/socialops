@@ -31,6 +31,9 @@ func (SubscriptionPlan) Annotations() []schema.Annotation {
 func (SubscriptionPlan) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int64("group_id"),
+		field.String("platform").
+			MaxLen(50).
+			Default("social"),
 		field.String("name").
 			MaxLen(100).
 			NotEmpty(),
@@ -58,6 +61,18 @@ func (SubscriptionPlan) Fields() []ent.Field {
 			Default(true),
 		field.Int("sort_order").
 			Default(0),
+		field.Float("daily_limit_usd").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}),
+		field.Float("weekly_limit_usd").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}),
+		field.Float("monthly_limit_usd").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}),
 		field.Time("created_at").
 			Immutable().
 			Default(time.Now).
@@ -72,6 +87,7 @@ func (SubscriptionPlan) Fields() []ent.Field {
 func (SubscriptionPlan) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("group_id"),
+		index.Fields("platform"),
 		index.Fields("for_sale"),
 	}
 }

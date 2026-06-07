@@ -29,8 +29,12 @@ const (
 	FieldPlatformKey = "platform_key"
 	// FieldNameKey holds the string denoting the name_key field in the database.
 	FieldNameKey = "name_key"
-	// FieldAccountID holds the string denoting the account_id field in the database.
-	FieldAccountID = "account_id"
+	// FieldIdentityKind holds the string denoting the identity_kind field in the database.
+	FieldIdentityKind = "identity_kind"
+	// FieldIdentityKey holds the string denoting the identity_key field in the database.
+	FieldIdentityKey = "identity_key"
+	// FieldPlatformUserID holds the string denoting the platform_user_id field in the database.
+	FieldPlatformUserID = "platform_user_id"
 	// FieldPassword holds the string denoting the password field in the database.
 	FieldPassword = "password"
 	// FieldPhone holds the string denoting the phone field in the database.
@@ -39,18 +43,32 @@ const (
 	FieldEmail = "email"
 	// FieldEmailPassword holds the string denoting the email_password field in the database.
 	FieldEmailPassword = "email_password"
+	// FieldTwoFactor holds the string denoting the two_factor field in the database.
+	FieldTwoFactor = "two_factor"
+	// FieldBackupCode holds the string denoting the backup_code field in the database.
+	FieldBackupCode = "backup_code"
+	// FieldEmailClientID holds the string denoting the email_client_id field in the database.
+	FieldEmailClientID = "email_client_id"
+	// FieldEmailToken holds the string denoting the email_token field in the database.
+	FieldEmailToken = "email_token"
+	// FieldRegistrationIP holds the string denoting the registration_ip field in the database.
+	FieldRegistrationIP = "registration_ip"
+	// FieldAuthCookie holds the string denoting the auth_cookie field in the database.
+	FieldAuthCookie = "auth_cookie"
+	// FieldExecutionAuth holds the string denoting the execution_auth field in the database.
+	FieldExecutionAuth = "execution_auth"
 	// FieldAccountStatus holds the string denoting the account_status field in the database.
 	FieldAccountStatus = "account_status"
 	// FieldTaskStatus holds the string denoting the task_status field in the database.
 	FieldTaskStatus = "task_status"
 	// FieldTaskMessage holds the string denoting the task_message field in the database.
 	FieldTaskMessage = "task_message"
-	// FieldSource holds the string denoting the source field in the database.
-	FieldSource = "source"
-	// FieldBoundIP holds the string denoting the bound_ip field in the database.
-	FieldBoundIP = "bound_ip"
+	// FieldDefaultProxySnapshot holds the string denoting the default_proxy_snapshot field in the database.
+	FieldDefaultProxySnapshot = "default_proxy_snapshot"
 	// FieldAssignedUserID holds the string denoting the assigned_user_id field in the database.
 	FieldAssignedUserID = "assigned_user_id"
+	// FieldUserWorkbenchDeletedAt holds the string denoting the user_workbench_deleted_at field in the database.
+	FieldUserWorkbenchDeletedAt = "user_workbench_deleted_at"
 	// FieldRemark holds the string denoting the remark field in the database.
 	FieldRemark = "remark"
 	// EdgeAssignedUser holds the string denoting the assigned_user edge name in mutations.
@@ -85,17 +103,26 @@ var Columns = []string{
 	FieldPlatform,
 	FieldPlatformKey,
 	FieldNameKey,
-	FieldAccountID,
+	FieldIdentityKind,
+	FieldIdentityKey,
+	FieldPlatformUserID,
 	FieldPassword,
 	FieldPhone,
 	FieldEmail,
 	FieldEmailPassword,
+	FieldTwoFactor,
+	FieldBackupCode,
+	FieldEmailClientID,
+	FieldEmailToken,
+	FieldRegistrationIP,
+	FieldAuthCookie,
+	FieldExecutionAuth,
 	FieldAccountStatus,
 	FieldTaskStatus,
 	FieldTaskMessage,
-	FieldSource,
-	FieldBoundIP,
+	FieldDefaultProxySnapshot,
 	FieldAssignedUserID,
+	FieldUserWorkbenchDeletedAt,
 	FieldRemark,
 }
 
@@ -115,7 +142,7 @@ func ValidColumn(column string) bool {
 //
 //	import _ "github.com/Wei-Shaw/socialops/ent/runtime"
 var (
-	Hooks        [1]ent.Hook
+	Hooks        [2]ent.Hook
 	Interceptors [1]ent.Interceptor
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
@@ -131,8 +158,14 @@ var (
 	PlatformKeyValidator func(string) error
 	// NameKeyValidator is a validator for the "name_key" field. It is called by the builders before save.
 	NameKeyValidator func(string) error
-	// AccountIDValidator is a validator for the "account_id" field. It is called by the builders before save.
-	AccountIDValidator func(string) error
+	// DefaultIdentityKind holds the default value on creation for the "identity_kind" field.
+	DefaultIdentityKind string
+	// IdentityKindValidator is a validator for the "identity_kind" field. It is called by the builders before save.
+	IdentityKindValidator func(string) error
+	// IdentityKeyValidator is a validator for the "identity_key" field. It is called by the builders before save.
+	IdentityKeyValidator func(string) error
+	// PlatformUserIDValidator is a validator for the "platform_user_id" field. It is called by the builders before save.
+	PlatformUserIDValidator func(string) error
 	// PasswordValidator is a validator for the "password" field. It is called by the builders before save.
 	PasswordValidator func(string) error
 	// PhoneValidator is a validator for the "phone" field. It is called by the builders before save.
@@ -141,6 +174,14 @@ var (
 	EmailValidator func(string) error
 	// EmailPasswordValidator is a validator for the "email_password" field. It is called by the builders before save.
 	EmailPasswordValidator func(string) error
+	// TwoFactorValidator is a validator for the "two_factor" field. It is called by the builders before save.
+	TwoFactorValidator func(string) error
+	// BackupCodeValidator is a validator for the "backup_code" field. It is called by the builders before save.
+	BackupCodeValidator func(string) error
+	// EmailClientIDValidator is a validator for the "email_client_id" field. It is called by the builders before save.
+	EmailClientIDValidator func(string) error
+	// RegistrationIPValidator is a validator for the "registration_ip" field. It is called by the builders before save.
+	RegistrationIPValidator func(string) error
 	// DefaultAccountStatus holds the default value on creation for the "account_status" field.
 	DefaultAccountStatus string
 	// AccountStatusValidator is a validator for the "account_status" field. It is called by the builders before save.
@@ -149,10 +190,6 @@ var (
 	DefaultTaskStatus string
 	// TaskStatusValidator is a validator for the "task_status" field. It is called by the builders before save.
 	TaskStatusValidator func(string) error
-	// DefaultSource holds the default value on creation for the "source" field.
-	DefaultSource string
-	// SourceValidator is a validator for the "source" field. It is called by the builders before save.
-	SourceValidator func(string) error
 )
 
 // OrderOption defines the ordering options for the SocialAccount queries.
@@ -198,9 +235,19 @@ func ByNameKey(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldNameKey, opts...).ToFunc()
 }
 
-// ByAccountID orders the results by the account_id field.
-func ByAccountID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldAccountID, opts...).ToFunc()
+// ByIdentityKind orders the results by the identity_kind field.
+func ByIdentityKind(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldIdentityKind, opts...).ToFunc()
+}
+
+// ByIdentityKey orders the results by the identity_key field.
+func ByIdentityKey(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldIdentityKey, opts...).ToFunc()
+}
+
+// ByPlatformUserID orders the results by the platform_user_id field.
+func ByPlatformUserID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPlatformUserID, opts...).ToFunc()
 }
 
 // ByPassword orders the results by the password field.
@@ -223,6 +270,41 @@ func ByEmailPassword(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEmailPassword, opts...).ToFunc()
 }
 
+// ByTwoFactor orders the results by the two_factor field.
+func ByTwoFactor(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTwoFactor, opts...).ToFunc()
+}
+
+// ByBackupCode orders the results by the backup_code field.
+func ByBackupCode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBackupCode, opts...).ToFunc()
+}
+
+// ByEmailClientID orders the results by the email_client_id field.
+func ByEmailClientID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEmailClientID, opts...).ToFunc()
+}
+
+// ByEmailToken orders the results by the email_token field.
+func ByEmailToken(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEmailToken, opts...).ToFunc()
+}
+
+// ByRegistrationIP orders the results by the registration_ip field.
+func ByRegistrationIP(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRegistrationIP, opts...).ToFunc()
+}
+
+// ByAuthCookie orders the results by the auth_cookie field.
+func ByAuthCookie(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAuthCookie, opts...).ToFunc()
+}
+
+// ByExecutionAuth orders the results by the execution_auth field.
+func ByExecutionAuth(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldExecutionAuth, opts...).ToFunc()
+}
+
 // ByAccountStatus orders the results by the account_status field.
 func ByAccountStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAccountStatus, opts...).ToFunc()
@@ -238,19 +320,19 @@ func ByTaskMessage(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTaskMessage, opts...).ToFunc()
 }
 
-// BySource orders the results by the source field.
-func BySource(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldSource, opts...).ToFunc()
-}
-
-// ByBoundIP orders the results by the bound_ip field.
-func ByBoundIP(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldBoundIP, opts...).ToFunc()
+// ByDefaultProxySnapshot orders the results by the default_proxy_snapshot field.
+func ByDefaultProxySnapshot(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDefaultProxySnapshot, opts...).ToFunc()
 }
 
 // ByAssignedUserID orders the results by the assigned_user_id field.
 func ByAssignedUserID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAssignedUserID, opts...).ToFunc()
+}
+
+// ByUserWorkbenchDeletedAt orders the results by the user_workbench_deleted_at field.
+func ByUserWorkbenchDeletedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUserWorkbenchDeletedAt, opts...).ToFunc()
 }
 
 // ByRemark orders the results by the remark field.

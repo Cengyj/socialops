@@ -60,6 +60,7 @@ import ProfileTotpCard from '@/components/user/profile/ProfileTotpCard.vue'
 import { isWeChatWebOAuthEnabled } from '@/api/auth'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -79,7 +80,7 @@ const oidcOAuthProviderName = ref('OIDC')
 
 onMounted(async () => {
   const profileRefresh = authStore.refreshUser().catch((error) => {
-    console.error('Failed to refresh profile:', error)
+    recordClientDiagnostic('profile.refresh_user', error)
   })
 
   const settingsLoad = appStore.fetchPublicSettings()
@@ -103,7 +104,7 @@ onMounted(async () => {
       oidcOAuthProviderName.value = settings.oidc_oauth_provider_name || 'OIDC'
     })
     .catch((error) => {
-      console.error('Failed to load settings:', error)
+      recordClientDiagnostic('profile.load_public_settings', error)
     })
 
   await Promise.all([profileRefresh, settingsLoad])

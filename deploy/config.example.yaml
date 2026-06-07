@@ -466,3 +466,28 @@ update:
   # Leave empty for direct connection (recommended for overseas servers)
   # 留空表示直连（适用于海外服务器）
   proxy_url: ""
+
+# =============================================================================
+# Twitter/X account login (credential acquisition)
+# Twitter/X 账号登录（采集执行凭证：cookie / OAuth token）
+# =============================================================================
+# The "login" task action logs in with the account's username + password and
+# writes the acquired execution credentials back to the account. It relies on
+# two external helper services. Leave a URL empty to fail closed (no fake
+# success, no charge) until it is configured.
+# “login” 任务动作用账号用户名 + 密码登录，并把采集到的执行凭证写回账号。
+# 它依赖两个外部辅助服务。URL 留空时该动作会 fail-closed（不会假成功、不扣费）。
+twitter_login:
+  # Device fingerprint API: returns a real device parameter set per login.
+  # A static fingerprint significantly raises Twitter risk-control rejection.
+  # 设备指纹 API：每次登录返回一份真实设备参数。静态指纹会显著提高风控拒绝率。
+  device_params_url: ""
+  # Collection name posted to the device fingerprint API.
+  # 向设备指纹 API 提交的 collection 名称。
+  device_params_collection: "twitter_parameter"
+  # Email verification-code API: polled when Twitter issues an email challenge
+  # (LoginAcid) during login. Uses the account's email/email_password/
+  # email_token/email_client_id fields.
+  # 邮箱验证码 API：登录过程中 Twitter 触发邮箱验证（LoginAcid）时轮询获取。
+  # 使用账号的 email / email_password / email_token / email_client_id 字段。
+  email_code_url: ""

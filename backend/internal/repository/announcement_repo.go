@@ -53,7 +53,8 @@ func (r *announcementRepository) Create(ctx context.Context, a *service.Announce
 }
 
 func (r *announcementRepository) GetByID(ctx context.Context, id int64) (*service.Announcement, error) {
-	m, err := r.client.Announcement.Query().
+	client := clientFromContext(ctx, r.client)
+	m, err := client.Announcement.Query().
 		Where(announcement.IDEQ(id)).
 		Only(ctx)
 	if err != nil {
@@ -112,7 +113,8 @@ func (r *announcementRepository) List(
 	params pagination.PaginationParams,
 	filters service.AnnouncementListFilters,
 ) ([]service.Announcement, *pagination.PaginationResult, error) {
-	q := r.client.Announcement.Query()
+	client := clientFromContext(ctx, r.client)
+	q := client.Announcement.Query()
 
 	if filters.Status != "" {
 		q = q.Where(announcement.StatusEQ(filters.Status))
@@ -198,7 +200,8 @@ func announcementListOrders(params pagination.PaginationParams) []func(*entsql.S
 }
 
 func (r *announcementRepository) ListActive(ctx context.Context, now time.Time) ([]service.Announcement, error) {
-	q := r.client.Announcement.Query().
+	client := clientFromContext(ctx, r.client)
+	q := client.Announcement.Query().
 		Where(
 			announcement.StatusEQ(service.AnnouncementStatusActive),
 			announcement.Or(announcement.StartsAtIsNil(), announcement.StartsAtLTE(now)),

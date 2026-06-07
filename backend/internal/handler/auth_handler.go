@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"sync"
@@ -31,6 +32,8 @@ type AuthHandler struct {
 	dingTalkClientInstance *DingTalkClient
 	dingTalkClientMu       sync.Mutex
 }
+
+var errBackendModeRefreshForbidden = errors.New("backend mode forbids non-admin refresh")
 
 // NewAuthHandler creates a new AuthHandler
 func NewAuthHandler(cfg *config.Config, authService *service.AuthService, userService *service.UserService, settingService *service.SettingService, promoService *service.PromoService, redeemService *service.RedeemService, totpService *service.TotpService, userAttributeService *service.UserAttributeService) *AuthHandler {
@@ -293,12 +296,7 @@ func (h *AuthHandler) Login2FA(c *gin.Context) {
 	// Get the login session
 	session, err := h.totpService.GetLoginSession(c.Request.Context(), req.TempToken)
 	if err != nil || session == nil {
-		tokenPrefix := ""
-		if len(req.TempToken) >= 8 {
-			tokenPrefix = req.TempToken[:8]
-		}
 		slog.Debug("login_2fa_session_invalid",
-			"temp_token_prefix", tokenPrefix,
 			"error", err)
 		response.BadRequest(c, "Invalid or expired 2FA session")
 		return
@@ -554,10 +552,14 @@ func (h *AuthHandler) ValidateInvitationCode(c *gin.Context) {
 		return
 	}
 
-	if redeemCode.Status != service.StatusUnused {
+	if !redeemCode.CanUse() {
+		errorCode := "INVITATION_CODE_INVALID"
+		if redeemCode.Status != service.StatusUnused {
+			errorCode = "INVITATION_CODE_USED"
+		}
 		response.Success(c, ValidateInvitationCodeResponse{
 			Valid:     false,
-			ErrorCode: "INVITATION_CODE_USED",
+			ErrorCode: errorCode,
 		})
 		return
 	}
@@ -668,15 +670,18 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	result, err := h.authService.RefreshTokenPair(c.Request.Context(), req.RefreshToken)
+	result, err := h.authService.RefreshTokenPairWithUserCheck(c.Request.Context(), req.RefreshToken, func(user *service.User) error {
+		if h.settingSvc != nil && h.settingSvc.IsBackendModeEnabled(c.Request.Context()) && !user.IsAdmin() {
+			return errBackendModeRefreshForbidden
+		}
+		return nil
+	})
 	if err != nil {
+		if errors.Is(err, errBackendModeRefreshForbidden) {
+			response.Forbidden(c, "Backend mode is active. Only admin login is allowed.")
+			return
+		}
 		response.ErrorFrom(c, err)
-		return
-	}
-
-	// Backend mode: block non-admin token refresh
-	if h.settingSvc.IsBackendModeEnabled(c.Request.Context()) && result.UserRole != "admin" {
-		response.Forbidden(c, "Backend mode is active. Only admin login is allowed.")
 		return
 	}
 

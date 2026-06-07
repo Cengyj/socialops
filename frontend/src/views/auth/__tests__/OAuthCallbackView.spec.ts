@@ -95,6 +95,7 @@ describe('OAuthCallbackView', () => {
     copyToClipboardMock.mockReset()
     exchangePendingOAuthCompletionMock.mockReset()
     apiPostMock.mockReset()
+    window.__SOCIALOPS_CLIENT_DIAGNOSTICS__ = []
     window.sessionStorage.clear()
   })
 
@@ -120,9 +121,12 @@ describe('OAuthCallbackView', () => {
 
     const wrapper = mount(OAuthCallbackView)
 
-    expect(showErrorMock).toHaveBeenCalledWith('oauth failed')
+    expect(showErrorMock).toHaveBeenCalledWith('auth.loginFailed')
     expect(wrapper.text()).not.toContain('oauth failed')
     expect(wrapper.find('.bg-red-50').exists()).toBe(false)
+    expect(window.__SOCIALOPS_CLIENT_DIAGNOSTICS__?.at(-1)?.context).toBe(
+      'auth.oauth.query_error'
+    )
   })
 
   it('does not render manual copy fields for direct email oauth callback visits', async () => {

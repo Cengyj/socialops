@@ -61,7 +61,7 @@
                   :to="child.path"
                   class="sidebar-link mb-0.5 py-1.5 text-sm"
                   :class="{ 'sidebar-link-active': route.path === child.path }"
-                  :id="child.path === '/admin/accounts' ? 'sidebar-social-account-manage' : undefined"
+                  :id="child.path === '/accounts' ? 'sidebar-social-account-manage' : undefined"
                   @click="handleMenuItemClick(child.path)"
                 >
                   <component :is="child.icon" class="h-4 w-4 flex-shrink-0" />
@@ -77,7 +77,7 @@
               :class="{ 'sidebar-link-active': isActive(item.path), 'sidebar-link-collapsed': sidebarCollapsed }"
               :title="sidebarCollapsed ? item.label : undefined"
               :id="
-                item.path === '/admin/accounts'
+                item.path === '/accounts'
                   ? 'sidebar-social-account-manage'
                   : item.path === '/admin/redeem'
                     ? 'sidebar-wallet'
@@ -567,46 +567,6 @@ const ChevronDownIcon = {
 const flagPayment = makeSidebarFlag(FeatureFlags.payment)
 const flagAffiliate = makeSidebarFlag(FeatureFlags.affiliate)
 const flagRiskControl = makeSidebarFlag(FeatureFlags.riskControl)
-const flagAdminPayment = () => adminSettingsStore.paymentEnabled
-
-// buildSelfNavItems 构造用户自己的导航项（用户端主菜单和管理员的"我的账户"子菜单共享这组声明）。
-// withDashboard=true 时包含仪表盘（用户端），false 时不含（管理员的个人区已经有独立仪表盘入口）。
-//
-// 条目顺序：用量 → 订阅/支付 → 兑换/资料。
-function buildSelfNavItems(withDashboard: boolean): NavItem[] {
-  const items: NavItem[] = []
-  if (withDashboard) {
-    items.push({ path: '/dashboard', label: t('nav.dashboard'), icon: DashboardIcon })
-  }
-  items.push(
-    { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
-    { path: '/subscriptions', label: t('nav.mySubscriptions'), icon: CreditCardIcon, hideInSimpleMode: true },
-    { path: '/purchase', label: t('nav.buySubscription'), icon: RechargeSubscriptionIcon, hideInSimpleMode: true, featureFlag: flagPayment },
-    { path: '/orders', label: t('nav.myOrders'), icon: OrderListIcon, hideInSimpleMode: true, featureFlag: flagPayment },
-    { path: '/redeem', label: t('nav.redeem'), icon: GiftIcon, hideInSimpleMode: true },
-    { path: '/affiliate', label: t('nav.affiliate'), icon: UsersIcon, hideInSimpleMode: true, featureFlag: flagAffiliate },
-    { path: '/profile', label: t('nav.profile'), icon: UserIcon },
-    ...customMenuItemsForUser.value.map((item): NavItem => ({
-      path: `/custom/${item.id}`,
-      label: item.label,
-      icon: null,
-      iconSvg: item.icon_svg,
-    })),
-  )
-  return items
-}
-
-// finalizeNav 合并三重过滤：featureFlag 过滤 + simple 模式过滤。
-function finalizeNav(items: NavItem[]): NavItem[] {
-  const visible = applyFeatureFlags(items)
-  return authStore.isSimpleMode ? visible.filter(item => !item.hideInSimpleMode) : visible
-}
-
-// User navigation items (for regular users)
-const userNavItems = computed((): NavItem[] => finalizeNav(buildSelfNavItems(true)))
-
-// Personal navigation items (for admin's "My Account" section, without Dashboard).
-const personalNavItems = computed((): NavItem[] => finalizeNav(buildSelfNavItems(false)))
 
 // Custom menu items filtered by visibility
 const customMenuItemsForUser = computed(() => {
@@ -622,23 +582,73 @@ const customMenuItemsForAdmin = computed(() => {
     .sort((a, b) => a.sort_order - b.sort_order)
 })
 
-// Admin navigation items
-const adminNavItems = computed((): NavItem[] => {
+function buildUserNavItems(): NavItem[] {
+  return [
+    { path: '/dashboard', label: t('nav.dashboard'), icon: DashboardIcon },
+    { path: '/accounts', label: t('nav.accountWorkbench'), icon: GlobeIcon, hideInSimpleMode: true },
+    { path: '/task-settings', label: t('nav.taskSettings'), icon: CogIcon, hideInSimpleMode: true },
+    { path: '/proxies', label: t('nav.proxies'), icon: ServerIcon, hideInSimpleMode: true },
+    { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
+    { path: '/subscriptions', label: t('nav.mySubscriptions'), icon: CreditCardIcon, hideInSimpleMode: true },
+    { path: '/purchase', label: t('nav.buySubscription'), icon: RechargeSubscriptionIcon, hideInSimpleMode: true, featureFlag: flagPayment },
+    { path: '/orders', label: t('nav.myOrders'), icon: OrderListIcon, hideInSimpleMode: true, featureFlag: flagPayment },
+    { path: '/redeem', label: t('nav.redeem'), icon: GiftIcon, hideInSimpleMode: true },
+    { path: '/affiliate', label: t('nav.affiliate'), icon: UsersIcon, hideInSimpleMode: true, featureFlag: flagAffiliate },
+    { path: '/profile', label: t('nav.profile'), icon: UserIcon },
+    ...customMenuItemsForUser.value.map((item): NavItem => ({
+      path: `/custom/${item.id}`,
+      label: item.label,
+      icon: null,
+      iconSvg: item.icon_svg,
+    })),
+  ]
+}
+
+function buildAdminPersonalNavItems(): NavItem[] {
+  return [
+    { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
+    { path: '/subscriptions', label: t('nav.mySubscriptions'), icon: CreditCardIcon, hideInSimpleMode: true },
+    { path: '/purchase', label: t('nav.buySubscription'), icon: RechargeSubscriptionIcon, hideInSimpleMode: true, featureFlag: flagPayment },
+    { path: '/orders', label: t('nav.myOrders'), icon: OrderListIcon, hideInSimpleMode: true, featureFlag: flagPayment },
+    { path: '/redeem', label: t('nav.redeem'), icon: GiftIcon, hideInSimpleMode: true },
+    { path: '/affiliate', label: t('nav.affiliate'), icon: UsersIcon, hideInSimpleMode: true, featureFlag: flagAffiliate },
+    { path: '/profile', label: t('nav.profile'), icon: UserIcon },
+    ...customMenuItemsForUser.value.map((item): NavItem => ({
+      path: `/custom/${item.id}`,
+      label: item.label,
+      icon: null,
+      iconSvg: item.icon_svg,
+    })),
+  ]
+}
+
+function buildAdminNavItems(): NavItem[] {
   const baseItems: NavItem[] = [
     { path: '/admin/dashboard', label: t('nav.dashboard'), icon: DashboardIcon },
     { path: '/admin/users', label: t('nav.users'), icon: UsersIcon, hideInSimpleMode: true },
-    { path: '/admin/subscriptions', label: t('nav.subscriptions'), icon: CreditCardIcon, hideInSimpleMode: true },
     {
       path: '/admin/account-center',
-      label: t('nav.socialAccounts'),
+      label: t('nav.accountWorkbench'),
       icon: GlobeIcon,
       expandOnly: true,
       children: [
-        { path: '/admin/accounts', label: t('nav.accounts'), icon: GlobeIcon },
+        { path: '/accounts', label: t('nav.accountWorkbenchHome'), icon: GlobeIcon },
+        { path: '/task-settings', label: t('nav.taskSettings'), icon: CogIcon },
+        { path: '/proxies', label: t('nav.proxies'), icon: ServerIcon },
         { path: '/admin/total-accounts', label: t('nav.totalAccounts'), icon: UsersIcon },
       ],
     },
-    { path: '/admin/proxies', label: t('nav.proxies'), icon: ServerIcon },
+    {
+      path: '/admin/subscription-center',
+      label: t('nav.subscriptions'),
+      icon: CreditCardIcon,
+      hideInSimpleMode: true,
+      expandOnly: true,
+      children: [
+        { path: '/admin/subscriptions', label: t('nav.subscriptions'), icon: CreditCardIcon },
+        { path: '/admin/orders/plans', label: t('nav.paymentPlans'), icon: GiftIcon },
+      ],
+    },
     { path: '/admin/announcements', label: t('nav.announcements'), icon: BellIcon },
     { path: '/admin/risk-control', label: t('nav.riskControl'), icon: ShieldIcon, hideInSimpleMode: true, featureFlag: flagRiskControl },
     { path: '/admin/redeem', label: t('nav.redeemCodes'), icon: TicketIcon, hideInSimpleMode: true },
@@ -662,14 +672,11 @@ const adminNavItems = computed((): NavItem[] => {
       icon: OrderIcon,
       hideInSimpleMode: true,
       expandOnly: true,
-      featureFlag: flagAdminPayment,
       children: [
         { path: '/admin/orders/dashboard', label: t('nav.paymentDashboard'), icon: ChartIcon },
         { path: '/admin/orders', label: t('nav.orderManagement'), icon: OrderIcon },
-        { path: '/admin/orders/plans', label: t('nav.paymentPlans'), icon: CreditCardIcon },
       ],
-    },
-    { path: '/admin/usage', label: t('nav.usage'), icon: ChartIcon }
+    }
   ]
 
   const visible = applyFeatureFlags(baseItems)
@@ -689,7 +696,22 @@ const adminNavItems = computed((): NavItem[] => {
     visible.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg })
   }
   return visible
-})
+}
+
+// finalizeNav 合并三重过滤：featureFlag 过滤 + simple 模式过滤。
+function finalizeNav(items: NavItem[]): NavItem[] {
+  const visible = applyFeatureFlags(items)
+  return authStore.isSimpleMode ? visible.filter(item => !item.hideInSimpleMode) : visible
+}
+
+// User navigation items (for regular users)
+const userNavItems = computed((): NavItem[] => finalizeNav(buildUserNavItems()))
+
+// Personal navigation items for admin's "My Account" section.
+const personalNavItems = computed((): NavItem[] => finalizeNav(buildAdminPersonalNavItems()))
+
+// Admin business navigation items.
+const adminNavItems = computed((): NavItem[] => buildAdminNavItems())
 
 function toggleSidebar() {
   appStore.toggleSidebar()
@@ -714,7 +736,7 @@ function handleMenuItemClick(itemPath: string) {
 
   // Map paths to tour selectors
   const pathToSelector: Record<string, string> = {
-    '/admin/accounts': '#sidebar-social-account-manage',
+    '/accounts': '#sidebar-social-account-manage',
   }
 
   const selector = pathToSelector[itemPath]

@@ -37,6 +37,8 @@ import {
   type PendingOAuthExchangeResponse
 } from '@/api/auth'
 import { clearAllAffiliateReferralCodes } from '@/utils/oauthAffiliate'
+import { buildSafeAuthErrorMessage } from '@/utils/authError'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 const route = useRoute()
 const router = useRouter()
@@ -59,9 +61,9 @@ function sanitizeRedirectPath(path: string | null | undefined): string {
   return path
 }
 
-function getRequestErrorMessage(error: unknown, fallback: string): string {
-  const err = error as { message?: string; response?: { data?: { detail?: string; message?: string } } }
-  return err.response?.data?.detail || err.response?.data?.message || err.message || fallback
+function getRequestErrorMessage(error: unknown, fallback: string, context: string): string {
+  recordClientDiagnostic(context, error)
+  return buildSafeAuthErrorMessage(error, { fallback })
 }
 
 async function handleCreateAccount(payload: PendingOAuthCreateAccountPayload) {
@@ -112,7 +114,11 @@ async function handleCreateAccount(payload: PendingOAuthCreateAccountPayload) {
       navigateToBindLogin(payload.email)
       return
     }
-    accountActionError.value = getRequestErrorMessage(e, t('auth.loginFailed'))
+    accountActionError.value = getRequestErrorMessage(
+      e,
+      t('auth.loginFailed'),
+      'auth.dingtalk.email_completion.create_account'
+    )
   } finally {
     isSubmitting.value = false
   }

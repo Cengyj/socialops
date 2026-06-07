@@ -12,6 +12,16 @@ import type {
   PaginatedResponse
 } from '@/types'
 
+export interface GenerateRedeemCodesInput {
+  count: number
+  type: RedeemCodeType
+  value: number
+  plan_id?: number | null
+  group_id?: number | null
+  validity_days?: number
+  expires_in_days?: number | null
+}
+
 /**
  * List all redeem codes with pagination
  * @param page - Page number (default: 1)
@@ -56,37 +66,29 @@ export async function getById(id: number): Promise<RedeemCode> {
 
 /**
  * Generate new redeem codes
- * @param count - Number of codes to generate
- * @param type - Type of redeem code
- * @param value - Value of the code
- * @param groupId - Group ID (required for subscription type)
- * @param validityDays - Validity days (for subscription type)
- * @param expiresInDays - Days before the code itself expires
+ * @param input - Code generation payload
  * @returns Array of generated redeem codes
  */
-export async function generate(
-  count: number,
-  type: RedeemCodeType,
-  value: number,
-  groupId?: number | null,
-  validityDays?: number,
-  expiresInDays?: number | null
-): Promise<RedeemCode[]> {
+export async function generate(input: GenerateRedeemCodesInput): Promise<RedeemCode[]> {
   const payload: GenerateRedeemCodesRequest = {
-    count,
-    type,
-    value
+    count: input.count,
+    type: input.type,
+    value: input.value
   }
 
-  // 订阅类型专用字段
-  if (type === 'subscription') {
-    payload.group_id = groupId
-    if (validityDays && validityDays > 0) {
-      payload.validity_days = validityDays
+  if (input.type === 'subscription') {
+    if (input.plan_id != null) {
+      payload.plan_id = input.plan_id
+    }
+    if (input.group_id != null) {
+      payload.group_id = input.group_id
+    }
+    if (input.validity_days && input.validity_days > 0) {
+      payload.validity_days = input.validity_days
     }
   }
-  if (expiresInDays && expiresInDays > 0) {
-    payload.expires_in_days = expiresInDays
+  if (input.expires_in_days && input.expires_in_days > 0) {
+    payload.expires_in_days = input.expires_in_days
   }
 
   const { data } = await apiClient.post<RedeemCode[]>('/admin/redeem-codes/generate', payload)

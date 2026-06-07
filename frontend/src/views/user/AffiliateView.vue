@@ -150,7 +150,8 @@ import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { useClipboard } from '@/composables/useClipboard'
 import { formatCurrency, formatDateTime } from '@/utils/format'
-import { extractApiErrorMessage } from '@/utils/apiError'
+import { extractSafeApiErrorMessage } from '@/utils/apiError'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -186,7 +187,8 @@ async function loadAffiliateDetail(silent = false): Promise<void> {
   try {
     detail.value = await userAPI.getAffiliateDetail()
   } catch (error) {
-    appStore.showError(extractApiErrorMessage(error, t('affiliate.loadFailed')))
+    recordClientDiagnostic('affiliate.load_detail', error)
+    appStore.showError(extractSafeApiErrorMessage(error, t('affiliate.loadFailed')))
   } finally {
     if (!silent) {
       loading.value = false
@@ -215,7 +217,8 @@ async function transferQuota(): Promise<void> {
       authStore.refreshUser().catch(() => undefined),
     ])
   } catch (error) {
-    appStore.showError(extractApiErrorMessage(error, t('affiliate.transferFailed')))
+    recordClientDiagnostic('affiliate.transfer_quota', error)
+    appStore.showError(extractSafeApiErrorMessage(error, t('affiliate.transferFailed')))
   } finally {
     transferring.value = false
   }

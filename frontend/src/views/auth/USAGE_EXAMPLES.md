@@ -447,7 +447,7 @@ async function handleRegister(): Promise<void> {
     appStore.showSuccess('Account created successfully!')
     await router.push('/dashboard')
   } catch (error: unknown) {
-    const err = error as { response?: { status?: number; data?: { detail?: string } } }
+    const err = error as { response?: { status?: number } }
 
     // Custom error handling based on status code
     if (err.response?.status === 409) {
@@ -458,7 +458,7 @@ async function handleRegister(): Promise<void> {
     } else if (err.response?.status === 500) {
       errorMessage.value = 'Server error. Please try again later.'
     } else {
-      errorMessage.value = err.response?.data?.detail || 'Registration failed. Please try again.'
+      errorMessage.value = 'Registration failed. Please try again.'
     }
 
     appStore.showError(errorMessage.value)

@@ -158,6 +158,9 @@ func (s *TotpService) InitiateSetup(ctx context.Context, userID int64, emailCode
 	// Verify identity based on email verification setting
 	if s.settingService.IsEmailVerifyEnabled(ctx) {
 		// Email verification enabled - verify email code
+		if s.emailService == nil {
+			return nil, ErrServiceUnavailable
+		}
 		if emailCode == "" {
 			return nil, ErrVerifyCodeRequired
 		}
@@ -235,15 +238,6 @@ func (s *TotpService) CompleteSetup(ctx context.Context, userID int64, totpCode,
 		return ErrTotpInvalidCode
 	}
 
-	setupSecretPrefix := "N/A"
-	if len(session.Secret) >= 4 {
-		setupSecretPrefix = session.Secret[:4]
-	}
-	slog.Debug("totp_complete_setup_before_encrypt",
-		"user_id", userID,
-		"secret_len", len(session.Secret),
-		"secret_prefix", setupSecretPrefix)
-
 	// Encrypt the secret
 	encryptedSecret, err := s.encryptor.Encrypt(session.Secret)
 	if err != nil {
@@ -254,38 +248,36 @@ func (s *TotpService) CompleteSetup(ctx context.Context, userID int64, totpCode,
 		"user_id", userID,
 		"encrypted_len", len(encryptedSecret))
 
-	// Verify encryption by decrypting
-	decrypted, decErr := s.encryptor.Decrypt(encryptedSecret)
-	if decErr != nil {
-		slog.Debug("totp_complete_setup_verify_failed",
-			"user_id", userID,
-			"error", decErr)
-	} else {
-		decryptedPrefix := "N/A"
-		if len(decrypted) >= 4 {
-			decryptedPrefix = decrypted[:4]
-		}
-		slog.Debug("totp_complete_setup_verified",
-			"user_id", userID,
-			"original_len", len(session.Secret),
-			"decrypted_len", len(decrypted),
-			"match", session.Secret == decrypted,
-			"decrypted_prefix", decryptedPrefix)
-	}
-
-	// Update user with encrypted TOTP secret
-	if err := s.userRepo.UpdateTotpSecret(ctx, userID, &encryptedSecret); err != nil {
-		return fmt.Errorf("update totp secret: %w", err)
-	}
-
-	// Enable TOTP for the user
-	if err := s.userRepo.EnableTotp(ctx, userID); err != nil {
-		return fmt.Errorf("enable totp: %w", err)
+	if err := s.completeSetupPersistence(ctx, userID, encryptedSecret); err != nil {
+		return err
 	}
 
 	// Clean up the setup session
 	_ = s.cache.DeleteSetupSession(ctx, userID)
 
+	return nil
+}
+
+func (s *TotpService) completeSetupPersistence(ctx context.Context, userID int64, encryptedSecret string) error {
+	if txRunner, ok := s.userRepo.(userProfileIdentityTxRunner); ok {
+		return txRunner.WithUserProfileIdentityTx(ctx, func(txCtx context.Context) error {
+			if err := s.userRepo.UpdateTotpSecret(txCtx, userID, &encryptedSecret); err != nil {
+				return fmt.Errorf("update totp secret: %w", err)
+			}
+			if err := s.userRepo.EnableTotp(txCtx, userID); err != nil {
+				return fmt.Errorf("enable totp: %w", err)
+			}
+			return nil
+		})
+	}
+
+	if err := s.userRepo.UpdateTotpSecret(ctx, userID, &encryptedSecret); err != nil {
+		return fmt.Errorf("update totp secret: %w", err)
+	}
+	if err := s.userRepo.EnableTotp(ctx, userID); err != nil {
+		_ = s.userRepo.UpdateTotpSecret(ctx, userID, nil)
+		return fmt.Errorf("enable totp: %w", err)
+	}
 	return nil
 }
 
@@ -305,6 +297,9 @@ func (s *TotpService) Disable(ctx context.Context, userID int64, emailCode, pass
 	// Verify identity based on email verification setting
 	if s.settingService.IsEmailVerifyEnabled(ctx) {
 		// Email verification enabled - verify email code
+		if s.emailService == nil {
+			return ErrServiceUnavailable
+		}
 		if emailCode == "" {
 			return ErrVerifyCodeRequired
 		}
@@ -371,22 +366,11 @@ func (s *TotpService) VerifyCode(ctx context.Context, userID int64, code string)
 		return infraerrors.InternalServer("TOTP_VERIFY_ERROR", "failed to verify totp code")
 	}
 
-	secretPrefix := "N/A"
-	if len(secret) >= 4 {
-		secretPrefix = secret[:4]
-	}
-	slog.Debug("totp_verify_decrypted",
-		"user_id", userID,
-		"secret_len", len(secret),
-		"secret_prefix", secretPrefix)
-
 	// Verify the code
 	valid := totp.Validate(code, secret)
 	slog.Debug("totp_verify_result",
 		"user_id", userID,
 		"valid", valid,
-		"secret_len", len(secret),
-		"secret_prefix", secretPrefix,
 		"server_time", time.Now().UTC().Format(time.RFC3339))
 
 	if !valid {
@@ -521,6 +505,9 @@ func (s *TotpService) SendVerifyCode(ctx context.Context, userID int64, locale .
 	// Check if email verification is enabled
 	if !s.settingService.IsEmailVerifyEnabled(ctx) {
 		return infraerrors.BadRequest("EMAIL_VERIFY_NOT_ENABLED", "email verification is not enabled")
+	}
+	if s.emailQueueService == nil {
+		return ErrServiceUnavailable
 	}
 
 	// Get user email

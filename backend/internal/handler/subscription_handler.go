@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"time"
+
 	"github.com/Wei-Shaw/socialops/internal/handler/dto"
 	"github.com/Wei-Shaw/socialops/internal/pkg/response"
 	middleware2 "github.com/Wei-Shaw/socialops/internal/server/middleware"
@@ -8,6 +10,22 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+type SubscriptionSummaryItem struct {
+	ID              int64    `json:"id"`
+	GroupName       string   `json:"group_name"`
+	Status          string   `json:"status"`
+	DailyProgress   *float64 `json:"daily_progress"`
+	WeeklyProgress  *float64 `json:"weekly_progress"`
+	MonthlyProgress *float64 `json:"monthly_progress"`
+	ExpiresAt       *string  `json:"expires_at"`
+	DaysRemaining   *int     `json:"days_remaining"`
+}
+
+type SubscriptionSummaryResponse struct {
+	ActiveCount   int                       `json:"active_count"`
+	Subscriptions []SubscriptionSummaryItem `json:"subscriptions"`
+}
 
 type SubscriptionHandler struct {
 	subscriptionService *service.SubscriptionService
@@ -68,7 +86,8 @@ func (h *SubscriptionHandler) GetProgress(c *gin.Context) {
 	for i := range subscriptions {
 		progress, err := h.subscriptionService.GetSubscriptionProgress(c.Request.Context(), subscriptions[i].ID)
 		if err != nil {
-			continue
+			response.ErrorFrom(c, err)
+			return
 		}
 		items = append(items, gin.H{
 			"subscription": dto.UserSubscriptionFromService(&subscriptions[i]),
@@ -89,8 +108,58 @@ func (h *SubscriptionHandler) GetSummary(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, gin.H{
-		"active_count":  len(subscriptions),
-		"subscriptions": subscriptions,
+	items := make([]SubscriptionSummaryItem, 0, len(subscriptions))
+	for i := range subscriptions {
+		items = append(items, subscriptionSummaryItemFromService(&subscriptions[i]))
+	}
+	response.Success(c, SubscriptionSummaryResponse{
+		ActiveCount:   len(items),
+		Subscriptions: items,
 	})
+}
+
+func subscriptionSummaryItemFromService(sub *service.UserSubscription) SubscriptionSummaryItem {
+	if sub == nil {
+		return SubscriptionSummaryItem{}
+	}
+	return SubscriptionSummaryItem{
+		ID:              sub.ID,
+		GroupName:       sub.EffectiveDisplayName(sub.Group),
+		Status:          sub.Status,
+		DailyProgress:   subscriptionUsageProgress(sub.DailyUsageUSD, sub.EffectiveDailyLimitUSD(sub.Group)),
+		WeeklyProgress:  subscriptionUsageProgress(sub.WeeklyUsageUSD, sub.EffectiveWeeklyLimitUSD(sub.Group)),
+		MonthlyProgress: subscriptionUsageProgress(sub.MonthlyUsageUSD, sub.EffectiveMonthlyLimitUSD(sub.Group)),
+		ExpiresAt:       subscriptionSummaryTime(sub.ExpiresAt),
+		DaysRemaining:   subscriptionSummaryDaysRemaining(sub),
+	}
+}
+
+func subscriptionUsageProgress(used float64, limit *float64) *float64 {
+	if limit == nil || *limit <= 0 {
+		return nil
+	}
+	progress := used / *limit * 100
+	if progress < 0 {
+		progress = 0
+	}
+	if progress > 100 {
+		progress = 100
+	}
+	return &progress
+}
+
+func subscriptionSummaryTime(value time.Time) *string {
+	if value.IsZero() {
+		return nil
+	}
+	formatted := value.UTC().Format(time.RFC3339)
+	return &formatted
+}
+
+func subscriptionSummaryDaysRemaining(sub *service.UserSubscription) *int {
+	if sub == nil || sub.ExpiresAt.IsZero() {
+		return nil
+	}
+	days := sub.DaysRemaining()
+	return &days
 }

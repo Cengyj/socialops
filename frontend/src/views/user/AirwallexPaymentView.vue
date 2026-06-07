@@ -35,6 +35,7 @@ import {
   readPaymentRecoverySnapshot,
   type PaymentRecoverySnapshot,
 } from '@/components/payment/paymentFlow'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 const { t, locale } = useI18n()
 const route = useRoute()
@@ -125,9 +126,8 @@ onMounted(async () => {
     }
   } catch (err: unknown) {
     loading.value = false
-    errorMessage.value = err instanceof Error && err.message
-      ? err.message
-      : t('payment.airwallexLoadFailed')
+    recordClientDiagnostic('payment.airwallex.checkout', err)
+    errorMessage.value = t('payment.airwallexLoadFailed')
   }
 })
 </script>

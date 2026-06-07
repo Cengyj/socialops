@@ -25,8 +25,20 @@ func TestInjectSiteTitleUsesSocialOpsProductTitle(t *testing.T) {
 
 	rendered := string(injectSiteTitle(html, settings))
 
-	require.Contains(t, rendered, "<title>SocialOps - Social Account Operations Platform</title>")
+	require.Contains(t, rendered, "<title>SocialOps - Website Account Pool Social Operations Platform</title>")
+	require.NotContains(t, rendered, "Social Account Operations Platform")
 	require.NotContains(t, rendered, "AI API Gateway")
+}
+
+func TestInjectSiteTitleEscapesConfiguredSiteName(t *testing.T) {
+	html := []byte("<html><head><title>Placeholder</title></head><body></body></html>")
+	settings := []byte(`{"site_name":"</title><script>alert(1)</script>"}`)
+
+	rendered := string(injectSiteTitle(html, settings))
+
+	require.Contains(t, rendered, "<title>&lt;/title&gt;&lt;script&gt;alert(1)&lt;/script&gt; - Website Account Pool Social Operations Platform</title>")
+	require.NotContains(t, rendered, "Social Account Operations Platform")
+	require.NotContains(t, rendered, "<script>alert(1)</script>")
 }
 
 func TestFrontendMiddlewareDoesNotServeSPAForNonGetRoutes(t *testing.T) {
@@ -37,7 +49,7 @@ func TestFrontendMiddlewareDoesNotServeSPAForNonGetRoutes(t *testing.T) {
 	router := gin.New()
 	router.Use(server.Middleware())
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/social-accounts/tasks", strings.NewReader("{}"))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", strings.NewReader("{}"))
 	rec := httptest.NewRecorder()
 
 	router.ServeHTTP(rec, req)
@@ -46,7 +58,7 @@ func TestFrontendMiddlewareDoesNotServeSPAForNonGetRoutes(t *testing.T) {
 	require.NotContains(t, rec.Body.String(), "<!doctype html>")
 }
 
-func TestFrontendMiddlewareDoesNotServeSPAForRemovedAIRoutes(t *testing.T) {
+func TestFrontendMiddlewareBypassesOnlySocialOpsOwnedBackendRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	server, err := NewFrontendServer(testPublicSettingsProvider{})
 	require.NoError(t, err)
@@ -55,10 +67,9 @@ func TestFrontendMiddlewareDoesNotServeSPAForRemovedAIRoutes(t *testing.T) {
 	router.Use(server.Middleware())
 
 	for _, path := range []string{
-		"/v1/chat/completions",
-		"/v1beta/models",
-		"/antigravity/v1/messages",
-		"/sora/v1/jobs",
+		"/api/v1/accounts" + "/tasks",
+		"/setup/health",
+		"/health",
 	} {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -69,5 +80,17 @@ func TestFrontendMiddlewareDoesNotServeSPAForRemovedAIRoutes(t *testing.T) {
 			require.Equal(t, http.StatusNotFound, rec.Code)
 			require.NotContains(t, rec.Body.String(), "<!doctype html>")
 		})
+	}
+}
+
+func TestFrontendBypassListDoesNotCarryLegacyAIGatewayPrefixes(t *testing.T) {
+	for _, path := range []string{
+		"/v1",
+		"/v1/chat/completions",
+		"/v1beta/models",
+		"/antigravity/v1/messages",
+		"/sora/v1/jobs",
+	} {
+		require.Falsef(t, shouldBypassEmbeddedFrontend(path), "legacy upstream AI gateway path %s must not be a SocialOps backend prefix", path)
 	}
 }

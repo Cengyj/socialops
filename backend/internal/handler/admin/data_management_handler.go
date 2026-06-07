@@ -132,15 +132,16 @@ func (h *DataManagementHandler) GetConfig(c *gin.Context) {
 }
 
 func (h *DataManagementHandler) UpdateConfig(c *gin.Context) {
+	if !h.requireAgentEnabled(c) {
+		return
+	}
+
 	var req service.DataManagementConfig
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
 
-	if !h.requireAgentEnabled(c) {
-		return
-	}
 	cfg, err := h.dataManagementService.UpdateConfig(c.Request.Context(), req)
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -150,15 +151,16 @@ func (h *DataManagementHandler) UpdateConfig(c *gin.Context) {
 }
 
 func (h *DataManagementHandler) TestS3(c *gin.Context) {
+	if !h.requireAgentEnabled(c) {
+		return
+	}
+
 	var req TestS3ConnectionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
 
-	if !h.requireAgentEnabled(c) {
-		return
-	}
 	result, err := h.dataManagementService.ValidateS3(c.Request.Context(), service.DataManagementS3Config{
 		Enabled:         true,
 		Endpoint:        req.Endpoint,
@@ -178,6 +180,10 @@ func (h *DataManagementHandler) TestS3(c *gin.Context) {
 }
 
 func (h *DataManagementHandler) CreateBackupJob(c *gin.Context) {
+	if !h.requireAgentEnabled(c) {
+		return
+	}
+
 	var req CreateBackupJobRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
@@ -185,9 +191,6 @@ func (h *DataManagementHandler) CreateBackupJob(c *gin.Context) {
 	}
 
 	req.IdempotencyKey = normalizeBackupIdempotencyKey(c.GetHeader("X-Idempotency-Key"), req.IdempotencyKey)
-	if !h.requireAgentEnabled(c) {
-		return
-	}
 
 	triggeredBy := "admin:unknown"
 	if subject, ok := middleware2.GetAuthSubjectFromContext(c); ok {
@@ -238,15 +241,16 @@ func (h *DataManagementHandler) CreateSourceProfile(c *gin.Context) {
 		return
 	}
 
+	if !h.requireAgentEnabled(c) {
+		return
+	}
+
 	var req CreateSourceProfileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
 
-	if !h.requireAgentEnabled(c) {
-		return
-	}
 	profile, err := h.dataManagementService.CreateSourceProfile(c.Request.Context(), service.DataManagementCreateSourceProfileInput{
 		SourceType: sourceType,
 		ProfileID:  req.ProfileID,
@@ -273,15 +277,16 @@ func (h *DataManagementHandler) UpdateSourceProfile(c *gin.Context) {
 		return
 	}
 
+	if !h.requireAgentEnabled(c) {
+		return
+	}
+
 	var req UpdateSourceProfileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
 
-	if !h.requireAgentEnabled(c) {
-		return
-	}
 	profile, err := h.dataManagementService.UpdateSourceProfile(c.Request.Context(), service.DataManagementUpdateSourceProfileInput{
 		SourceType: sourceType,
 		ProfileID:  profileID,
@@ -354,13 +359,13 @@ func (h *DataManagementHandler) ListS3Profiles(c *gin.Context) {
 }
 
 func (h *DataManagementHandler) CreateS3Profile(c *gin.Context) {
-	var req CreateS3ProfileRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
+	if !h.requireAgentEnabled(c) {
 		return
 	}
 
-	if !h.requireAgentEnabled(c) {
+	var req CreateS3ProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
 
@@ -388,12 +393,6 @@ func (h *DataManagementHandler) CreateS3Profile(c *gin.Context) {
 }
 
 func (h *DataManagementHandler) UpdateS3Profile(c *gin.Context) {
-	var req UpdateS3ProfileRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
-		return
-	}
-
 	profileID := strings.TrimSpace(c.Param("profile_id"))
 	if profileID == "" {
 		response.BadRequest(c, "Invalid profile_id")
@@ -401,6 +400,12 @@ func (h *DataManagementHandler) UpdateS3Profile(c *gin.Context) {
 	}
 
 	if !h.requireAgentEnabled(c) {
+		return
+	}
+
+	var req UpdateS3ProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
 

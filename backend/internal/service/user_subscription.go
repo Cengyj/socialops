@@ -6,6 +6,14 @@ type UserSubscription struct {
 	ID      int64
 	UserID  int64
 	GroupID int64
+	PlanID  *int64
+
+	PlanName     string
+	PlanPlatform string
+
+	DailyLimitUSD   *float64
+	WeeklyLimitUSD  *float64
+	MonthlyLimitUSD *float64
 
 	StartsAt  time.Time
 	ExpiresAt time.Time
@@ -114,24 +122,27 @@ func (s *UserSubscription) MonthlyResetTime() *time.Time {
 }
 
 func (s *UserSubscription) CheckDailyLimit(group *Group, additionalCost float64) bool {
-	if !group.HasDailyLimit() {
+	limit := s.EffectiveDailyLimitUSD(group)
+	if limit == nil || *limit <= 0 {
 		return true
 	}
-	return s.DailyUsageUSD+additionalCost <= *group.DailyLimitUSD
+	return s.DailyUsageUSD+additionalCost <= *limit
 }
 
 func (s *UserSubscription) CheckWeeklyLimit(group *Group, additionalCost float64) bool {
-	if !group.HasWeeklyLimit() {
+	limit := s.EffectiveWeeklyLimitUSD(group)
+	if limit == nil || *limit <= 0 {
 		return true
 	}
-	return s.WeeklyUsageUSD+additionalCost <= *group.WeeklyLimitUSD
+	return s.WeeklyUsageUSD+additionalCost <= *limit
 }
 
 func (s *UserSubscription) CheckMonthlyLimit(group *Group, additionalCost float64) bool {
-	if !group.HasMonthlyLimit() {
+	limit := s.EffectiveMonthlyLimitUSD(group)
+	if limit == nil || *limit <= 0 {
 		return true
 	}
-	return s.MonthlyUsageUSD+additionalCost <= *group.MonthlyLimitUSD
+	return s.MonthlyUsageUSD+additionalCost <= *limit
 }
 
 func (s *UserSubscription) CheckAllLimits(group *Group, additionalCost float64) (daily, weekly, monthly bool) {
@@ -139,4 +150,69 @@ func (s *UserSubscription) CheckAllLimits(group *Group, additionalCost float64) 
 	weekly = s.CheckWeeklyLimit(group, additionalCost)
 	monthly = s.CheckMonthlyLimit(group, additionalCost)
 	return
+}
+
+func (s *UserSubscription) EffectivePlatform(group *Group) string {
+	if s == nil {
+		return ""
+	}
+	if s.PlanPlatform != "" {
+		return s.PlanPlatform
+	}
+	if group != nil {
+		return group.Platform
+	}
+	return ""
+}
+
+func (s *UserSubscription) EffectiveDisplayName(group *Group) string {
+	if s == nil {
+		return ""
+	}
+	if s.PlanName != "" {
+		return s.PlanName
+	}
+	if group != nil {
+		return group.Name
+	}
+	return ""
+}
+
+func (s *UserSubscription) EffectiveDailyLimitUSD(group *Group) *float64 {
+	if s == nil {
+		return nil
+	}
+	if s.DailyLimitUSD != nil {
+		return s.DailyLimitUSD
+	}
+	if group != nil {
+		return group.DailyLimitUSD
+	}
+	return nil
+}
+
+func (s *UserSubscription) EffectiveWeeklyLimitUSD(group *Group) *float64 {
+	if s == nil {
+		return nil
+	}
+	if s.WeeklyLimitUSD != nil {
+		return s.WeeklyLimitUSD
+	}
+	if group != nil {
+		return group.WeeklyLimitUSD
+	}
+	return nil
+}
+
+func (s *UserSubscription) EffectiveMonthlyLimitUSD(group *Group) *float64 {
+	if s == nil {
+		return nil
+	}
+	if s.MonthlyLimitUSD != nil {
+		return s.MonthlyLimitUSD
+	}
+	if group != nil {
+		return group.MonthlyLimitUSD
+	}
+	return nil
 }

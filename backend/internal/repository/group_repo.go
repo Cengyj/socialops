@@ -221,16 +221,19 @@ func (r *groupRepository) DeleteCascade(ctx context.Context, id int64) ([]int64,
 }
 
 func (r *groupRepository) List(ctx context.Context, params pagination.PaginationParams) ([]service.Group, *pagination.PaginationResult, error) {
-	return r.ListWithFilters(ctx, params, "", "", "", nil)
+	return r.ListWithFilters(ctx, params, "", "", "", "", nil)
 }
 
-func (r *groupRepository) ListWithFilters(ctx context.Context, params pagination.PaginationParams, platform, status, search string, isExclusive *bool) ([]service.Group, *pagination.PaginationResult, error) {
+func (r *groupRepository) ListWithFilters(ctx context.Context, params pagination.PaginationParams, platform, status, subscriptionType, search string, isExclusive *bool) ([]service.Group, *pagination.PaginationResult, error) {
 	q := r.client.Group.Query()
 	if strings.TrimSpace(platform) != "" {
 		q = q.Where(dbgroup.PlatformEQ(strings.TrimSpace(platform)))
 	}
 	if strings.TrimSpace(status) != "" {
 		q = q.Where(dbgroup.StatusEQ(strings.TrimSpace(status)))
+	}
+	if strings.TrimSpace(subscriptionType) != "" {
+		q = q.Where(dbgroup.SubscriptionTypeEQ(strings.TrimSpace(subscriptionType)))
 	}
 	if strings.TrimSpace(search) != "" {
 		needle := strings.TrimSpace(search)
@@ -341,6 +344,8 @@ func groupListOrder(params pagination.PaginationParams) []func(*entsql.Selector)
 		field = dbgroup.FieldStatus
 	case "platform":
 		field = dbgroup.FieldPlatform
+	case "subscription_type":
+		field = dbgroup.FieldSubscriptionType
 	case "created_at":
 		field = dbgroup.FieldCreatedAt
 	case "updated_at":

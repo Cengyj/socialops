@@ -92,6 +92,7 @@ ON CONFLICT (user_id, provider_type, grant_reason) DO NOTHING`,
 			if _, _, err := s.defaultSubAssigner.AssignOrExtendSubscription(ctx, &AssignSubscriptionInput{
 				UserID:       userID,
 				GroupID:      item.GroupID,
+				PlanID:       positiveInt64Ptr(item.PlanID),
 				ValidityDays: item.ValidityDays,
 				Notes:        "auto assigned by first bind defaults",
 			}); err != nil {

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"github.com/Wei-Shaw/socialops/internal/handler/dto"
 	"github.com/Wei-Shaw/socialops/internal/pkg/response"
 	middleware2 "github.com/Wei-Shaw/socialops/internal/server/middleware"
 	"github.com/Wei-Shaw/socialops/internal/service"
@@ -9,23 +10,25 @@ import (
 
 // PlanHandler handles plan-related endpoints for users.
 type PlanHandler struct {
-	planService *service.PlanService
+	planService   *service.PlanService
+	configService *service.PaymentConfigService
 }
 
 // NewPlanHandler creates a new PlanHandler.
-func NewPlanHandler(planService *service.PlanService) *PlanHandler {
-	return &PlanHandler{planService: planService}
+func NewPlanHandler(planService *service.PlanService, configService *service.PaymentConfigService) *PlanHandler {
+	return &PlanHandler{planService: planService, configService: configService}
 }
 
 // ListPlansForSale returns plans available for purchase.
 // GET /api/v1/plans
 func (h *PlanHandler) ListPlansForSale(c *gin.Context) {
-	plans, err := h.planService.ListPlansForSale(c.Request.Context())
+	plans, err := h.configService.ListPlansForSale(c.Request.Context())
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, plans)
+	groupInfo := h.configService.GetGroupInfoMap(c.Request.Context(), plans)
+	response.Success(c, dto.AvailableSubscriptionPlansFromEnt(plans, groupInfo))
 }
 
 // GetMyPlan returns the current user's active plan.

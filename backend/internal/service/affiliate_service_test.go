@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"testing"
 
@@ -128,4 +129,23 @@ func TestIsValidAffiliateCodeFormat(t *testing.T) {
 			require.Equal(t, tc.want, isValidAffiliateCodeFormat(tc.in))
 		})
 	}
+}
+
+func TestAffiliateRebateRecordSerializesCurrencyWithoutProviderSnapshot(t *testing.T) {
+	t.Parallel()
+
+	payload, err := json.Marshal(AffiliateRebateRecord{
+		OrderID:      12,
+		OutTradeNo:   "affiliate-currency",
+		PayAmount:    103,
+		Currency:     "HKD",
+		PaymentType:  "stripe",
+		OrderStatus:  "COMPLETED",
+		RebateAmount: 10,
+	})
+	require.NoError(t, err)
+
+	body := string(payload)
+	require.Contains(t, body, `"currency":"HKD"`)
+	require.NotContains(t, body, "provider_snapshot")
 }

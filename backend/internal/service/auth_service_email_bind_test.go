@@ -126,7 +126,7 @@ func TestAuthServiceBindEmailIdentity_UpdatesEmailAndAppliesFirstBindDefaults(t 
 	svc, _, client := newAuthServiceForEmailBind(t, map[string]string{
 		service.SettingKeyAuthSourceDefaultEmailBalance:          "8.5",
 		service.SettingKeyAuthSourceDefaultEmailConcurrency:      "4",
-		service.SettingKeyAuthSourceDefaultEmailSubscriptions:    `[{"group_id":11,"validity_days":30}]`,
+		service.SettingKeyAuthSourceDefaultEmailSubscriptions:    `[{"plan_id":101,"group_id":11,"validity_days":30}]`,
 		service.SettingKeyAuthSourceDefaultEmailGrantOnFirstBind: "true",
 	}, cache, assigner)
 
@@ -168,6 +168,8 @@ func TestAuthServiceBindEmailIdentity_UpdatesEmailAndAppliesFirstBindDefaults(t 
 	require.Len(t, assigner.calls, 1)
 	require.Equal(t, user.ID, assigner.calls[0].UserID)
 	require.Equal(t, int64(11), assigner.calls[0].GroupID)
+	require.NotNil(t, assigner.calls[0].PlanID)
+	require.Equal(t, int64(101), *assigner.calls[0].PlanID)
 	require.Equal(t, 30, assigner.calls[0].ValidityDays)
 	require.Equal(t, 1, countProviderGrantRecords(t, client, user.ID, "email", "first_bind"))
 }

@@ -90,16 +90,36 @@ func (_c *SocialAccountCreate) SetNameKey(v string) *SocialAccountCreate {
 	return _c
 }
 
-// SetAccountID sets the "account_id" field.
-func (_c *SocialAccountCreate) SetAccountID(v string) *SocialAccountCreate {
-	_c.mutation.SetAccountID(v)
+// SetIdentityKind sets the "identity_kind" field.
+func (_c *SocialAccountCreate) SetIdentityKind(v string) *SocialAccountCreate {
+	_c.mutation.SetIdentityKind(v)
 	return _c
 }
 
-// SetNillableAccountID sets the "account_id" field if the given value is not nil.
-func (_c *SocialAccountCreate) SetNillableAccountID(v *string) *SocialAccountCreate {
+// SetNillableIdentityKind sets the "identity_kind" field if the given value is not nil.
+func (_c *SocialAccountCreate) SetNillableIdentityKind(v *string) *SocialAccountCreate {
 	if v != nil {
-		_c.SetAccountID(*v)
+		_c.SetIdentityKind(*v)
+	}
+	return _c
+}
+
+// SetIdentityKey sets the "identity_key" field.
+func (_c *SocialAccountCreate) SetIdentityKey(v string) *SocialAccountCreate {
+	_c.mutation.SetIdentityKey(v)
+	return _c
+}
+
+// SetPlatformUserID sets the "platform_user_id" field.
+func (_c *SocialAccountCreate) SetPlatformUserID(v string) *SocialAccountCreate {
+	_c.mutation.SetPlatformUserID(v)
+	return _c
+}
+
+// SetNillablePlatformUserID sets the "platform_user_id" field if the given value is not nil.
+func (_c *SocialAccountCreate) SetNillablePlatformUserID(v *string) *SocialAccountCreate {
+	if v != nil {
+		_c.SetPlatformUserID(*v)
 	}
 	return _c
 }
@@ -160,6 +180,104 @@ func (_c *SocialAccountCreate) SetNillableEmailPassword(v *string) *SocialAccoun
 	return _c
 }
 
+// SetTwoFactor sets the "two_factor" field.
+func (_c *SocialAccountCreate) SetTwoFactor(v string) *SocialAccountCreate {
+	_c.mutation.SetTwoFactor(v)
+	return _c
+}
+
+// SetNillableTwoFactor sets the "two_factor" field if the given value is not nil.
+func (_c *SocialAccountCreate) SetNillableTwoFactor(v *string) *SocialAccountCreate {
+	if v != nil {
+		_c.SetTwoFactor(*v)
+	}
+	return _c
+}
+
+// SetBackupCode sets the "backup_code" field.
+func (_c *SocialAccountCreate) SetBackupCode(v string) *SocialAccountCreate {
+	_c.mutation.SetBackupCode(v)
+	return _c
+}
+
+// SetNillableBackupCode sets the "backup_code" field if the given value is not nil.
+func (_c *SocialAccountCreate) SetNillableBackupCode(v *string) *SocialAccountCreate {
+	if v != nil {
+		_c.SetBackupCode(*v)
+	}
+	return _c
+}
+
+// SetEmailClientID sets the "email_client_id" field.
+func (_c *SocialAccountCreate) SetEmailClientID(v string) *SocialAccountCreate {
+	_c.mutation.SetEmailClientID(v)
+	return _c
+}
+
+// SetNillableEmailClientID sets the "email_client_id" field if the given value is not nil.
+func (_c *SocialAccountCreate) SetNillableEmailClientID(v *string) *SocialAccountCreate {
+	if v != nil {
+		_c.SetEmailClientID(*v)
+	}
+	return _c
+}
+
+// SetEmailToken sets the "email_token" field.
+func (_c *SocialAccountCreate) SetEmailToken(v string) *SocialAccountCreate {
+	_c.mutation.SetEmailToken(v)
+	return _c
+}
+
+// SetNillableEmailToken sets the "email_token" field if the given value is not nil.
+func (_c *SocialAccountCreate) SetNillableEmailToken(v *string) *SocialAccountCreate {
+	if v != nil {
+		_c.SetEmailToken(*v)
+	}
+	return _c
+}
+
+// SetRegistrationIP sets the "registration_ip" field.
+func (_c *SocialAccountCreate) SetRegistrationIP(v string) *SocialAccountCreate {
+	_c.mutation.SetRegistrationIP(v)
+	return _c
+}
+
+// SetNillableRegistrationIP sets the "registration_ip" field if the given value is not nil.
+func (_c *SocialAccountCreate) SetNillableRegistrationIP(v *string) *SocialAccountCreate {
+	if v != nil {
+		_c.SetRegistrationIP(*v)
+	}
+	return _c
+}
+
+// SetAuthCookie sets the "auth_cookie" field.
+func (_c *SocialAccountCreate) SetAuthCookie(v string) *SocialAccountCreate {
+	_c.mutation.SetAuthCookie(v)
+	return _c
+}
+
+// SetNillableAuthCookie sets the "auth_cookie" field if the given value is not nil.
+func (_c *SocialAccountCreate) SetNillableAuthCookie(v *string) *SocialAccountCreate {
+	if v != nil {
+		_c.SetAuthCookie(*v)
+	}
+	return _c
+}
+
+// SetExecutionAuth sets the "execution_auth" field.
+func (_c *SocialAccountCreate) SetExecutionAuth(v string) *SocialAccountCreate {
+	_c.mutation.SetExecutionAuth(v)
+	return _c
+}
+
+// SetNillableExecutionAuth sets the "execution_auth" field if the given value is not nil.
+func (_c *SocialAccountCreate) SetNillableExecutionAuth(v *string) *SocialAccountCreate {
+	if v != nil {
+		_c.SetExecutionAuth(*v)
+	}
+	return _c
+}
+
 // SetAccountStatus sets the "account_status" field.
 func (_c *SocialAccountCreate) SetAccountStatus(v string) *SocialAccountCreate {
 	_c.mutation.SetAccountStatus(v)
@@ -202,30 +320,16 @@ func (_c *SocialAccountCreate) SetNillableTaskMessage(v *string) *SocialAccountC
 	return _c
 }
 
-// SetSource sets the "source" field.
-func (_c *SocialAccountCreate) SetSource(v string) *SocialAccountCreate {
-	_c.mutation.SetSource(v)
+// SetDefaultProxySnapshot sets the "default_proxy_snapshot" field.
+func (_c *SocialAccountCreate) SetDefaultProxySnapshot(v string) *SocialAccountCreate {
+	_c.mutation.SetDefaultProxySnapshot(v)
 	return _c
 }
 
-// SetNillableSource sets the "source" field if the given value is not nil.
-func (_c *SocialAccountCreate) SetNillableSource(v *string) *SocialAccountCreate {
+// SetNillableDefaultProxySnapshot sets the "default_proxy_snapshot" field if the given value is not nil.
+func (_c *SocialAccountCreate) SetNillableDefaultProxySnapshot(v *string) *SocialAccountCreate {
 	if v != nil {
-		_c.SetSource(*v)
-	}
-	return _c
-}
-
-// SetBoundIP sets the "bound_ip" field.
-func (_c *SocialAccountCreate) SetBoundIP(v string) *SocialAccountCreate {
-	_c.mutation.SetBoundIP(v)
-	return _c
-}
-
-// SetNillableBoundIP sets the "bound_ip" field if the given value is not nil.
-func (_c *SocialAccountCreate) SetNillableBoundIP(v *string) *SocialAccountCreate {
-	if v != nil {
-		_c.SetBoundIP(*v)
+		_c.SetDefaultProxySnapshot(*v)
 	}
 	return _c
 }
@@ -240,6 +344,20 @@ func (_c *SocialAccountCreate) SetAssignedUserID(v int64) *SocialAccountCreate {
 func (_c *SocialAccountCreate) SetNillableAssignedUserID(v *int64) *SocialAccountCreate {
 	if v != nil {
 		_c.SetAssignedUserID(*v)
+	}
+	return _c
+}
+
+// SetUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field.
+func (_c *SocialAccountCreate) SetUserWorkbenchDeletedAt(v time.Time) *SocialAccountCreate {
+	_c.mutation.SetUserWorkbenchDeletedAt(v)
+	return _c
+}
+
+// SetNillableUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field if the given value is not nil.
+func (_c *SocialAccountCreate) SetNillableUserWorkbenchDeletedAt(v *time.Time) *SocialAccountCreate {
+	if v != nil {
+		_c.SetUserWorkbenchDeletedAt(*v)
 	}
 	return _c
 }
@@ -329,6 +447,10 @@ func (_c *SocialAccountCreate) defaults() error {
 		v := socialaccount.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.IdentityKind(); !ok {
+		v := socialaccount.DefaultIdentityKind
+		_c.mutation.SetIdentityKind(v)
+	}
 	if _, ok := _c.mutation.AccountStatus(); !ok {
 		v := socialaccount.DefaultAccountStatus
 		_c.mutation.SetAccountStatus(v)
@@ -336,10 +458,6 @@ func (_c *SocialAccountCreate) defaults() error {
 	if _, ok := _c.mutation.TaskStatus(); !ok {
 		v := socialaccount.DefaultTaskStatus
 		_c.mutation.SetTaskStatus(v)
-	}
-	if _, ok := _c.mutation.Source(); !ok {
-		v := socialaccount.DefaultSource
-		_c.mutation.SetSource(v)
 	}
 	return nil
 }
@@ -384,9 +502,25 @@ func (_c *SocialAccountCreate) check() error {
 			return &ValidationError{Name: "name_key", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.name_key": %w`, err)}
 		}
 	}
-	if v, ok := _c.mutation.AccountID(); ok {
-		if err := socialaccount.AccountIDValidator(v); err != nil {
-			return &ValidationError{Name: "account_id", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.account_id": %w`, err)}
+	if _, ok := _c.mutation.IdentityKind(); !ok {
+		return &ValidationError{Name: "identity_kind", err: errors.New(`ent: missing required field "SocialAccount.identity_kind"`)}
+	}
+	if v, ok := _c.mutation.IdentityKind(); ok {
+		if err := socialaccount.IdentityKindValidator(v); err != nil {
+			return &ValidationError{Name: "identity_kind", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.identity_kind": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.IdentityKey(); !ok {
+		return &ValidationError{Name: "identity_key", err: errors.New(`ent: missing required field "SocialAccount.identity_key"`)}
+	}
+	if v, ok := _c.mutation.IdentityKey(); ok {
+		if err := socialaccount.IdentityKeyValidator(v); err != nil {
+			return &ValidationError{Name: "identity_key", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.identity_key": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.PlatformUserID(); ok {
+		if err := socialaccount.PlatformUserIDValidator(v); err != nil {
+			return &ValidationError{Name: "platform_user_id", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.platform_user_id": %w`, err)}
 		}
 	}
 	if v, ok := _c.mutation.Password(); ok {
@@ -409,6 +543,26 @@ func (_c *SocialAccountCreate) check() error {
 			return &ValidationError{Name: "email_password", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.email_password": %w`, err)}
 		}
 	}
+	if v, ok := _c.mutation.TwoFactor(); ok {
+		if err := socialaccount.TwoFactorValidator(v); err != nil {
+			return &ValidationError{Name: "two_factor", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.two_factor": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.BackupCode(); ok {
+		if err := socialaccount.BackupCodeValidator(v); err != nil {
+			return &ValidationError{Name: "backup_code", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.backup_code": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.EmailClientID(); ok {
+		if err := socialaccount.EmailClientIDValidator(v); err != nil {
+			return &ValidationError{Name: "email_client_id", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.email_client_id": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.RegistrationIP(); ok {
+		if err := socialaccount.RegistrationIPValidator(v); err != nil {
+			return &ValidationError{Name: "registration_ip", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.registration_ip": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.AccountStatus(); !ok {
 		return &ValidationError{Name: "account_status", err: errors.New(`ent: missing required field "SocialAccount.account_status"`)}
 	}
@@ -423,14 +577,6 @@ func (_c *SocialAccountCreate) check() error {
 	if v, ok := _c.mutation.TaskStatus(); ok {
 		if err := socialaccount.TaskStatusValidator(v); err != nil {
 			return &ValidationError{Name: "task_status", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.task_status": %w`, err)}
-		}
-	}
-	if _, ok := _c.mutation.Source(); !ok {
-		return &ValidationError{Name: "source", err: errors.New(`ent: missing required field "SocialAccount.source"`)}
-	}
-	if v, ok := _c.mutation.Source(); ok {
-		if err := socialaccount.SourceValidator(v); err != nil {
-			return &ValidationError{Name: "source", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.source": %w`, err)}
 		}
 	}
 	return nil
@@ -488,9 +634,17 @@ func (_c *SocialAccountCreate) createSpec() (*SocialAccount, *sqlgraph.CreateSpe
 		_spec.SetField(socialaccount.FieldNameKey, field.TypeString, value)
 		_node.NameKey = value
 	}
-	if value, ok := _c.mutation.AccountID(); ok {
-		_spec.SetField(socialaccount.FieldAccountID, field.TypeString, value)
-		_node.AccountID = &value
+	if value, ok := _c.mutation.IdentityKind(); ok {
+		_spec.SetField(socialaccount.FieldIdentityKind, field.TypeString, value)
+		_node.IdentityKind = value
+	}
+	if value, ok := _c.mutation.IdentityKey(); ok {
+		_spec.SetField(socialaccount.FieldIdentityKey, field.TypeString, value)
+		_node.IdentityKey = value
+	}
+	if value, ok := _c.mutation.PlatformUserID(); ok {
+		_spec.SetField(socialaccount.FieldPlatformUserID, field.TypeString, value)
+		_node.PlatformUserID = &value
 	}
 	if value, ok := _c.mutation.Password(); ok {
 		_spec.SetField(socialaccount.FieldPassword, field.TypeString, value)
@@ -508,6 +662,34 @@ func (_c *SocialAccountCreate) createSpec() (*SocialAccount, *sqlgraph.CreateSpe
 		_spec.SetField(socialaccount.FieldEmailPassword, field.TypeString, value)
 		_node.EmailPassword = &value
 	}
+	if value, ok := _c.mutation.TwoFactor(); ok {
+		_spec.SetField(socialaccount.FieldTwoFactor, field.TypeString, value)
+		_node.TwoFactor = &value
+	}
+	if value, ok := _c.mutation.BackupCode(); ok {
+		_spec.SetField(socialaccount.FieldBackupCode, field.TypeString, value)
+		_node.BackupCode = &value
+	}
+	if value, ok := _c.mutation.EmailClientID(); ok {
+		_spec.SetField(socialaccount.FieldEmailClientID, field.TypeString, value)
+		_node.EmailClientID = &value
+	}
+	if value, ok := _c.mutation.EmailToken(); ok {
+		_spec.SetField(socialaccount.FieldEmailToken, field.TypeString, value)
+		_node.EmailToken = &value
+	}
+	if value, ok := _c.mutation.RegistrationIP(); ok {
+		_spec.SetField(socialaccount.FieldRegistrationIP, field.TypeString, value)
+		_node.RegistrationIP = &value
+	}
+	if value, ok := _c.mutation.AuthCookie(); ok {
+		_spec.SetField(socialaccount.FieldAuthCookie, field.TypeString, value)
+		_node.AuthCookie = &value
+	}
+	if value, ok := _c.mutation.ExecutionAuth(); ok {
+		_spec.SetField(socialaccount.FieldExecutionAuth, field.TypeString, value)
+		_node.ExecutionAuth = &value
+	}
 	if value, ok := _c.mutation.AccountStatus(); ok {
 		_spec.SetField(socialaccount.FieldAccountStatus, field.TypeString, value)
 		_node.AccountStatus = value
@@ -520,13 +702,13 @@ func (_c *SocialAccountCreate) createSpec() (*SocialAccount, *sqlgraph.CreateSpe
 		_spec.SetField(socialaccount.FieldTaskMessage, field.TypeString, value)
 		_node.TaskMessage = &value
 	}
-	if value, ok := _c.mutation.Source(); ok {
-		_spec.SetField(socialaccount.FieldSource, field.TypeString, value)
-		_node.Source = value
+	if value, ok := _c.mutation.DefaultProxySnapshot(); ok {
+		_spec.SetField(socialaccount.FieldDefaultProxySnapshot, field.TypeString, value)
+		_node.DefaultProxySnapshot = &value
 	}
-	if value, ok := _c.mutation.BoundIP(); ok {
-		_spec.SetField(socialaccount.FieldBoundIP, field.TypeString, value)
-		_node.BoundIP = &value
+	if value, ok := _c.mutation.UserWorkbenchDeletedAt(); ok {
+		_spec.SetField(socialaccount.FieldUserWorkbenchDeletedAt, field.TypeTime, value)
+		_node.UserWorkbenchDeletedAt = &value
 	}
 	if value, ok := _c.mutation.Remark(); ok {
 		_spec.SetField(socialaccount.FieldRemark, field.TypeString, value)
@@ -695,21 +877,45 @@ func (u *SocialAccountUpsert) UpdateNameKey() *SocialAccountUpsert {
 	return u
 }
 
-// SetAccountID sets the "account_id" field.
-func (u *SocialAccountUpsert) SetAccountID(v string) *SocialAccountUpsert {
-	u.Set(socialaccount.FieldAccountID, v)
+// SetIdentityKind sets the "identity_kind" field.
+func (u *SocialAccountUpsert) SetIdentityKind(v string) *SocialAccountUpsert {
+	u.Set(socialaccount.FieldIdentityKind, v)
 	return u
 }
 
-// UpdateAccountID sets the "account_id" field to the value that was provided on create.
-func (u *SocialAccountUpsert) UpdateAccountID() *SocialAccountUpsert {
-	u.SetExcluded(socialaccount.FieldAccountID)
+// UpdateIdentityKind sets the "identity_kind" field to the value that was provided on create.
+func (u *SocialAccountUpsert) UpdateIdentityKind() *SocialAccountUpsert {
+	u.SetExcluded(socialaccount.FieldIdentityKind)
 	return u
 }
 
-// ClearAccountID clears the value of the "account_id" field.
-func (u *SocialAccountUpsert) ClearAccountID() *SocialAccountUpsert {
-	u.SetNull(socialaccount.FieldAccountID)
+// SetIdentityKey sets the "identity_key" field.
+func (u *SocialAccountUpsert) SetIdentityKey(v string) *SocialAccountUpsert {
+	u.Set(socialaccount.FieldIdentityKey, v)
+	return u
+}
+
+// UpdateIdentityKey sets the "identity_key" field to the value that was provided on create.
+func (u *SocialAccountUpsert) UpdateIdentityKey() *SocialAccountUpsert {
+	u.SetExcluded(socialaccount.FieldIdentityKey)
+	return u
+}
+
+// SetPlatformUserID sets the "platform_user_id" field.
+func (u *SocialAccountUpsert) SetPlatformUserID(v string) *SocialAccountUpsert {
+	u.Set(socialaccount.FieldPlatformUserID, v)
+	return u
+}
+
+// UpdatePlatformUserID sets the "platform_user_id" field to the value that was provided on create.
+func (u *SocialAccountUpsert) UpdatePlatformUserID() *SocialAccountUpsert {
+	u.SetExcluded(socialaccount.FieldPlatformUserID)
+	return u
+}
+
+// ClearPlatformUserID clears the value of the "platform_user_id" field.
+func (u *SocialAccountUpsert) ClearPlatformUserID() *SocialAccountUpsert {
+	u.SetNull(socialaccount.FieldPlatformUserID)
 	return u
 }
 
@@ -785,6 +991,132 @@ func (u *SocialAccountUpsert) ClearEmailPassword() *SocialAccountUpsert {
 	return u
 }
 
+// SetTwoFactor sets the "two_factor" field.
+func (u *SocialAccountUpsert) SetTwoFactor(v string) *SocialAccountUpsert {
+	u.Set(socialaccount.FieldTwoFactor, v)
+	return u
+}
+
+// UpdateTwoFactor sets the "two_factor" field to the value that was provided on create.
+func (u *SocialAccountUpsert) UpdateTwoFactor() *SocialAccountUpsert {
+	u.SetExcluded(socialaccount.FieldTwoFactor)
+	return u
+}
+
+// ClearTwoFactor clears the value of the "two_factor" field.
+func (u *SocialAccountUpsert) ClearTwoFactor() *SocialAccountUpsert {
+	u.SetNull(socialaccount.FieldTwoFactor)
+	return u
+}
+
+// SetBackupCode sets the "backup_code" field.
+func (u *SocialAccountUpsert) SetBackupCode(v string) *SocialAccountUpsert {
+	u.Set(socialaccount.FieldBackupCode, v)
+	return u
+}
+
+// UpdateBackupCode sets the "backup_code" field to the value that was provided on create.
+func (u *SocialAccountUpsert) UpdateBackupCode() *SocialAccountUpsert {
+	u.SetExcluded(socialaccount.FieldBackupCode)
+	return u
+}
+
+// ClearBackupCode clears the value of the "backup_code" field.
+func (u *SocialAccountUpsert) ClearBackupCode() *SocialAccountUpsert {
+	u.SetNull(socialaccount.FieldBackupCode)
+	return u
+}
+
+// SetEmailClientID sets the "email_client_id" field.
+func (u *SocialAccountUpsert) SetEmailClientID(v string) *SocialAccountUpsert {
+	u.Set(socialaccount.FieldEmailClientID, v)
+	return u
+}
+
+// UpdateEmailClientID sets the "email_client_id" field to the value that was provided on create.
+func (u *SocialAccountUpsert) UpdateEmailClientID() *SocialAccountUpsert {
+	u.SetExcluded(socialaccount.FieldEmailClientID)
+	return u
+}
+
+// ClearEmailClientID clears the value of the "email_client_id" field.
+func (u *SocialAccountUpsert) ClearEmailClientID() *SocialAccountUpsert {
+	u.SetNull(socialaccount.FieldEmailClientID)
+	return u
+}
+
+// SetEmailToken sets the "email_token" field.
+func (u *SocialAccountUpsert) SetEmailToken(v string) *SocialAccountUpsert {
+	u.Set(socialaccount.FieldEmailToken, v)
+	return u
+}
+
+// UpdateEmailToken sets the "email_token" field to the value that was provided on create.
+func (u *SocialAccountUpsert) UpdateEmailToken() *SocialAccountUpsert {
+	u.SetExcluded(socialaccount.FieldEmailToken)
+	return u
+}
+
+// ClearEmailToken clears the value of the "email_token" field.
+func (u *SocialAccountUpsert) ClearEmailToken() *SocialAccountUpsert {
+	u.SetNull(socialaccount.FieldEmailToken)
+	return u
+}
+
+// SetRegistrationIP sets the "registration_ip" field.
+func (u *SocialAccountUpsert) SetRegistrationIP(v string) *SocialAccountUpsert {
+	u.Set(socialaccount.FieldRegistrationIP, v)
+	return u
+}
+
+// UpdateRegistrationIP sets the "registration_ip" field to the value that was provided on create.
+func (u *SocialAccountUpsert) UpdateRegistrationIP() *SocialAccountUpsert {
+	u.SetExcluded(socialaccount.FieldRegistrationIP)
+	return u
+}
+
+// ClearRegistrationIP clears the value of the "registration_ip" field.
+func (u *SocialAccountUpsert) ClearRegistrationIP() *SocialAccountUpsert {
+	u.SetNull(socialaccount.FieldRegistrationIP)
+	return u
+}
+
+// SetAuthCookie sets the "auth_cookie" field.
+func (u *SocialAccountUpsert) SetAuthCookie(v string) *SocialAccountUpsert {
+	u.Set(socialaccount.FieldAuthCookie, v)
+	return u
+}
+
+// UpdateAuthCookie sets the "auth_cookie" field to the value that was provided on create.
+func (u *SocialAccountUpsert) UpdateAuthCookie() *SocialAccountUpsert {
+	u.SetExcluded(socialaccount.FieldAuthCookie)
+	return u
+}
+
+// ClearAuthCookie clears the value of the "auth_cookie" field.
+func (u *SocialAccountUpsert) ClearAuthCookie() *SocialAccountUpsert {
+	u.SetNull(socialaccount.FieldAuthCookie)
+	return u
+}
+
+// SetExecutionAuth sets the "execution_auth" field.
+func (u *SocialAccountUpsert) SetExecutionAuth(v string) *SocialAccountUpsert {
+	u.Set(socialaccount.FieldExecutionAuth, v)
+	return u
+}
+
+// UpdateExecutionAuth sets the "execution_auth" field to the value that was provided on create.
+func (u *SocialAccountUpsert) UpdateExecutionAuth() *SocialAccountUpsert {
+	u.SetExcluded(socialaccount.FieldExecutionAuth)
+	return u
+}
+
+// ClearExecutionAuth clears the value of the "execution_auth" field.
+func (u *SocialAccountUpsert) ClearExecutionAuth() *SocialAccountUpsert {
+	u.SetNull(socialaccount.FieldExecutionAuth)
+	return u
+}
+
 // SetAccountStatus sets the "account_status" field.
 func (u *SocialAccountUpsert) SetAccountStatus(v string) *SocialAccountUpsert {
 	u.Set(socialaccount.FieldAccountStatus, v)
@@ -827,33 +1159,21 @@ func (u *SocialAccountUpsert) ClearTaskMessage() *SocialAccountUpsert {
 	return u
 }
 
-// SetSource sets the "source" field.
-func (u *SocialAccountUpsert) SetSource(v string) *SocialAccountUpsert {
-	u.Set(socialaccount.FieldSource, v)
+// SetDefaultProxySnapshot sets the "default_proxy_snapshot" field.
+func (u *SocialAccountUpsert) SetDefaultProxySnapshot(v string) *SocialAccountUpsert {
+	u.Set(socialaccount.FieldDefaultProxySnapshot, v)
 	return u
 }
 
-// UpdateSource sets the "source" field to the value that was provided on create.
-func (u *SocialAccountUpsert) UpdateSource() *SocialAccountUpsert {
-	u.SetExcluded(socialaccount.FieldSource)
+// UpdateDefaultProxySnapshot sets the "default_proxy_snapshot" field to the value that was provided on create.
+func (u *SocialAccountUpsert) UpdateDefaultProxySnapshot() *SocialAccountUpsert {
+	u.SetExcluded(socialaccount.FieldDefaultProxySnapshot)
 	return u
 }
 
-// SetBoundIP sets the "bound_ip" field.
-func (u *SocialAccountUpsert) SetBoundIP(v string) *SocialAccountUpsert {
-	u.Set(socialaccount.FieldBoundIP, v)
-	return u
-}
-
-// UpdateBoundIP sets the "bound_ip" field to the value that was provided on create.
-func (u *SocialAccountUpsert) UpdateBoundIP() *SocialAccountUpsert {
-	u.SetExcluded(socialaccount.FieldBoundIP)
-	return u
-}
-
-// ClearBoundIP clears the value of the "bound_ip" field.
-func (u *SocialAccountUpsert) ClearBoundIP() *SocialAccountUpsert {
-	u.SetNull(socialaccount.FieldBoundIP)
+// ClearDefaultProxySnapshot clears the value of the "default_proxy_snapshot" field.
+func (u *SocialAccountUpsert) ClearDefaultProxySnapshot() *SocialAccountUpsert {
+	u.SetNull(socialaccount.FieldDefaultProxySnapshot)
 	return u
 }
 
@@ -872,6 +1192,24 @@ func (u *SocialAccountUpsert) UpdateAssignedUserID() *SocialAccountUpsert {
 // ClearAssignedUserID clears the value of the "assigned_user_id" field.
 func (u *SocialAccountUpsert) ClearAssignedUserID() *SocialAccountUpsert {
 	u.SetNull(socialaccount.FieldAssignedUserID)
+	return u
+}
+
+// SetUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field.
+func (u *SocialAccountUpsert) SetUserWorkbenchDeletedAt(v time.Time) *SocialAccountUpsert {
+	u.Set(socialaccount.FieldUserWorkbenchDeletedAt, v)
+	return u
+}
+
+// UpdateUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field to the value that was provided on create.
+func (u *SocialAccountUpsert) UpdateUserWorkbenchDeletedAt() *SocialAccountUpsert {
+	u.SetExcluded(socialaccount.FieldUserWorkbenchDeletedAt)
+	return u
+}
+
+// ClearUserWorkbenchDeletedAt clears the value of the "user_workbench_deleted_at" field.
+func (u *SocialAccountUpsert) ClearUserWorkbenchDeletedAt() *SocialAccountUpsert {
+	u.SetNull(socialaccount.FieldUserWorkbenchDeletedAt)
 	return u
 }
 
@@ -1029,24 +1367,52 @@ func (u *SocialAccountUpsertOne) UpdateNameKey() *SocialAccountUpsertOne {
 	})
 }
 
-// SetAccountID sets the "account_id" field.
-func (u *SocialAccountUpsertOne) SetAccountID(v string) *SocialAccountUpsertOne {
+// SetIdentityKind sets the "identity_kind" field.
+func (u *SocialAccountUpsertOne) SetIdentityKind(v string) *SocialAccountUpsertOne {
 	return u.Update(func(s *SocialAccountUpsert) {
-		s.SetAccountID(v)
+		s.SetIdentityKind(v)
 	})
 }
 
-// UpdateAccountID sets the "account_id" field to the value that was provided on create.
-func (u *SocialAccountUpsertOne) UpdateAccountID() *SocialAccountUpsertOne {
+// UpdateIdentityKind sets the "identity_kind" field to the value that was provided on create.
+func (u *SocialAccountUpsertOne) UpdateIdentityKind() *SocialAccountUpsertOne {
 	return u.Update(func(s *SocialAccountUpsert) {
-		s.UpdateAccountID()
+		s.UpdateIdentityKind()
 	})
 }
 
-// ClearAccountID clears the value of the "account_id" field.
-func (u *SocialAccountUpsertOne) ClearAccountID() *SocialAccountUpsertOne {
+// SetIdentityKey sets the "identity_key" field.
+func (u *SocialAccountUpsertOne) SetIdentityKey(v string) *SocialAccountUpsertOne {
 	return u.Update(func(s *SocialAccountUpsert) {
-		s.ClearAccountID()
+		s.SetIdentityKey(v)
+	})
+}
+
+// UpdateIdentityKey sets the "identity_key" field to the value that was provided on create.
+func (u *SocialAccountUpsertOne) UpdateIdentityKey() *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdateIdentityKey()
+	})
+}
+
+// SetPlatformUserID sets the "platform_user_id" field.
+func (u *SocialAccountUpsertOne) SetPlatformUserID(v string) *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.SetPlatformUserID(v)
+	})
+}
+
+// UpdatePlatformUserID sets the "platform_user_id" field to the value that was provided on create.
+func (u *SocialAccountUpsertOne) UpdatePlatformUserID() *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdatePlatformUserID()
+	})
+}
+
+// ClearPlatformUserID clears the value of the "platform_user_id" field.
+func (u *SocialAccountUpsertOne) ClearPlatformUserID() *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.ClearPlatformUserID()
 	})
 }
 
@@ -1134,6 +1500,153 @@ func (u *SocialAccountUpsertOne) ClearEmailPassword() *SocialAccountUpsertOne {
 	})
 }
 
+// SetTwoFactor sets the "two_factor" field.
+func (u *SocialAccountUpsertOne) SetTwoFactor(v string) *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.SetTwoFactor(v)
+	})
+}
+
+// UpdateTwoFactor sets the "two_factor" field to the value that was provided on create.
+func (u *SocialAccountUpsertOne) UpdateTwoFactor() *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdateTwoFactor()
+	})
+}
+
+// ClearTwoFactor clears the value of the "two_factor" field.
+func (u *SocialAccountUpsertOne) ClearTwoFactor() *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.ClearTwoFactor()
+	})
+}
+
+// SetBackupCode sets the "backup_code" field.
+func (u *SocialAccountUpsertOne) SetBackupCode(v string) *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.SetBackupCode(v)
+	})
+}
+
+// UpdateBackupCode sets the "backup_code" field to the value that was provided on create.
+func (u *SocialAccountUpsertOne) UpdateBackupCode() *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdateBackupCode()
+	})
+}
+
+// ClearBackupCode clears the value of the "backup_code" field.
+func (u *SocialAccountUpsertOne) ClearBackupCode() *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.ClearBackupCode()
+	})
+}
+
+// SetEmailClientID sets the "email_client_id" field.
+func (u *SocialAccountUpsertOne) SetEmailClientID(v string) *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.SetEmailClientID(v)
+	})
+}
+
+// UpdateEmailClientID sets the "email_client_id" field to the value that was provided on create.
+func (u *SocialAccountUpsertOne) UpdateEmailClientID() *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdateEmailClientID()
+	})
+}
+
+// ClearEmailClientID clears the value of the "email_client_id" field.
+func (u *SocialAccountUpsertOne) ClearEmailClientID() *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.ClearEmailClientID()
+	})
+}
+
+// SetEmailToken sets the "email_token" field.
+func (u *SocialAccountUpsertOne) SetEmailToken(v string) *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.SetEmailToken(v)
+	})
+}
+
+// UpdateEmailToken sets the "email_token" field to the value that was provided on create.
+func (u *SocialAccountUpsertOne) UpdateEmailToken() *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdateEmailToken()
+	})
+}
+
+// ClearEmailToken clears the value of the "email_token" field.
+func (u *SocialAccountUpsertOne) ClearEmailToken() *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.ClearEmailToken()
+	})
+}
+
+// SetRegistrationIP sets the "registration_ip" field.
+func (u *SocialAccountUpsertOne) SetRegistrationIP(v string) *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.SetRegistrationIP(v)
+	})
+}
+
+// UpdateRegistrationIP sets the "registration_ip" field to the value that was provided on create.
+func (u *SocialAccountUpsertOne) UpdateRegistrationIP() *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdateRegistrationIP()
+	})
+}
+
+// ClearRegistrationIP clears the value of the "registration_ip" field.
+func (u *SocialAccountUpsertOne) ClearRegistrationIP() *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.ClearRegistrationIP()
+	})
+}
+
+// SetAuthCookie sets the "auth_cookie" field.
+func (u *SocialAccountUpsertOne) SetAuthCookie(v string) *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.SetAuthCookie(v)
+	})
+}
+
+// UpdateAuthCookie sets the "auth_cookie" field to the value that was provided on create.
+func (u *SocialAccountUpsertOne) UpdateAuthCookie() *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdateAuthCookie()
+	})
+}
+
+// ClearAuthCookie clears the value of the "auth_cookie" field.
+func (u *SocialAccountUpsertOne) ClearAuthCookie() *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.ClearAuthCookie()
+	})
+}
+
+// SetExecutionAuth sets the "execution_auth" field.
+func (u *SocialAccountUpsertOne) SetExecutionAuth(v string) *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.SetExecutionAuth(v)
+	})
+}
+
+// UpdateExecutionAuth sets the "execution_auth" field to the value that was provided on create.
+func (u *SocialAccountUpsertOne) UpdateExecutionAuth() *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdateExecutionAuth()
+	})
+}
+
+// ClearExecutionAuth clears the value of the "execution_auth" field.
+func (u *SocialAccountUpsertOne) ClearExecutionAuth() *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.ClearExecutionAuth()
+	})
+}
+
 // SetAccountStatus sets the "account_status" field.
 func (u *SocialAccountUpsertOne) SetAccountStatus(v string) *SocialAccountUpsertOne {
 	return u.Update(func(s *SocialAccountUpsert) {
@@ -1183,38 +1696,24 @@ func (u *SocialAccountUpsertOne) ClearTaskMessage() *SocialAccountUpsertOne {
 	})
 }
 
-// SetSource sets the "source" field.
-func (u *SocialAccountUpsertOne) SetSource(v string) *SocialAccountUpsertOne {
+// SetDefaultProxySnapshot sets the "default_proxy_snapshot" field.
+func (u *SocialAccountUpsertOne) SetDefaultProxySnapshot(v string) *SocialAccountUpsertOne {
 	return u.Update(func(s *SocialAccountUpsert) {
-		s.SetSource(v)
+		s.SetDefaultProxySnapshot(v)
 	})
 }
 
-// UpdateSource sets the "source" field to the value that was provided on create.
-func (u *SocialAccountUpsertOne) UpdateSource() *SocialAccountUpsertOne {
+// UpdateDefaultProxySnapshot sets the "default_proxy_snapshot" field to the value that was provided on create.
+func (u *SocialAccountUpsertOne) UpdateDefaultProxySnapshot() *SocialAccountUpsertOne {
 	return u.Update(func(s *SocialAccountUpsert) {
-		s.UpdateSource()
+		s.UpdateDefaultProxySnapshot()
 	})
 }
 
-// SetBoundIP sets the "bound_ip" field.
-func (u *SocialAccountUpsertOne) SetBoundIP(v string) *SocialAccountUpsertOne {
+// ClearDefaultProxySnapshot clears the value of the "default_proxy_snapshot" field.
+func (u *SocialAccountUpsertOne) ClearDefaultProxySnapshot() *SocialAccountUpsertOne {
 	return u.Update(func(s *SocialAccountUpsert) {
-		s.SetBoundIP(v)
-	})
-}
-
-// UpdateBoundIP sets the "bound_ip" field to the value that was provided on create.
-func (u *SocialAccountUpsertOne) UpdateBoundIP() *SocialAccountUpsertOne {
-	return u.Update(func(s *SocialAccountUpsert) {
-		s.UpdateBoundIP()
-	})
-}
-
-// ClearBoundIP clears the value of the "bound_ip" field.
-func (u *SocialAccountUpsertOne) ClearBoundIP() *SocialAccountUpsertOne {
-	return u.Update(func(s *SocialAccountUpsert) {
-		s.ClearBoundIP()
+		s.ClearDefaultProxySnapshot()
 	})
 }
 
@@ -1236,6 +1735,27 @@ func (u *SocialAccountUpsertOne) UpdateAssignedUserID() *SocialAccountUpsertOne 
 func (u *SocialAccountUpsertOne) ClearAssignedUserID() *SocialAccountUpsertOne {
 	return u.Update(func(s *SocialAccountUpsert) {
 		s.ClearAssignedUserID()
+	})
+}
+
+// SetUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field.
+func (u *SocialAccountUpsertOne) SetUserWorkbenchDeletedAt(v time.Time) *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.SetUserWorkbenchDeletedAt(v)
+	})
+}
+
+// UpdateUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field to the value that was provided on create.
+func (u *SocialAccountUpsertOne) UpdateUserWorkbenchDeletedAt() *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdateUserWorkbenchDeletedAt()
+	})
+}
+
+// ClearUserWorkbenchDeletedAt clears the value of the "user_workbench_deleted_at" field.
+func (u *SocialAccountUpsertOne) ClearUserWorkbenchDeletedAt() *SocialAccountUpsertOne {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.ClearUserWorkbenchDeletedAt()
 	})
 }
 
@@ -1562,24 +2082,52 @@ func (u *SocialAccountUpsertBulk) UpdateNameKey() *SocialAccountUpsertBulk {
 	})
 }
 
-// SetAccountID sets the "account_id" field.
-func (u *SocialAccountUpsertBulk) SetAccountID(v string) *SocialAccountUpsertBulk {
+// SetIdentityKind sets the "identity_kind" field.
+func (u *SocialAccountUpsertBulk) SetIdentityKind(v string) *SocialAccountUpsertBulk {
 	return u.Update(func(s *SocialAccountUpsert) {
-		s.SetAccountID(v)
+		s.SetIdentityKind(v)
 	})
 }
 
-// UpdateAccountID sets the "account_id" field to the value that was provided on create.
-func (u *SocialAccountUpsertBulk) UpdateAccountID() *SocialAccountUpsertBulk {
+// UpdateIdentityKind sets the "identity_kind" field to the value that was provided on create.
+func (u *SocialAccountUpsertBulk) UpdateIdentityKind() *SocialAccountUpsertBulk {
 	return u.Update(func(s *SocialAccountUpsert) {
-		s.UpdateAccountID()
+		s.UpdateIdentityKind()
 	})
 }
 
-// ClearAccountID clears the value of the "account_id" field.
-func (u *SocialAccountUpsertBulk) ClearAccountID() *SocialAccountUpsertBulk {
+// SetIdentityKey sets the "identity_key" field.
+func (u *SocialAccountUpsertBulk) SetIdentityKey(v string) *SocialAccountUpsertBulk {
 	return u.Update(func(s *SocialAccountUpsert) {
-		s.ClearAccountID()
+		s.SetIdentityKey(v)
+	})
+}
+
+// UpdateIdentityKey sets the "identity_key" field to the value that was provided on create.
+func (u *SocialAccountUpsertBulk) UpdateIdentityKey() *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdateIdentityKey()
+	})
+}
+
+// SetPlatformUserID sets the "platform_user_id" field.
+func (u *SocialAccountUpsertBulk) SetPlatformUserID(v string) *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.SetPlatformUserID(v)
+	})
+}
+
+// UpdatePlatformUserID sets the "platform_user_id" field to the value that was provided on create.
+func (u *SocialAccountUpsertBulk) UpdatePlatformUserID() *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdatePlatformUserID()
+	})
+}
+
+// ClearPlatformUserID clears the value of the "platform_user_id" field.
+func (u *SocialAccountUpsertBulk) ClearPlatformUserID() *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.ClearPlatformUserID()
 	})
 }
 
@@ -1667,6 +2215,153 @@ func (u *SocialAccountUpsertBulk) ClearEmailPassword() *SocialAccountUpsertBulk 
 	})
 }
 
+// SetTwoFactor sets the "two_factor" field.
+func (u *SocialAccountUpsertBulk) SetTwoFactor(v string) *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.SetTwoFactor(v)
+	})
+}
+
+// UpdateTwoFactor sets the "two_factor" field to the value that was provided on create.
+func (u *SocialAccountUpsertBulk) UpdateTwoFactor() *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdateTwoFactor()
+	})
+}
+
+// ClearTwoFactor clears the value of the "two_factor" field.
+func (u *SocialAccountUpsertBulk) ClearTwoFactor() *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.ClearTwoFactor()
+	})
+}
+
+// SetBackupCode sets the "backup_code" field.
+func (u *SocialAccountUpsertBulk) SetBackupCode(v string) *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.SetBackupCode(v)
+	})
+}
+
+// UpdateBackupCode sets the "backup_code" field to the value that was provided on create.
+func (u *SocialAccountUpsertBulk) UpdateBackupCode() *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdateBackupCode()
+	})
+}
+
+// ClearBackupCode clears the value of the "backup_code" field.
+func (u *SocialAccountUpsertBulk) ClearBackupCode() *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.ClearBackupCode()
+	})
+}
+
+// SetEmailClientID sets the "email_client_id" field.
+func (u *SocialAccountUpsertBulk) SetEmailClientID(v string) *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.SetEmailClientID(v)
+	})
+}
+
+// UpdateEmailClientID sets the "email_client_id" field to the value that was provided on create.
+func (u *SocialAccountUpsertBulk) UpdateEmailClientID() *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdateEmailClientID()
+	})
+}
+
+// ClearEmailClientID clears the value of the "email_client_id" field.
+func (u *SocialAccountUpsertBulk) ClearEmailClientID() *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.ClearEmailClientID()
+	})
+}
+
+// SetEmailToken sets the "email_token" field.
+func (u *SocialAccountUpsertBulk) SetEmailToken(v string) *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.SetEmailToken(v)
+	})
+}
+
+// UpdateEmailToken sets the "email_token" field to the value that was provided on create.
+func (u *SocialAccountUpsertBulk) UpdateEmailToken() *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdateEmailToken()
+	})
+}
+
+// ClearEmailToken clears the value of the "email_token" field.
+func (u *SocialAccountUpsertBulk) ClearEmailToken() *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.ClearEmailToken()
+	})
+}
+
+// SetRegistrationIP sets the "registration_ip" field.
+func (u *SocialAccountUpsertBulk) SetRegistrationIP(v string) *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.SetRegistrationIP(v)
+	})
+}
+
+// UpdateRegistrationIP sets the "registration_ip" field to the value that was provided on create.
+func (u *SocialAccountUpsertBulk) UpdateRegistrationIP() *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdateRegistrationIP()
+	})
+}
+
+// ClearRegistrationIP clears the value of the "registration_ip" field.
+func (u *SocialAccountUpsertBulk) ClearRegistrationIP() *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.ClearRegistrationIP()
+	})
+}
+
+// SetAuthCookie sets the "auth_cookie" field.
+func (u *SocialAccountUpsertBulk) SetAuthCookie(v string) *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.SetAuthCookie(v)
+	})
+}
+
+// UpdateAuthCookie sets the "auth_cookie" field to the value that was provided on create.
+func (u *SocialAccountUpsertBulk) UpdateAuthCookie() *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdateAuthCookie()
+	})
+}
+
+// ClearAuthCookie clears the value of the "auth_cookie" field.
+func (u *SocialAccountUpsertBulk) ClearAuthCookie() *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.ClearAuthCookie()
+	})
+}
+
+// SetExecutionAuth sets the "execution_auth" field.
+func (u *SocialAccountUpsertBulk) SetExecutionAuth(v string) *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.SetExecutionAuth(v)
+	})
+}
+
+// UpdateExecutionAuth sets the "execution_auth" field to the value that was provided on create.
+func (u *SocialAccountUpsertBulk) UpdateExecutionAuth() *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdateExecutionAuth()
+	})
+}
+
+// ClearExecutionAuth clears the value of the "execution_auth" field.
+func (u *SocialAccountUpsertBulk) ClearExecutionAuth() *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.ClearExecutionAuth()
+	})
+}
+
 // SetAccountStatus sets the "account_status" field.
 func (u *SocialAccountUpsertBulk) SetAccountStatus(v string) *SocialAccountUpsertBulk {
 	return u.Update(func(s *SocialAccountUpsert) {
@@ -1716,38 +2411,24 @@ func (u *SocialAccountUpsertBulk) ClearTaskMessage() *SocialAccountUpsertBulk {
 	})
 }
 
-// SetSource sets the "source" field.
-func (u *SocialAccountUpsertBulk) SetSource(v string) *SocialAccountUpsertBulk {
+// SetDefaultProxySnapshot sets the "default_proxy_snapshot" field.
+func (u *SocialAccountUpsertBulk) SetDefaultProxySnapshot(v string) *SocialAccountUpsertBulk {
 	return u.Update(func(s *SocialAccountUpsert) {
-		s.SetSource(v)
+		s.SetDefaultProxySnapshot(v)
 	})
 }
 
-// UpdateSource sets the "source" field to the value that was provided on create.
-func (u *SocialAccountUpsertBulk) UpdateSource() *SocialAccountUpsertBulk {
+// UpdateDefaultProxySnapshot sets the "default_proxy_snapshot" field to the value that was provided on create.
+func (u *SocialAccountUpsertBulk) UpdateDefaultProxySnapshot() *SocialAccountUpsertBulk {
 	return u.Update(func(s *SocialAccountUpsert) {
-		s.UpdateSource()
+		s.UpdateDefaultProxySnapshot()
 	})
 }
 
-// SetBoundIP sets the "bound_ip" field.
-func (u *SocialAccountUpsertBulk) SetBoundIP(v string) *SocialAccountUpsertBulk {
+// ClearDefaultProxySnapshot clears the value of the "default_proxy_snapshot" field.
+func (u *SocialAccountUpsertBulk) ClearDefaultProxySnapshot() *SocialAccountUpsertBulk {
 	return u.Update(func(s *SocialAccountUpsert) {
-		s.SetBoundIP(v)
-	})
-}
-
-// UpdateBoundIP sets the "bound_ip" field to the value that was provided on create.
-func (u *SocialAccountUpsertBulk) UpdateBoundIP() *SocialAccountUpsertBulk {
-	return u.Update(func(s *SocialAccountUpsert) {
-		s.UpdateBoundIP()
-	})
-}
-
-// ClearBoundIP clears the value of the "bound_ip" field.
-func (u *SocialAccountUpsertBulk) ClearBoundIP() *SocialAccountUpsertBulk {
-	return u.Update(func(s *SocialAccountUpsert) {
-		s.ClearBoundIP()
+		s.ClearDefaultProxySnapshot()
 	})
 }
 
@@ -1769,6 +2450,27 @@ func (u *SocialAccountUpsertBulk) UpdateAssignedUserID() *SocialAccountUpsertBul
 func (u *SocialAccountUpsertBulk) ClearAssignedUserID() *SocialAccountUpsertBulk {
 	return u.Update(func(s *SocialAccountUpsert) {
 		s.ClearAssignedUserID()
+	})
+}
+
+// SetUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field.
+func (u *SocialAccountUpsertBulk) SetUserWorkbenchDeletedAt(v time.Time) *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.SetUserWorkbenchDeletedAt(v)
+	})
+}
+
+// UpdateUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field to the value that was provided on create.
+func (u *SocialAccountUpsertBulk) UpdateUserWorkbenchDeletedAt() *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.UpdateUserWorkbenchDeletedAt()
+	})
+}
+
+// ClearUserWorkbenchDeletedAt clears the value of the "user_workbench_deleted_at" field.
+func (u *SocialAccountUpsertBulk) ClearUserWorkbenchDeletedAt() *SocialAccountUpsertBulk {
+	return u.Update(func(s *SocialAccountUpsert) {
+		s.ClearUserWorkbenchDeletedAt()
 	})
 }
 

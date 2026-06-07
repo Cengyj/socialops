@@ -10,6 +10,8 @@ import { useAdminSettingsStore } from '@/stores/adminSettings'
 import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { getSetupStatus } from '@/api/setup'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
+import { FeatureFlags, isFeatureFlagEnabled, type RegisteredFeatureFlag } from '@/utils/featureFlags'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveDocumentTitle } from './title'
 
@@ -184,6 +186,42 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/accounts',
+    name: 'AccountWorkbench',
+    component: () => import('@/views/AccountWorkbenchRoute.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Account Workbench',
+      titleKey: 'accountWorkbench.title',
+      descriptionKey: 'accountWorkbench.description'
+    }
+  },
+  {
+    path: '/task-settings',
+    name: 'TaskSettings',
+    component: () => import('@/views/task-settings/TaskSettingsView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Task Settings',
+      titleKey: 'taskSettings.title',
+      descriptionKey: 'taskSettings.description'
+    }
+  },
+  {
+    path: '/proxies',
+    name: 'Proxies',
+    component: () => import('@/views/proxies/ProxiesView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Proxy Management',
+      titleKey: 'proxies.title',
+      descriptionKey: 'proxies.description'
+    }
+  },
+  {
     path: '/usage',
     name: 'Usage',
     component: () => import('@/views/user/UsageView.vue'),
@@ -216,7 +254,8 @@ const routes: RouteRecordRaw[] = [
       requiresAdmin: false,
       title: 'Affiliate',
       titleKey: 'affiliate.title',
-      descriptionKey: 'affiliate.description'
+      descriptionKey: 'affiliate.description',
+      requiresFeatureFlag: 'affiliate'
     }
   },
   {
@@ -382,15 +421,7 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/admin/accounts',
-    name: 'AdminAccounts',
-    component: () => import('@/views/admin/AccountOnboardingView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      title: 'Account Management',
-      titleKey: 'admin.accounts.title',
-      descriptionKey: 'admin.accounts.description'
-    }
+    redirect: '/accounts'
   },
   {
     path: '/admin/total-accounts',
@@ -402,18 +433,6 @@ const routes: RouteRecordRaw[] = [
       title: 'Total Account Pool',
       titleKey: 'admin.totalAccounts.title',
       descriptionKey: 'admin.totalAccounts.description'
-    }
-  },
-  {
-    path: '/admin/proxies',
-    name: 'AdminProxies',
-    component: () => import('@/views/admin/ProxiesView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      title: 'Proxy Management',
-      titleKey: 'admin.proxies.title',
-      descriptionKey: 'admin.proxies.description'
     }
   },
   {
@@ -437,7 +456,8 @@ const routes: RouteRecordRaw[] = [
       requiresAdmin: true,
       title: 'Risk Control',
       titleKey: 'admin.riskControl.title',
-      descriptionKey: 'admin.riskControl.description'
+      descriptionKey: 'admin.riskControl.description',
+      requiresFeatureFlag: 'riskControl'
     }
   },
   {
@@ -489,7 +509,8 @@ const routes: RouteRecordRaw[] = [
       requiresAdmin: true,
       title: 'Affiliate Invite Records',
       titleKey: 'nav.affiliateInviteRecords',
-      descriptionKey: 'admin.affiliates.invitesDescription'
+      descriptionKey: 'admin.affiliates.invitesDescription',
+      requiresFeatureFlag: 'affiliate'
     }
   },
   {
@@ -501,7 +522,8 @@ const routes: RouteRecordRaw[] = [
       requiresAdmin: true,
       title: 'Affiliate Rebate Records',
       titleKey: 'nav.affiliateRebateRecords',
-      descriptionKey: 'admin.affiliates.rebatesDescription'
+      descriptionKey: 'admin.affiliates.rebatesDescription',
+      requiresFeatureFlag: 'affiliate'
     }
   },
   {
@@ -513,7 +535,8 @@ const routes: RouteRecordRaw[] = [
       requiresAdmin: true,
       title: 'Affiliate Transfer Records',
       titleKey: 'nav.affiliateTransferRecords',
-      descriptionKey: 'admin.affiliates.transfersDescription'
+      descriptionKey: 'admin.affiliates.transfersDescription',
+      requiresFeatureFlag: 'affiliate'
     }
   },
 
@@ -527,8 +550,7 @@ const routes: RouteRecordRaw[] = [
       requiresAuth: true,
       requiresAdmin: true,
       title: 'Payment Dashboard',
-      titleKey: 'nav.paymentDashboard',
-      requiresPayment: true
+      titleKey: 'nav.paymentDashboard'
     }
   },
   {
@@ -539,8 +561,7 @@ const routes: RouteRecordRaw[] = [
       requiresAuth: true,
       requiresAdmin: true,
       title: 'Order Management',
-      titleKey: 'nav.orderManagement',
-      requiresPayment: true
+      titleKey: 'nav.orderManagement'
     }
   },
   {
@@ -551,23 +572,17 @@ const routes: RouteRecordRaw[] = [
       requiresAuth: true,
       requiresAdmin: true,
       title: 'Subscription Plans',
-      titleKey: 'nav.paymentPlans',
-      requiresPayment: true
+      titleKey: 'nav.paymentPlans'
     }
   },
   {
-    path: '/admin/usage',
-    name: 'AdminUsage',
-    component: () => import('@/views/admin/UsageView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      title: 'Usage',
-      titleKey: 'admin.usage.title',
-      descriptionKey: 'admin.usage.description'
-    }
+    path: '/admin/data-management',
+    redirect: { path: '/admin/settings', query: { tab: 'backup' } }
   },
-
+  {
+    path: '/admin/backups',
+    redirect: { path: '/admin/settings', query: { tab: 'backup' } }
+  },
   // ==================== 404 Not Found ====================
   {
     path: '/:pathMatch(.*)*',
@@ -604,9 +619,18 @@ let authInitialized = false
 const navigationLoading = useNavigationLoadingState()
 // 延迟初始化预加载，传入 router 实例
 let routePrefetch: ReturnType<typeof useRoutePrefetch> | null = null
-const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/setup', '/payment/result', '/payment/airwallex', '/legal']
+const BACKEND_MODE_ALLOWED_PATHS = [
+  '/login',
+  '/setup',
+  '/payment/result',
+  '/payment/stripe',
+  '/payment/stripe-popup',
+  '/payment/airwallex',
+  '/legal',
+]
 const BACKEND_MODE_CALLBACK_PATHS = [
   '/auth/callback',
+  '/auth/oauth/callback',
   '/auth/linuxdo/callback',
   '/auth/dingtalk/callback',
   '/auth/dingtalk/email-completion',
@@ -615,9 +639,43 @@ const BACKEND_MODE_CALLBACK_PATHS = [
   '/auth/wechat/payment/callback',
 ]
 const BACKEND_MODE_PENDING_AUTH_PATHS = ['/register', '/email-verify']
+const SIMPLE_MODE_USER_RESTRICTED_PATHS = [
+  '/accounts',
+  '/usage',
+  '/subscriptions',
+  '/purchase',
+  '/payment/qrcode',
+  '/orders',
+  '/redeem',
+  '/affiliate',
+]
+const SIMPLE_MODE_ADMIN_RESTRICTED_PATHS = [
+  '/usage',
+  '/subscriptions',
+  '/purchase',
+  '/payment/qrcode',
+  '/orders',
+  '/redeem',
+  '/affiliate',
+  '/admin/users',
+  '/admin/subscriptions',
+  '/admin/risk-control',
+  '/admin/redeem',
+  '/admin/promo-codes',
+  '/admin/affiliates',
+  '/admin/orders',
+]
+
+function matchesBackendModePublicPath(path: string, allowedPath: string): boolean {
+  return path === allowedPath || path.startsWith(`${allowedPath}/`)
+}
+
+function matchesRoutePathPrefix(path: string, prefix: string): boolean {
+  return path === prefix || path.startsWith(`${prefix}/`)
+}
 
 function isBackendModePublicRouteAllowed(path: string, hasPendingAuthSession: boolean): boolean {
-  if (BACKEND_MODE_ALLOWED_PATHS.some((allowedPath) => path === allowedPath || path.startsWith(allowedPath))) {
+  if (BACKEND_MODE_ALLOWED_PATHS.some((allowedPath) => matchesBackendModePublicPath(path, allowedPath))) {
     return true
   }
 
@@ -630,6 +688,11 @@ function isBackendModePublicRouteAllowed(path: string, hasPendingAuthSession: bo
   }
 
   return false
+}
+
+function isRequiredFeatureFlagEnabled(flag: RegisteredFeatureFlag | undefined): boolean {
+  if (!flag) return true
+  return isFeatureFlagEnabled(FeatureFlags[flag])
 }
 
 router.beforeEach(async (to, _from, next) => {
@@ -646,6 +709,9 @@ router.beforeEach(async (to, _from, next) => {
 
   // Set page title
   const appStore = useAppStore()
+  if (!appStore.publicSettingsLoaded) {
+    await appStore.fetchPublicSettings()
+  }
   // For custom pages, use menu item label as document title
   if (to.name === 'CustomPage') {
     const id = to.params.id as string
@@ -686,14 +752,26 @@ router.beforeEach(async (to, _from, next) => {
       // In backend mode, non-admin users should NOT be redirected away from login
       // (they are blocked from all protected routes, so redirecting would cause a loop)
       if (appStore.backendModeEnabled && !authStore.isAdmin) {
-        next()
+        if (to.path === '/login') {
+          next()
+        } else {
+          next('/login')
+        }
         return
       }
       // Admin users go to admin dashboard, regular users go to user dashboard
       next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
       return
     }
-    // Backend mode: block public pages for unauthenticated users (except login, key-usage, setup)
+    // Backend mode: authenticated non-admin users are blocked from self-service public pages too.
+    if (appStore.backendModeEnabled && authStore.isAuthenticated && !authStore.isAdmin) {
+      const isAllowed = isBackendModePublicRouteAllowed(to.path, authStore.hasPendingAuthSession)
+      if (!isAllowed) {
+        next('/login')
+        return
+      }
+    }
+    // Backend mode: block public pages for unauthenticated users except required login, setup, callback, legal, and payment result routes.
     if (appStore.backendModeEnabled && !authStore.isAuthenticated) {
       const isAllowed = isBackendModePublicRouteAllowed(to.path, authStore.hasPendingAuthSession)
       if (!isAllowed) {
@@ -722,11 +800,16 @@ router.beforeEach(async (to, _from, next) => {
     return
   }
 
+  // Check feature-flag requirements
+  if (!isRequiredFeatureFlagEnabled(to.meta.requiresFeatureFlag)) {
+    next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
+    return
+  }
 
   // Check payment requirement (internal payment system only)
   if (to.meta.requiresPayment) {
     const paymentEnabled = appStore.cachedPublicSettings?.payment_enabled
-    if (!paymentEnabled) {
+    if (paymentEnabled === false) {
       next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
       return
     }
@@ -735,14 +818,11 @@ router.beforeEach(async (to, _from, next) => {
 
   // 简易模式下限制访问某些页面
   if (authStore.isSimpleMode) {
-    const restrictedPaths = [
-      '/admin/subscriptions',
-      '/admin/redeem',
-      '/subscriptions',
-      '/redeem'
-    ]
+    const restrictedPaths = authStore.isAdmin
+      ? SIMPLE_MODE_ADMIN_RESTRICTED_PATHS
+      : SIMPLE_MODE_USER_RESTRICTED_PATHS
 
-    if (restrictedPaths.some((path) => to.path.startsWith(path))) {
+    if (restrictedPaths.some((path) => matchesRoutePathPrefix(to.path, path))) {
       // 简易模式下访问受限页面,重定向到仪表板
       next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
       return
@@ -786,7 +866,7 @@ router.afterEach((to) => {
  * Handles dynamic import failures caused by deployment updates
  */
 router.onError((error) => {
-  console.error('Router error:', error)
+  recordClientDiagnostic('router.error', error)
 
   // Check if this is a dynamic import failure (chunk loading error)
   const isChunkLoadError =
@@ -804,10 +884,10 @@ router.onError((error) => {
     // Allow reload if never attempted or more than 10 seconds ago
     if (!lastReload || now - parseInt(lastReload) > 10000) {
       sessionStorage.setItem(reloadKey, now.toString())
-      console.warn('Chunk load error detected, reloading page to fetch latest version...')
+      recordClientDiagnostic('router.chunkReload', error)
       window.location.reload()
     } else {
-      console.error('Chunk load error persists after reload. Please clear browser cache.')
+      recordClientDiagnostic('router.chunkReloadPersistent', error)
     }
   }
 })

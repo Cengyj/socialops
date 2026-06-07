@@ -25,6 +25,7 @@ import (
 	"time"
 
 	xdraw "golang.org/x/image/draw"
+	_ "golang.org/x/image/webp"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -36,6 +37,7 @@ var (
 	ErrAvatarInvalid            = infraerrors.BadRequest("AVATAR_INVALID", "avatar must be a valid image data URL or http(s) URL")
 	ErrAvatarTooLarge           = infraerrors.BadRequest("AVATAR_TOO_LARGE", "avatar image must be 100KB or smaller")
 	ErrAvatarNotImage           = infraerrors.BadRequest("AVATAR_NOT_IMAGE", "avatar content must be an image")
+	ErrUsernameRequired         = infraerrors.BadRequest("USERNAME_REQUIRED", "username is required")
 	ErrIdentityProviderInvalid  = infraerrors.BadRequest("IDENTITY_PROVIDER_INVALID", "identity provider is invalid")
 	ErrIdentityRedirectInvalid  = infraerrors.BadRequest("IDENTITY_REDIRECT_INVALID", "identity redirect path is invalid")
 	ErrIdentityUnbindLastMethod = infraerrors.Conflict(
@@ -429,7 +431,11 @@ func (s *UserService) updateProfile(ctx context.Context, userID int64, req Updat
 	}
 
 	if req.Username != nil {
-		user.Username = *req.Username
+		username := strings.TrimSpace(*req.Username)
+		if username == "" {
+			return nil, oldConcurrency, ErrUsernameRequired
+		}
+		user.Username = username
 	}
 
 	if req.AvatarURL != nil {
@@ -558,6 +564,9 @@ func normalizeInlineUserAvatarInput(raw string) (UpsertUserAvatarInput, error) {
 	if len(decoded) > maxInlineAvatarBytes {
 		return UpsertUserAvatarInput{}, ErrAvatarTooLarge
 	}
+	if err := validateInlineAvatarImage(decoded); err != nil {
+		return UpsertUserAvatarInput{}, err
+	}
 
 	if len(decoded) > targetAvatarBytes {
 		decoded, contentType, err = compressInlineAvatar(decoded)
@@ -575,6 +584,17 @@ func normalizeInlineUserAvatarInput(raw string) (UpsertUserAvatarInput, error) {
 		ByteSize:        len(decoded),
 		SHA256:          hex.EncodeToString(sum[:]),
 	}, nil
+}
+
+func validateInlineAvatarImage(decoded []byte) error {
+	src, _, err := image.DecodeConfig(bytes.NewReader(decoded))
+	if err != nil {
+		return ErrAvatarInvalid
+	}
+	if src.Width <= 0 || src.Height <= 0 {
+		return ErrAvatarInvalid
+	}
+	return nil
 }
 
 func compressInlineAvatar(decoded []byte) ([]byte, string, error) {

@@ -56,7 +56,8 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
-import { extractI18nErrorMessage } from '@/utils/apiError'
+import { extractSafeI18nErrorMessage } from '@/utils/apiError'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 import { isMobileDevice } from '@/utils/device'
 
 interface StripeWithWechatPay {
@@ -125,7 +126,10 @@ async function initStripe(clientSecret: string, publishableKey: string) {
     if (method === 'alipay') {
       // Alipay: redirect this popup to Alipay payment page
       const { error: err } = await stripe.confirmAlipayPayment(clientSecret, { return_url: returnUrl })
-      if (err) error.value = err.message || t('payment.result.failed')
+      if (err) {
+        recordClientDiagnostic('payment.stripe_popup.confirm_alipay', err)
+        error.value = t('payment.result.failed')
+      }
     } else if (method === 'wechat_pay') {
       // WeChat: Stripe shows its built-in QR dialog, user scans, promise resolves
       hint.value = t('payment.stripePopup.loadingQr')
@@ -133,7 +137,8 @@ async function initStripe(clientSecret: string, publishableKey: string) {
         payment_method_options: { wechat_pay: { client: isMobileDevice() ? 'mobile_web' : 'web' } },
       })
       if (result.error) {
-        error.value = result.error.message || t('payment.result.failed')
+        recordClientDiagnostic('payment.stripe_popup.confirm_wechat', result.error)
+        error.value = t('payment.result.failed')
       } else if (result.paymentIntent?.status === 'succeeded') {
         success.value = true
         setTimeout(closeWindow, 2000)
@@ -143,7 +148,8 @@ async function initStripe(clientSecret: string, publishableKey: string) {
       }
     }
   } catch (err: unknown) {
-    error.value = extractI18nErrorMessage(err, t, 'payment.errors', t('payment.stripeLoadFailed'))
+    recordClientDiagnostic('payment.stripe_popup.init', err)
+    error.value = extractSafeI18nErrorMessage(err, t, 'payment.errors', t('payment.stripeLoadFailed'))
   }
 }
 

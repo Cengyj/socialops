@@ -6,6 +6,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -150,6 +151,68 @@ func TestAdminAuthJWTValidatesTokenVersion(t *testing.T) {
 		require.Equal(t, http.StatusForbidden, w.Code)
 		require.Contains(t, w.Body.String(), "FORBIDDEN")
 	})
+}
+
+func TestAdminAccountMutationEndpointsRejectNonAdminJWT(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{JWT: config.JWTConfig{Secret: "test-secret", ExpireHour: 1}}
+	authService := service.NewAuthService(nil, nil, nil, nil, cfg, nil, nil, nil, nil, nil, nil, nil)
+	regular := &service.User{
+		ID:           7,
+		Email:        "user@example.com",
+		Role:         service.RoleUser,
+		Status:       service.StatusActive,
+		TokenVersion: 1,
+		Concurrency:  1,
+	}
+
+	userRepo := &stubUserRepo{
+		getByID: func(ctx context.Context, id int64) (*service.User, error) {
+			if id != regular.ID {
+				return nil, service.ErrUserNotFound
+			}
+			clone := *regular
+			return &clone, nil
+		},
+	}
+	userService := service.NewUserService(userRepo, nil, nil, nil)
+
+	router := gin.New()
+	admin := router.Group("/api/v1/admin")
+	admin.Use(gin.HandlerFunc(NewAdminAuthMiddleware(authService, userService, nil)))
+	admin.POST("/accounts/register", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"unexpected": true})
+	})
+	admin.POST("/accounts/import", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"unexpected": true})
+	})
+	admin.POST("/accounts/store-workbench", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"unexpected": true})
+	})
+
+	token, err := authService.GenerateToken(regular)
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name string
+		path string
+		body string
+	}{
+		{name: "register", path: "/api/v1/admin/accounts/register", body: `{"name":"@u","platform":"x_twitter"}`},
+		{name: "import", path: "/api/v1/admin/accounts/import", body: ""},
+		{name: "store-workbench", path: "/api/v1/admin/accounts/store-workbench", body: `{"account_ids":[1]}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Authorization", "Bearer "+token)
+			router.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusForbidden, w.Code)
+			require.Contains(t, w.Body.String(), "Admin access required")
+		})
+	}
 }
 
 type stubUserRepo struct {

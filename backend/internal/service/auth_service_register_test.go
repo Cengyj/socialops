@@ -71,6 +71,35 @@ type defaultSubscriptionAssignerStub struct {
 	err   error
 }
 
+type registerInvitationRedeemRepoStub struct {
+	redeemRepoStub
+	code     *RedeemCode
+	useErr   error
+	useCalls []struct {
+		id     int64
+		userID int64
+	}
+}
+
+func (s *registerInvitationRedeemRepoStub) GetByCode(_ context.Context, code string) (*RedeemCode, error) {
+	if s.code == nil || s.code.Code != code {
+		return nil, ErrRedeemCodeNotFound
+	}
+	cloned := *s.code
+	return &cloned, nil
+}
+
+func (s *registerInvitationRedeemRepoStub) Use(_ context.Context, id, userID int64) error {
+	s.useCalls = append(s.useCalls, struct {
+		id     int64
+		userID int64
+	}{id: id, userID: userID})
+	if s.useErr != nil {
+		return s.useErr
+	}
+	return nil
+}
+
 type refreshTokenCacheStub struct{}
 
 func (s *defaultSubscriptionAssignerStub) AssignOrExtendSubscription(_ context.Context, input *AssignSubscriptionInput) (*UserSubscription, bool, error) {
@@ -273,6 +302,113 @@ func TestAuthService_Register_EmailVerifyInvalid(t *testing.T) {
 	_, _, err := service.RegisterWithVerification(context.Background(), "user@test.com", "password", "wrong", "", "", "")
 	require.ErrorIs(t, err, ErrInvalidVerifyCode)
 	require.ErrorContains(t, err, "verify code")
+}
+
+func TestAuthService_Register_InvitationUseFailureRejectsRegistration(t *testing.T) {
+	repo := &userRepoStub{nextID: 9}
+	redeemRepo := &registerInvitationRedeemRepoStub{
+		code: &RedeemCode{
+			ID:     7,
+			Code:   "INVITE-RACE",
+			Type:   RedeemTypeInvitation,
+			Status: StatusUnused,
+		},
+		useErr: ErrRedeemCodeUsed,
+	}
+	assigner := &defaultSubscriptionAssignerStub{}
+	service := newAuthService(repo, map[string]string{
+		SettingKeyRegistrationEnabled:   "true",
+		SettingKeyInvitationCodeEnabled: "true",
+		SettingKeyDefaultSubscriptions:  `[{"group_id":11,"validity_days":30}]`,
+	}, nil)
+	service.redeemRepo = redeemRepo
+	service.defaultSubAssigner = assigner
+
+	token, user, err := service.RegisterWithVerification(
+		context.Background(),
+		"invite-race@test.com",
+		"password",
+		"",
+		"",
+		"INVITE-RACE",
+		"",
+	)
+
+	require.ErrorIs(t, err, ErrInvitationCodeInvalid)
+	require.Empty(t, token)
+	require.Nil(t, user)
+	require.Len(t, redeemRepo.useCalls, 1)
+	require.Equal(t, int64(7), redeemRepo.useCalls[0].id)
+	require.Equal(t, int64(9), redeemRepo.useCalls[0].userID)
+	require.Empty(t, assigner.calls)
+}
+
+func TestAuthService_Register_TrimsInvitationCodeBeforeLookup(t *testing.T) {
+	repo := &userRepoStub{nextID: 10}
+	redeemRepo := &registerInvitationRedeemRepoStub{
+		code: &RedeemCode{
+			ID:     8,
+			Code:   "INVITE-TRIM",
+			Type:   RedeemTypeInvitation,
+			Status: StatusUnused,
+		},
+	}
+	service := newAuthService(repo, map[string]string{
+		SettingKeyRegistrationEnabled:   "true",
+		SettingKeyInvitationCodeEnabled: "true",
+	}, nil)
+	service.redeemRepo = redeemRepo
+
+	token, user, err := service.RegisterWithVerification(
+		context.Background(),
+		"invite-trim@test.com",
+		"password",
+		"",
+		"",
+		"  INVITE-TRIM  ",
+		"",
+	)
+
+	require.NoError(t, err)
+	require.NotEmpty(t, token)
+	require.NotNil(t, user)
+	require.Len(t, redeemRepo.useCalls, 1)
+	require.Equal(t, int64(8), redeemRepo.useCalls[0].id)
+	require.Equal(t, int64(10), redeemRepo.useCalls[0].userID)
+}
+
+func TestAuthService_OAuthSignup_TrimsInvitationCodeBeforeLookup(t *testing.T) {
+	repo := &userRepoStub{nextID: 11}
+	redeemRepo := &registerInvitationRedeemRepoStub{
+		code: &RedeemCode{
+			ID:     9,
+			Code:   "OAUTH-TRIM",
+			Type:   RedeemTypeInvitation,
+			Status: StatusUnused,
+		},
+	}
+	service := newAuthService(repo, map[string]string{
+		SettingKeyRegistrationEnabled:   "true",
+		SettingKeyInvitationCodeEnabled: "true",
+	}, nil)
+	service.redeemRepo = redeemRepo
+	service.refreshTokenCache = &refreshTokenCacheStub{}
+
+	tokenPair, user, err := service.LoginOrRegisterOAuthWithTokenPair(
+		context.Background(),
+		"oauth-trim@test.com",
+		"oauth_user",
+		"  OAUTH-TRIM  ",
+		"",
+		"oidc",
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, tokenPair)
+	require.NotNil(t, user)
+	require.Len(t, redeemRepo.useCalls, 1)
+	require.Equal(t, int64(9), redeemRepo.useCalls[0].id)
+	require.Equal(t, int64(11), redeemRepo.useCalls[0].userID)
 }
 
 func TestAuthService_Register_EmailExists(t *testing.T) {
@@ -523,7 +659,7 @@ func TestAuthService_Register_AssignsDefaultSubscriptions(t *testing.T) {
 	assigner := &defaultSubscriptionAssignerStub{}
 	service := newAuthService(repo, map[string]string{
 		SettingKeyRegistrationEnabled:                 "true",
-		SettingKeyDefaultSubscriptions:                `[{"group_id":11,"validity_days":30},{"group_id":12,"validity_days":7}]`,
+		SettingKeyDefaultSubscriptions:                `[{"plan_id":101,"group_id":11,"validity_days":30},{"group_id":12,"validity_days":7}]`,
 		SettingKeyAuthSourceDefaultEmailGrantOnSignup: "false",
 	}, nil)
 	service.defaultSubAssigner = assigner
@@ -534,8 +670,11 @@ func TestAuthService_Register_AssignsDefaultSubscriptions(t *testing.T) {
 	require.Len(t, assigner.calls, 2)
 	require.Equal(t, int64(42), assigner.calls[0].UserID)
 	require.Equal(t, int64(11), assigner.calls[0].GroupID)
+	require.NotNil(t, assigner.calls[0].PlanID)
+	require.Equal(t, int64(101), *assigner.calls[0].PlanID)
 	require.Equal(t, 30, assigner.calls[0].ValidityDays)
 	require.Equal(t, int64(12), assigner.calls[1].GroupID)
+	require.Nil(t, assigner.calls[1].PlanID)
 	require.Equal(t, 7, assigner.calls[1].ValidityDays)
 }
 

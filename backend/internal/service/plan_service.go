@@ -11,33 +11,45 @@ import (
 	"github.com/Wei-Shaw/socialops/internal/pkg/pagination"
 )
 
-// Plan represents a service plan for the social platform.
+// Plan is the legacy service shape for old /plans compatibility.
+// New subscription package catalog responses should use handler/dto.SubscriptionPlan.
 type Plan struct {
-	ID            int64     `json:"id"`
-	Name          string    `json:"name"`
-	Description   string    `json:"description"`
-	Price         float64   `json:"price"`
-	OriginalPrice float64   `json:"original_price,omitempty"`
-	ValidityDays  int       `json:"validity_days"`
-	Features      string    `json:"features"`
-	ForSale       bool      `json:"for_sale"`
-	SortOrder     int       `json:"sort_order"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID              int64     `json:"id"`
+	GroupID         int64     `json:"group_id"`
+	Platform        string    `json:"platform"`
+	Name            string    `json:"name"`
+	Description     string    `json:"description"`
+	Price           float64   `json:"price"`
+	OriginalPrice   float64   `json:"original_price,omitempty"`
+	ValidityDays    int       `json:"validity_days"`
+	ValidityUnit    string    `json:"validity_unit"`
+	Features        string    `json:"features"`
+	ForSale         bool      `json:"for_sale"`
+	SortOrder       int       `json:"sort_order"`
+	DailyLimitUSD   *float64  `json:"daily_limit_usd"`
+	WeeklyLimitUSD  *float64  `json:"weekly_limit_usd"`
+	MonthlyLimitUSD *float64  `json:"monthly_limit_usd"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // UserPlan represents a user's active plan subscription.
 type UserPlan struct {
-	ID        int64     `json:"id"`
-	UserID    int64     `json:"user_id"`
-	PlanID    int64     `json:"plan_id"`
-	PlanName  string    `json:"plan_name"`
-	Status    string    `json:"status"`
-	StartsAt  time.Time `json:"starts_at"`
-	ExpiresAt time.Time `json:"expires_at"`
+	ID              int64     `json:"id"`
+	UserID          int64     `json:"user_id"`
+	PlanID          int64     `json:"plan_id"`
+	PlanName        string    `json:"plan_name"`
+	PlanPlatform    string    `json:"plan_platform"`
+	Status          string    `json:"status"`
+	StartsAt        time.Time `json:"starts_at"`
+	ExpiresAt       time.Time `json:"expires_at"`
+	DailyLimitUSD   *float64  `json:"daily_limit_usd,omitempty"`
+	WeeklyLimitUSD  *float64  `json:"weekly_limit_usd,omitempty"`
+	MonthlyLimitUSD *float64  `json:"monthly_limit_usd,omitempty"`
 }
 
-// CreatePlanInput is the input for creating a plan.
+// CreatePlanInput is the legacy input for creating a plan.
+// Admin package creation should use PaymentConfigService.CreatePlan.
 type CreatePlanInput struct {
 	Name          string  `json:"name" binding:"required"`
 	Description   string  `json:"description"`
@@ -49,7 +61,8 @@ type CreatePlanInput struct {
 	SortOrder     int     `json:"sort_order"`
 }
 
-// UpdatePlanInput is the input for updating a plan.
+// UpdatePlanInput is the legacy input for updating a plan.
+// Admin package updates should use PaymentConfigService.UpdatePlan.
 type UpdatePlanInput struct {
 	Name          *string  `json:"name"`
 	Description   *string  `json:"description"`
@@ -61,7 +74,8 @@ type UpdatePlanInput struct {
 	SortOrder     *int     `json:"sort_order"`
 }
 
-// PlanService manages service plans and user plan subscriptions.
+// PlanService keeps compatibility helpers for legacy user plan endpoints.
+// PaymentConfigService owns the current quota package catalog.
 type PlanService struct {
 	entClient *dbent.Client
 }
@@ -193,6 +207,7 @@ func (s *PlanService) GetUserActivePlan(ctx context.Context, userID int64) (*Use
 			usersubscription.StatusEQ("active"),
 			usersubscription.ExpiresAtGT(time.Now()),
 		).
+		WithGroup().
 		Order(dbent.Desc(usersubscription.FieldExpiresAt)).
 		First(ctx)
 	if err != nil {
@@ -202,13 +217,70 @@ func (s *PlanService) GetUserActivePlan(ctx context.Context, userID int64) (*Use
 		return nil, err
 	}
 	return &UserPlan{
-		ID:        int64(sub.ID),
-		UserID:    int64(sub.UserID),
-		PlanID:    int64(sub.GroupID),
-		Status:    sub.Status,
-		StartsAt:  sub.StartsAt,
-		ExpiresAt: sub.ExpiresAt,
+		ID:              int64(sub.ID),
+		UserID:          int64(sub.UserID),
+		PlanID:          derefInt64(sub.PlanID),
+		PlanName:        sub.PlanName,
+		PlanPlatform:    userPlanEffectivePlatform(sub),
+		Status:          sub.Status,
+		StartsAt:        sub.StartsAt,
+		ExpiresAt:       sub.ExpiresAt,
+		DailyLimitUSD:   userPlanEffectiveDailyLimit(sub),
+		WeeklyLimitUSD:  userPlanEffectiveWeeklyLimit(sub),
+		MonthlyLimitUSD: userPlanEffectiveMonthlyLimit(sub),
 	}, nil
+}
+
+func userPlanEffectivePlatform(sub *dbent.UserSubscription) string {
+	if sub == nil {
+		return ""
+	}
+	if sub.PlanPlatform != "" {
+		return sub.PlanPlatform
+	}
+	if sub.Edges.Group != nil {
+		return sub.Edges.Group.Platform
+	}
+	return ""
+}
+
+func userPlanEffectiveDailyLimit(sub *dbent.UserSubscription) *float64 {
+	if sub == nil {
+		return nil
+	}
+	if sub.DailyLimitUsd != nil {
+		return sub.DailyLimitUsd
+	}
+	if sub.Edges.Group != nil {
+		return sub.Edges.Group.DailyLimitUsd
+	}
+	return nil
+}
+
+func userPlanEffectiveWeeklyLimit(sub *dbent.UserSubscription) *float64 {
+	if sub == nil {
+		return nil
+	}
+	if sub.WeeklyLimitUsd != nil {
+		return sub.WeeklyLimitUsd
+	}
+	if sub.Edges.Group != nil {
+		return sub.Edges.Group.WeeklyLimitUsd
+	}
+	return nil
+}
+
+func userPlanEffectiveMonthlyLimit(sub *dbent.UserSubscription) *float64 {
+	if sub == nil {
+		return nil
+	}
+	if sub.MonthlyLimitUsd != nil {
+		return sub.MonthlyLimitUsd
+	}
+	if sub.Edges.Group != nil {
+		return sub.Edges.Group.MonthlyLimitUsd
+	}
+	return nil
 }
 
 // ListUserPlans returns all plans for a user with pagination.
@@ -233,12 +305,17 @@ func (s *PlanService) ListUserPlans(ctx context.Context, userID int64, params pa
 	plans := make([]*UserPlan, len(subs))
 	for i, sub := range subs {
 		plans[i] = &UserPlan{
-			ID:        int64(sub.ID),
-			UserID:    int64(sub.UserID),
-			PlanID:    int64(sub.GroupID),
-			Status:    sub.Status,
-			StartsAt:  sub.StartsAt,
-			ExpiresAt: sub.ExpiresAt,
+			ID:              int64(sub.ID),
+			UserID:          int64(sub.UserID),
+			PlanID:          derefInt64(sub.PlanID),
+			PlanName:        sub.PlanName,
+			PlanPlatform:    sub.PlanPlatform,
+			Status:          sub.Status,
+			StartsAt:        sub.StartsAt,
+			ExpiresAt:       sub.ExpiresAt,
+			DailyLimitUSD:   sub.DailyLimitUsd,
+			WeeklyLimitUSD:  sub.WeeklyLimitUsd,
+			MonthlyLimitUSD: sub.MonthlyLimitUsd,
 		}
 	}
 
@@ -248,21 +325,34 @@ func (s *PlanService) ListUserPlans(ctx context.Context, userID int64, params pa
 
 func planFromEnt(e *dbent.SubscriptionPlan) *Plan {
 	return &Plan{
-		ID:            int64(e.ID),
-		Name:          e.Name,
-		Description:   e.Description,
-		Price:         e.Price,
-		OriginalPrice: derefFloat(e.OriginalPrice),
-		ValidityDays:  e.ValidityDays,
-		Features:      e.Features,
-		ForSale:       e.ForSale,
-		SortOrder:     e.SortOrder,
-		CreatedAt:     e.CreatedAt,
-		UpdatedAt:     e.UpdatedAt,
+		ID:              int64(e.ID),
+		GroupID:         e.GroupID,
+		Platform:        e.Platform,
+		Name:            e.Name,
+		Description:     e.Description,
+		Price:           e.Price,
+		OriginalPrice:   derefFloat(e.OriginalPrice),
+		ValidityDays:    e.ValidityDays,
+		ValidityUnit:    e.ValidityUnit,
+		Features:        e.Features,
+		ForSale:         e.ForSale,
+		SortOrder:       e.SortOrder,
+		DailyLimitUSD:   e.DailyLimitUsd,
+		WeeklyLimitUSD:  e.WeeklyLimitUsd,
+		MonthlyLimitUSD: e.MonthlyLimitUsd,
+		CreatedAt:       e.CreatedAt,
+		UpdatedAt:       e.UpdatedAt,
 	}
 }
 
 func derefFloat(p *float64) float64 {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
+func derefInt64(p *int64) int64 {
 	if p == nil {
 		return 0
 	}

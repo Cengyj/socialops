@@ -39,27 +39,6 @@ type APIKeyRateLimitCacheData struct {
 	Window7d int64   `json:"window_7d"`
 }
 
-// ── Identity cache (account fingerprint) ──
-
-type IdentityCache interface {
-	GetFingerprint(ctx context.Context, accountID int64) (*Fingerprint, error)
-	SetFingerprint(ctx context.Context, accountID int64, fp *Fingerprint) error
-	GetMaskedSessionID(ctx context.Context, accountID int64) (string, error)
-	SetMaskedSessionID(ctx context.Context, accountID int64, sessionID string) error
-}
-
-type Fingerprint struct {
-	ClientID                string
-	UserAgent               string
-	StainlessLang           string
-	StainlessPackageVersion string
-	StainlessOS             string
-	StainlessArch           string
-	StainlessRuntime        string
-	StainlessRuntimeVersion string
-	UpdatedAt               int64 `json:",omitempty"`
-}
-
 // ── Subscription errors ──
 
 var (

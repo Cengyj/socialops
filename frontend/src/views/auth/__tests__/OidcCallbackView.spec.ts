@@ -90,6 +90,7 @@ describe('OidcCallbackView', () => {
     apiClientPost.mockReset()
     sendVerifyCode.mockReset()
     sendPendingOAuthVerifyCode.mockReset()
+    window.__SOCIALOPS_CLIENT_DIAGNOSTICS__ = []
     getPublicSettings.mockResolvedValue({
       oidc_oauth_provider_name: 'ExampleID',
       turnstile_enabled: false,
@@ -549,8 +550,11 @@ describe('OidcCallbackView', () => {
     await wrapper.get('[data-testid="oidc-create-account-submit"]').trigger('click')
     await flushPromises()
 
-    expect(showError).toHaveBeenCalledWith('create failed')
+    expect(showError).toHaveBeenCalledWith('auth.loginFailed')
     expect(wrapper.text()).not.toContain('create failed')
+    expect(window.__SOCIALOPS_CLIENT_DIAGNOSTICS__?.at(-1)?.context).toBe(
+      'auth.oidc.create_account'
+    )
   })
 
   it('sends a verify code for pending oauth account creation', async () => {

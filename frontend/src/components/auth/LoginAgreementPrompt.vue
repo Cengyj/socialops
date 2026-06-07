@@ -17,7 +17,7 @@
             for="login-agreement-consent"
             class="cursor-pointer text-gray-700 dark:text-dark-200"
           >
-            我已阅读并同意
+            {{ t('auth.loginAgreement.checkboxPrefix') }}
           </label>
           <template v-for="(doc, index) in documents" :key="doc.id || doc.title">
             <RouterLink
@@ -28,7 +28,7 @@
             >
               {{ doc.title }}
             </RouterLink>
-            <span v-if="index < documents.length - 1">、</span>
+            <span v-if="index < documents.length - 1">{{ documentSeparator }}</span>
           </template>
         </p>
       </div>
@@ -42,9 +42,9 @@
     <div class="flex items-start gap-3">
       <Icon name="shield" size="sm" class="mt-0.5 flex-shrink-0 text-primary-600 dark:text-primary-300" />
       <div class="min-w-0 flex-1">
-        <p class="font-medium">继续登录前需要先同意最新条款。</p>
+        <p class="font-medium">{{ t('auth.loginAgreement.promptTitle') }}</p>
         <p class="mt-1 text-primary-700 dark:text-primary-200/80">
-          未同意前，账号密码输入和快捷登录会保持禁用。
+          {{ t('auth.loginAgreement.promptDescription') }}
         </p>
       </div>
       <button
@@ -52,7 +52,7 @@
         class="flex-shrink-0 rounded-md bg-primary-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-primary-700"
         @click="emit('open')"
       >
-        查看条款
+        {{ t('auth.loginAgreement.viewTerms') }}
       </button>
     </div>
   </div>
@@ -72,7 +72,7 @@
               <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-2">
                   <h2 class="text-xl font-bold tracking-normal text-gray-950 dark:text-white">
-                    条款更新通知
+                    {{ t('auth.loginAgreement.updatedTitle') }}
                   </h2>
                   <span
                     v-if="updatedAt"
@@ -82,7 +82,7 @@
                   </span>
                 </div>
                 <p class="mt-2 text-sm leading-6 text-gray-600 dark:text-dark-300">
-                  我们的服务条款已于 {{ updatedAt || '近期' }} 更新。在继续使用服务之前，请仔细阅读并同意以下条款。
+                  {{ t('auth.loginAgreement.updatedDescription', { date: updatedLabel }) }}
                 </p>
               </div>
             </div>
@@ -90,7 +90,9 @@
 
           <div class="max-h-[58vh] overflow-y-auto px-6 py-5">
             <div class="mb-3 flex items-center justify-between gap-3">
-              <p class="text-sm font-semibold text-gray-900 dark:text-white">相关文档</p>
+              <p class="text-sm font-semibold text-gray-900 dark:text-white">
+                {{ t('auth.loginAgreement.documentsTitle') }}
+              </p>
             </div>
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <RouterLink
@@ -121,14 +123,14 @@
                 class="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 dark:border-dark-700 dark:bg-dark-800 dark:text-dark-200 dark:hover:bg-dark-700"
                 @click="emit('reject')"
               >
-                拒绝
+                {{ t('auth.loginAgreement.reject') }}
               </button>
               <button
                 type="button"
                 class="rounded-xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-primary-600/20 transition hover:bg-primary-700"
                 @click="emit('accept')"
               >
-                同意并继续
+                {{ t('auth.loginAgreement.accept') }}
               </button>
             </div>
           </div>
@@ -140,6 +142,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import type { LoginAgreementDocument } from '@/types'
 
@@ -159,11 +162,17 @@ const emit = defineEmits<{
   open: []
 }>()
 
+const { t, locale } = useI18n()
+
 const dialogVisible = computed(() => props.visible && documents.value.length > 0)
 const documents = computed(() => props.documents.filter((doc) => doc.title.trim()))
 const updatedAt = computed(() => props.updatedAt || '')
+const updatedLabel = computed(() => updatedAt.value || t('auth.loginAgreement.recently'))
 const accepted = computed(() => props.accepted)
 const mode = computed(() => props.mode === 'checkbox' ? 'checkbox' : 'modal')
+const documentSeparator = computed(() =>
+  String(locale.value || '').toLowerCase().startsWith('zh') ? '、' : ', '
+)
 
 function documentRoute(doc: LoginAgreementDocument) {
   return {
@@ -184,10 +193,21 @@ function handleCheckboxChange(event: Event): void {
 }
 
 function documentIcon(index: number, title: string): 'document' | 'shield' | 'globe' | 'cog' {
-  if (title.includes('政策') || title.includes('隐私')) {
+  const normalizedTitle = title.toLowerCase()
+  if (
+    title.includes('政策') ||
+    title.includes('隐私') ||
+    normalizedTitle.includes('policy') ||
+    normalizedTitle.includes('privacy')
+  ) {
     return 'shield'
   }
-  if (title.includes('国家') || title.includes('地区')) {
+  if (
+    title.includes('国家') ||
+    title.includes('地区') ||
+    normalizedTitle.includes('country') ||
+    normalizedTitle.includes('region')
+  ) {
     return 'globe'
   }
   if (index === 3) {

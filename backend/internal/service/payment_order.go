@@ -21,6 +21,7 @@ import (
 // --- Order Creation ---
 
 func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest) (*CreateOrderResponse, error) {
+	req.OrderType = strings.TrimSpace(req.OrderType)
 	if req.OrderType == "" {
 		req.OrderType = payment.OrderTypeBalance
 	}
@@ -104,20 +105,46 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	}
 	resp, err := s.invokeProvider(ctx, order, req, cfg, limitAmount, payAmountStr, payAmount, plan, sel)
 	if err != nil {
-		_, _ = s.entClient.PaymentOrder.UpdateOneID(order.ID).
-			SetStatus(OrderStatusFailed).
-			Save(ctx)
+		s.markCreateOrderFailed(ctx, order.ID, req.UserID, sel, err)
 		return nil, err
 	}
 	return resp, nil
 }
 
-func (s *PaymentService) validateOrderInput(ctx context.Context, req CreateOrderRequest, cfg *PaymentConfig) (*dbent.SubscriptionPlan, error) {
-	if req.OrderType == payment.OrderTypeBalance && cfg.BalanceDisabled {
-		return nil, infraerrors.Forbidden("BALANCE_PAYMENT_DISABLED", "balance recharge has been disabled")
+func (s *PaymentService) markCreateOrderFailed(ctx context.Context, orderID, userID int64, sel *payment.InstanceSelection, cause error) {
+	now := time.Now()
+	reason := psErrMsg(cause)
+	if _, err := s.entClient.PaymentOrder.UpdateOneID(orderID).
+		SetStatus(OrderStatusFailed).
+		SetFailedAt(now).
+		SetFailedReason(reason).
+		Save(ctx); err != nil {
+		slog.Error("mark payment order create failure", "orderID", orderID, "error", err)
+		return
 	}
-	if req.OrderType == payment.OrderTypeSubscription {
+
+	detail := map[string]any{"reason": reason}
+	if sel != nil {
+		detail["provider"] = sel.ProviderKey
+		detail["instance_id"] = sel.InstanceID
+	}
+	s.writeAuditLog(ctx, orderID, "ORDER_CREATE_FAILED", fmt.Sprintf("user:%d", userID), detail)
+}
+
+func (s *PaymentService) validateOrderInput(ctx context.Context, req CreateOrderRequest, cfg *PaymentConfig) (*dbent.SubscriptionPlan, error) {
+	orderType := strings.TrimSpace(req.OrderType)
+	if orderType == "" {
+		orderType = payment.OrderTypeBalance
+	}
+	switch orderType {
+	case payment.OrderTypeBalance:
+	case payment.OrderTypeSubscription:
 		return s.validateSubOrder(ctx, req)
+	default:
+		return nil, infraerrors.BadRequest("INVALID_ORDER_TYPE", "order_type must be balance or subscription")
+	}
+	if cfg.BalanceDisabled {
+		return nil, infraerrors.Forbidden("BALANCE_PAYMENT_DISABLED", "balance recharge has been disabled")
 	}
 	if math.IsNaN(req.Amount) || math.IsInf(req.Amount, 0) || req.Amount <= 0 {
 		return nil, infraerrors.BadRequest("INVALID_AMOUNT", "amount must be a positive number")

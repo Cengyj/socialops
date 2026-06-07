@@ -316,7 +316,8 @@ import {
   validatePromoCode,
   validateInvitationCode
 } from '@/api/auth'
-import { buildAuthErrorMessage } from '@/utils/authError'
+import { buildSafeAuthErrorMessage } from '@/utils/authError'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 import {
   formatRegistrationEmailSuffixWhitelistForMessage,
   isRegistrationEmailSuffixAllowed,
@@ -484,7 +485,7 @@ onMounted(async () => {
     }
     syncAffiliateReferralCode()
   } catch (error) {
-    console.error('Failed to load public settings:', error)
+    recordClientDiagnostic('auth.register.load_public_settings', error)
     loginAgreementEnabled.value = false
     agreementAccepted.value = true
   } finally {
@@ -567,7 +568,7 @@ function rejectLoginAgreement(): void {
   localStorage.removeItem(LOGIN_AGREEMENT_STORAGE_KEY)
   agreementAccepted.value = false
   showAgreementModal.value = false
-  appStore.showWarning('未同意最新条款前，无法注册或使用快捷登录。')
+  appStore.showWarning(t('auth.loginAgreement.registerRejectWarning'))
 }
 
 // ==================== Promo Code Validation ====================
@@ -617,7 +618,7 @@ async function validatePromoCodeDebounced(code: string): Promise<void> {
       promoValidation.message = getPromoErrorMessage(result.error_code)
     }
   } catch (error) {
-    console.error('Failed to validate promo code:', error)
+    recordClientDiagnostic('auth.register.validate_promo_code', error)
     promoValidation.valid = false
     promoValidation.invalid = true
     promoValidation.message = t('auth.promoCodeInvalid')
@@ -757,7 +758,7 @@ function validateForm(): boolean {
   let isValid = true
 
   if (agreementGateActive.value) {
-    appStore.showWarning('请先阅读并同意最新条款后再注册。')
+    appStore.showWarning(t('auth.loginAgreement.registerGateWarning'))
     if (loginAgreementMode.value !== 'checkbox') {
       showAgreementModal.value = true
     }
@@ -905,7 +906,8 @@ async function handleRegister(): Promise<void> {
     }
 
     // Handle registration error
-    errorMessage.value = buildAuthErrorMessage(error, {
+    recordClientDiagnostic('auth.register.submit', error)
+    errorMessage.value = buildSafeAuthErrorMessage(error, {
       fallback: t('auth.registrationFailed')
     })
 

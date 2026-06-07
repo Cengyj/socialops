@@ -44,6 +44,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { userAPI } from '@/api'
+import { showSafeProfileError } from './profileError'
 
 const props = withDefaults(defineProps<{
   initialUsername: string
@@ -64,7 +65,8 @@ watch(() => props.initialUsername, (val) => {
 })
 
 const handleUpdateProfile = async () => {
-  if (!username.value.trim()) {
+  const normalizedUsername = username.value.trim()
+  if (!normalizedUsername) {
     appStore.showError(t('profile.usernameRequired'))
     return
   }
@@ -72,12 +74,12 @@ const handleUpdateProfile = async () => {
   loading.value = true
   try {
     const updatedUser = await userAPI.updateProfile({
-      username: username.value
+      username: normalizedUsername
     })
     authStore.user = updatedUser
     appStore.showSuccess(t('profile.updateSuccess'))
-  } catch (error: any) {
-    appStore.showError(error.response?.data?.detail || t('profile.updateFailed'))
+  } catch (error: unknown) {
+    showSafeProfileError(appStore, 'profile.edit.update', error, t('profile.updateFailed'))
   } finally {
     loading.value = false
   }

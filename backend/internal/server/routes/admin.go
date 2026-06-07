@@ -3,12 +3,13 @@ package routes
 
 import (
 	"github.com/Wei-Shaw/socialops/internal/handler"
+	"github.com/Wei-Shaw/socialops/internal/pkg/response"
 	"github.com/Wei-Shaw/socialops/internal/server/middleware"
 
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterAdminRoutes 注册管理员路由
+// RegisterAdminRoutes registers administrator routes.
 func RegisterAdminRoutes(
 	v1 *gin.RouterGroup,
 	h *handler.Handlers,
@@ -17,56 +18,23 @@ func RegisterAdminRoutes(
 	admin := v1.Group("/admin")
 	admin.Use(gin.HandlerFunc(adminAuth))
 	{
-		// 仪表盘
 		registerDashboardRoutes(admin, h)
-
-		// 用户管理
 		registerUserManagementRoutes(admin, h)
-
-		// 公告管理
 		registerAnnouncementRoutes(admin, h)
-
-		// 卡密管理
 		registerRedeemCodeRoutes(admin, h)
-
-		// 优惠码管理
 		registerPromoCodeRoutes(admin, h)
-
-		// 系统设置
 		registerSettingsRoutes(admin, h)
-
-		// 数据管理
 		registerDataManagementRoutes(admin, h)
-
-		// 数据库备份恢复
 		registerBackupRoutes(admin, h)
-
-		// 系统管理
 		registerSystemRoutes(admin, h)
-
-		// 订阅管理
 		registerSubscriptionRoutes(admin, h)
-
-		// 使用记录管理
-		registerUsageRoutes(admin, h)
-
-		// 用户属性管理
+		registerGroupRoutes(admin, h)
 		registerUserAttributeRoutes(admin, h)
-
-		// API Key 管理
 		registerAdminAPIKeyRoutes(admin, h)
-
-		// 风控中心
 		registerRiskControlRoutes(admin)
-
-		// 邀请返利（专属用户管理）
 		registerAffiliateRoutes(admin, h)
-
-		// 社交账号管理
 		registerSocialAccountAdminRoutes(admin, h)
-
-		// 执行代理管理
-		registerProxyAdminRoutes(admin, h)
+		registerTotalAccountAdminRoutes(admin, h)
 	}
 }
 
@@ -112,7 +80,6 @@ func registerUserManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		users.GET("/:id/rpm-status", h.Admin.User.GetUserRPMStatus)
 		users.POST("/batch-concurrency", h.Admin.User.BatchUpdateConcurrency)
 
-		// User attribute values
 		users.GET("/:id/attributes", h.Admin.UserAttribute.GetUserAttributes)
 		users.PUT("/:id/attributes", h.Admin.UserAttribute.UpdateUserAttributes)
 	}
@@ -170,7 +137,6 @@ func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		adminSettings.GET("/email-templates/:event/:locale", h.Admin.Setting.GetEmailTemplate)
 		adminSettings.PUT("/email-templates/:event/:locale", h.Admin.Setting.UpdateEmailTemplate)
 		adminSettings.POST("/email-templates/:event/:locale/restore-official", h.Admin.Setting.RestoreOfficialEmailTemplate)
-		// Admin API Key 管理
 		adminSettings.GET("/admin-api-key", h.Admin.Setting.GetAdminAPIKey)
 		adminSettings.POST("/admin-api-key/regenerate", h.Admin.Setting.RegenerateAdminAPIKey)
 		adminSettings.DELETE("/admin-api-key", h.Admin.Setting.DeleteAdminAPIKey)
@@ -232,6 +198,8 @@ func registerSubscriptionRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	subscriptions := admin.Group("/subscriptions")
 	{
 		subscriptions.GET("", h.Admin.Subscription.List)
+		subscriptions.POST("", h.Admin.Subscription.Create)
+		subscriptions.POST("/bulk", h.Admin.Subscription.BulkCreate)
 		subscriptions.GET("/:id", h.Admin.Subscription.GetByID)
 		subscriptions.GET("/:id/progress", h.Admin.Subscription.GetProgress)
 		subscriptions.POST("/assign", h.Admin.Subscription.Assign)
@@ -241,20 +209,18 @@ func registerSubscriptionRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		subscriptions.DELETE("/:id", h.Admin.Subscription.Revoke)
 	}
 
-	// 用户下的订阅列表
 	admin.GET("/users/:id/subscriptions", h.Admin.Subscription.ListByUser)
+	admin.GET("/groups/:id/subscriptions", h.Admin.Subscription.ListByGroup)
 }
 
-func registerUsageRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
-	usage := admin.Group("/usage")
+func registerGroupRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	groups := admin.Group("/groups")
 	{
-		usage.GET("", h.Admin.Usage.List)
-		usage.GET("/stats", h.Admin.Usage.Stats)
-		usage.GET("/search-users", h.Admin.Usage.SearchUsers)
-		usage.GET("/search-api-keys", h.Admin.Usage.SearchAPIKeys)
-		usage.GET("/cleanup-tasks", h.Admin.Usage.ListCleanupTasks)
-		usage.POST("/cleanup-tasks", h.Admin.Usage.CreateCleanupTask)
-		usage.POST("/cleanup-tasks/:id/cancel", h.Admin.Usage.CancelCleanupTask)
+		groups.GET("", h.Admin.Group.List)
+		groups.POST("", h.Admin.Group.Create)
+		groups.GET("/:id", h.Admin.Group.GetByID)
+		groups.PUT("/:id", h.Admin.Group.Update)
+		groups.DELETE("/:id", h.Admin.Group.Delete)
 	}
 }
 
@@ -262,20 +228,18 @@ func registerRiskControlRoutes(admin *gin.RouterGroup) {
 	risk := admin.Group("/risk-control")
 	{
 		risk.GET("/status", func(c *gin.Context) {
-			c.JSON(200, gin.H{
+			response.Success(c, gin.H{
 				"enabled": false,
 				"status":  "disabled",
 				"message": "SocialOps risk control backend is not configured yet",
 			})
 		})
 		risk.GET("/logs", func(c *gin.Context) {
-			c.JSON(200, gin.H{
-				"items": []gin.H{},
-				"total": 0,
-			})
+			page, pageSize := response.ParsePagination(c)
+			response.Paginated(c, []gin.H{}, 0, page, pageSize)
 		})
 		risk.GET("/config", func(c *gin.Context) {
-			c.JSON(200, gin.H{
+			response.Success(c, gin.H{
 				"enabled": false,
 			})
 		})
@@ -294,7 +258,6 @@ func registerUserAttributeRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	}
 }
 
-// registerAffiliateRoutes 注册邀请返利的管理端路由（专属用户配置）
 func registerAffiliateRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	affiliates := admin.Group("/affiliates")
 	{
@@ -315,34 +278,29 @@ func registerAffiliateRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 }
 
 func registerSocialAccountAdminRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
-	sa := admin.Group("/social-accounts")
+	sa := admin.Group("/accounts")
 	{
-		sa.GET("", h.Admin.SocialAccount.List)
-		sa.GET("/stats", h.Admin.SocialAccount.GetStats)
-		sa.GET("/export", h.Admin.SocialAccount.Export)
-		sa.GET("/tasks", h.Admin.SocialAccount.ListTaskLogs)
-		sa.POST("/tasks/estimate", h.Admin.SocialAccount.EstimateTask)
-		sa.POST("/tasks", h.Admin.SocialAccount.SubmitTask)
-		sa.POST("/register", h.Admin.SocialAccount.Register)
-		sa.GET("/:id", h.Admin.SocialAccount.GetByID)
-		sa.POST("", h.Admin.SocialAccount.Create)
-		sa.POST("/import", h.Admin.SocialAccount.Import)
-		sa.POST("/batch-delete", h.Admin.SocialAccount.BatchDelete)
-		sa.PUT("/:id", h.Admin.SocialAccount.Update)
-		sa.DELETE("/:id", h.Admin.SocialAccount.Delete)
-		sa.POST("/:id/assign", h.Admin.SocialAccount.Assign)
-		sa.POST("/:id/reclaim", h.Admin.SocialAccount.Reclaim)
-		sa.PUT("/:id/default-proxy", h.Admin.SocialAccount.SetDefaultProxy)
+		sa.GET("", h.Admin.AccountWorkbench.List)
+		sa.GET("/stats", h.Admin.AccountWorkbench.GetStats)
+		sa.GET("/export", h.Admin.AccountWorkbench.Export)
+		sa.POST("/tasks", h.Admin.AccountWorkbench.SubmitTask)
+		sa.GET("/:id", h.Admin.AccountWorkbench.GetByID)
+		sa.POST("", h.Admin.AccountWorkbench.Create)
+		sa.POST("/import", h.Admin.AccountWorkbench.Import)
+		sa.POST("/batch-delete", h.Admin.AccountWorkbench.BatchDelete)
+		sa.PUT("/:id", h.Admin.AccountWorkbench.Update)
+		sa.DELETE("/:id", h.Admin.AccountWorkbench.Delete)
 	}
 }
 
-func registerProxyAdminRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
-	proxies := admin.Group("/proxies")
+func registerTotalAccountAdminRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	pool := admin.Group("/total-accounts")
 	{
-		proxies.GET("", h.Admin.Proxy.List)
-		proxies.POST("", h.Admin.Proxy.Create)
-		proxies.PUT("/:id", h.Admin.Proxy.Update)
-		proxies.DELETE("/:id", h.Admin.Proxy.Delete)
-		proxies.POST("/:id/test", h.Admin.Proxy.Test)
+		pool.GET("", h.Admin.TotalAccounts.List)
+		pool.POST("/batch-assign", h.Admin.TotalAccounts.BatchAssign)
+		pool.POST("/batch-reclaim", h.Admin.TotalAccounts.BatchReclaim)
+		pool.POST("/batch-delete", h.Admin.TotalAccounts.BatchDelete)
+		pool.POST("/:id/assign", h.Admin.TotalAccounts.Assign)
+		pool.POST("/:id/reclaim", h.Admin.TotalAccounts.Reclaim)
 	}
 }

@@ -28,6 +28,10 @@ const (
 	FieldTarget = "target"
 	// FieldContent holds the string denoting the content field in the database.
 	FieldContent = "content"
+	// FieldPayload holds the string denoting the payload field in the database.
+	FieldPayload = "payload"
+	// FieldTemplateSnapshot holds the string denoting the template_snapshot field in the database.
+	FieldTemplateSnapshot = "template_snapshot"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldResultMessage holds the string denoting the result_message field in the database.
@@ -82,6 +86,8 @@ var Columns = []string{
 	FieldAction,
 	FieldTarget,
 	FieldContent,
+	FieldPayload,
+	FieldTemplateSnapshot,
 	FieldStatus,
 	FieldResultMessage,
 	FieldPrice,

@@ -1,9 +1,12 @@
 package admin
 
 import (
+	"context"
 	"strconv"
+	"time"
 
 	dbent "github.com/Wei-Shaw/socialops/ent"
+	"github.com/Wei-Shaw/socialops/internal/handler/dto"
 	"github.com/Wei-Shaw/socialops/internal/pkg/response"
 	"github.com/Wei-Shaw/socialops/internal/service"
 
@@ -82,7 +85,11 @@ func (h *PaymentHandler) GetOrderDetail(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	auditLogs, _ := h.paymentService.GetOrderAuditLogs(c.Request.Context(), orderID)
+	auditLogs, err := h.paymentService.GetOrderAuditLogs(c.Request.Context(), orderID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 	response.Success(c, gin.H{"order": sanitizeAdminPaymentOrderForResponse(order), "auditLogs": auditLogs})
 }
 
@@ -115,24 +122,108 @@ func (h *PaymentHandler) RetryFulfillment(c *gin.Context) {
 	response.Success(c, gin.H{"message": "fulfillment retried"})
 }
 
-func sanitizeAdminPaymentOrdersForResponse(orders []*dbent.PaymentOrder) []*dbent.PaymentOrder {
+type AdminPaymentOrderResult struct {
+	ID                  int64      `json:"id,omitempty"`
+	UserID              int64      `json:"user_id,omitempty"`
+	UserEmail           string     `json:"user_email,omitempty"`
+	UserName            string     `json:"user_name,omitempty"`
+	UserNotes           *string    `json:"user_notes,omitempty"`
+	Amount              float64    `json:"amount,omitempty"`
+	PayAmount           float64    `json:"pay_amount,omitempty"`
+	FeeRate             float64    `json:"fee_rate,omitempty"`
+	Currency            string     `json:"currency"`
+	RechargeCode        string     `json:"recharge_code,omitempty"`
+	OutTradeNo          string     `json:"out_trade_no,omitempty"`
+	PaymentType         string     `json:"payment_type,omitempty"`
+	PaymentTradeNo      string     `json:"payment_trade_no,omitempty"`
+	PayURL              *string    `json:"pay_url,omitempty"`
+	QrCode              *string    `json:"qr_code,omitempty"`
+	QrCodeImg           *string    `json:"qr_code_img,omitempty"`
+	OrderType           string     `json:"order_type,omitempty"`
+	PlanID              *int64     `json:"plan_id,omitempty"`
+	SubscriptionGroupID *int64     `json:"subscription_group_id,omitempty"`
+	SubscriptionDays    *int       `json:"subscription_days,omitempty"`
+	ProviderInstanceID  *string    `json:"provider_instance_id,omitempty"`
+	ProviderKey         *string    `json:"provider_key,omitempty"`
+	Status              string     `json:"status,omitempty"`
+	RefundAmount        float64    `json:"refund_amount,omitempty"`
+	RefundReason        *string    `json:"refund_reason,omitempty"`
+	RefundAt            *time.Time `json:"refund_at,omitempty"`
+	ForceRefund         bool       `json:"force_refund,omitempty"`
+	RefundRequestedAt   *time.Time `json:"refund_requested_at,omitempty"`
+	RefundRequestReason *string    `json:"refund_request_reason,omitempty"`
+	RefundRequestedBy   *string    `json:"refund_requested_by,omitempty"`
+	ExpiresAt           time.Time  `json:"expires_at,omitempty"`
+	PaidAt              *time.Time `json:"paid_at,omitempty"`
+	CompletedAt         *time.Time `json:"completed_at,omitempty"`
+	FailedAt            *time.Time `json:"failed_at,omitempty"`
+	FailedReason        *string    `json:"failed_reason,omitempty"`
+	ClientIP            string     `json:"client_ip,omitempty"`
+	SrcHost             string     `json:"src_host,omitempty"`
+	SrcURL              *string    `json:"src_url,omitempty"`
+	CreatedAt           time.Time  `json:"created_at,omitempty"`
+	UpdatedAt           time.Time  `json:"updated_at,omitempty"`
+}
+
+func sanitizeAdminPaymentOrdersForResponse(orders []*dbent.PaymentOrder) []AdminPaymentOrderResult {
 	if len(orders) == 0 {
-		return orders
+		return []AdminPaymentOrderResult{}
 	}
-	out := make([]*dbent.PaymentOrder, 0, len(orders))
+	out := make([]AdminPaymentOrderResult, 0, len(orders))
 	for _, order := range orders {
-		out = append(out, sanitizeAdminPaymentOrderForResponse(order))
+		if item := sanitizeAdminPaymentOrderForResponse(order); item != nil {
+			out = append(out, *item)
+		}
 	}
 	return out
 }
 
-func sanitizeAdminPaymentOrderForResponse(order *dbent.PaymentOrder) *dbent.PaymentOrder {
+func sanitizeAdminPaymentOrderForResponse(order *dbent.PaymentOrder) *AdminPaymentOrderResult {
 	if order == nil {
 		return nil
 	}
-	cloned := *order
-	cloned.ProviderSnapshot = nil
-	return &cloned
+	return &AdminPaymentOrderResult{
+		ID:                  order.ID,
+		UserID:              order.UserID,
+		UserEmail:           order.UserEmail,
+		UserName:            order.UserName,
+		UserNotes:           order.UserNotes,
+		Amount:              order.Amount,
+		PayAmount:           order.PayAmount,
+		FeeRate:             order.FeeRate,
+		Currency:            service.PaymentOrderCurrency(order),
+		RechargeCode:        order.RechargeCode,
+		OutTradeNo:          order.OutTradeNo,
+		PaymentType:         order.PaymentType,
+		PaymentTradeNo:      order.PaymentTradeNo,
+		PayURL:              order.PayURL,
+		QrCode:              order.QrCode,
+		QrCodeImg:           order.QrCodeImg,
+		OrderType:           order.OrderType,
+		PlanID:              order.PlanID,
+		SubscriptionGroupID: order.SubscriptionGroupID,
+		SubscriptionDays:    order.SubscriptionDays,
+		ProviderInstanceID:  order.ProviderInstanceID,
+		ProviderKey:         order.ProviderKey,
+		Status:              order.Status,
+		RefundAmount:        order.RefundAmount,
+		RefundReason:        order.RefundReason,
+		RefundAt:            order.RefundAt,
+		ForceRefund:         order.ForceRefund,
+		RefundRequestedAt:   order.RefundRequestedAt,
+		RefundRequestReason: order.RefundRequestReason,
+		RefundRequestedBy:   order.RefundRequestedBy,
+		ExpiresAt:           order.ExpiresAt,
+		PaidAt:              order.PaidAt,
+		CompletedAt:         order.CompletedAt,
+		FailedAt:            order.FailedAt,
+		FailedReason:        order.FailedReason,
+		ClientIP:            order.ClientIP,
+		SrcHost:             order.SrcHost,
+		SrcURL:              order.SrcURL,
+		CreatedAt:           order.CreatedAt,
+		UpdatedAt:           order.UpdatedAt,
+	}
 }
 
 // AdminProcessRefundRequest is the request body for admin refund processing.
@@ -185,7 +276,12 @@ func (h *PaymentHandler) ListPlans(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, plans)
+	response.Success(c, h.buildAdminSubscriptionPlanResponses(c.Request.Context(), plans))
+}
+
+func (h *PaymentHandler) buildAdminSubscriptionPlanResponses(ctx context.Context, plans []*dbent.SubscriptionPlan) []dto.AdminSubscriptionPlan {
+	groupInfo := h.configService.GetGroupInfoMap(ctx, plans)
+	return dto.AdminSubscriptionPlansFromEnt(plans, groupInfo)
 }
 
 // CreatePlan creates a new subscription plan.
@@ -201,7 +297,7 @@ func (h *PaymentHandler) CreatePlan(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Created(c, plan)
+	response.Created(c, firstAdminSubscriptionPlanResponse(h.buildAdminSubscriptionPlanResponses(c.Request.Context(), []*dbent.SubscriptionPlan{plan})))
 }
 
 // UpdatePlan updates an existing subscription plan.
@@ -221,7 +317,14 @@ func (h *PaymentHandler) UpdatePlan(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, plan)
+	response.Success(c, firstAdminSubscriptionPlanResponse(h.buildAdminSubscriptionPlanResponses(c.Request.Context(), []*dbent.SubscriptionPlan{plan})))
+}
+
+func firstAdminSubscriptionPlanResponse(plans []dto.AdminSubscriptionPlan) dto.AdminSubscriptionPlan {
+	if len(plans) == 0 {
+		return dto.AdminSubscriptionPlan{}
+	}
+	return plans[0]
 }
 
 // DeletePlan deletes a subscription plan.
@@ -265,7 +368,12 @@ func (h *PaymentHandler) CreateProvider(c *gin.Context) {
 		return
 	}
 	h.paymentService.RefreshProviders(c.Request.Context())
-	response.Created(c, inst)
+	provider, err := h.configService.ProviderInstanceToResponse(inst)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Created(c, provider)
 }
 
 // UpdateProvider updates an existing payment provider instance.
@@ -286,7 +394,12 @@ func (h *PaymentHandler) UpdateProvider(c *gin.Context) {
 		return
 	}
 	h.paymentService.RefreshProviders(c.Request.Context())
-	response.Success(c, inst)
+	provider, err := h.configService.ProviderInstanceToResponse(inst)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, provider)
 }
 
 // DeleteProvider deletes a payment provider instance.

@@ -230,6 +230,7 @@ func (h *UserAttributeHandler) DeleteDefinition(c *gin.Context) {
 		return
 	}
 
+	userAttributesBatchCache.Clear()
 	response.Success(c, gin.H{"message": "Attribute definition deleted successfully"})
 }
 
@@ -306,6 +307,7 @@ func (h *UserAttributeHandler) UpdateUserAttributes(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	userAttributesBatchCache.Clear()
 
 	// Return updated values
 	values, err := h.attrService.GetUserAttributes(c.Request.Context(), userID)

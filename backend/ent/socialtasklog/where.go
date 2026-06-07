@@ -480,6 +480,26 @@ func ContentContainsFold(v string) predicate.SocialTaskLog {
 	return predicate.SocialTaskLog(sql.FieldContainsFold(FieldContent, v))
 }
 
+// PayloadIsNil applies the IsNil predicate on the "payload" field.
+func PayloadIsNil() predicate.SocialTaskLog {
+	return predicate.SocialTaskLog(sql.FieldIsNull(FieldPayload))
+}
+
+// PayloadNotNil applies the NotNil predicate on the "payload" field.
+func PayloadNotNil() predicate.SocialTaskLog {
+	return predicate.SocialTaskLog(sql.FieldNotNull(FieldPayload))
+}
+
+// TemplateSnapshotIsNil applies the IsNil predicate on the "template_snapshot" field.
+func TemplateSnapshotIsNil() predicate.SocialTaskLog {
+	return predicate.SocialTaskLog(sql.FieldIsNull(FieldTemplateSnapshot))
+}
+
+// TemplateSnapshotNotNil applies the NotNil predicate on the "template_snapshot" field.
+func TemplateSnapshotNotNil() predicate.SocialTaskLog {
+	return predicate.SocialTaskLog(sql.FieldNotNull(FieldTemplateSnapshot))
+}
+
 // StatusEQ applies the EQ predicate on the "status" field.
 func StatusEQ(v string) predicate.SocialTaskLog {
 	return predicate.SocialTaskLog(sql.FieldEQ(FieldStatus, v))

@@ -112,23 +112,51 @@ func (_u *SocialAccountUpdate) SetNillableNameKey(v *string) *SocialAccountUpdat
 	return _u
 }
 
-// SetAccountID sets the "account_id" field.
-func (_u *SocialAccountUpdate) SetAccountID(v string) *SocialAccountUpdate {
-	_u.mutation.SetAccountID(v)
+// SetIdentityKind sets the "identity_kind" field.
+func (_u *SocialAccountUpdate) SetIdentityKind(v string) *SocialAccountUpdate {
+	_u.mutation.SetIdentityKind(v)
 	return _u
 }
 
-// SetNillableAccountID sets the "account_id" field if the given value is not nil.
-func (_u *SocialAccountUpdate) SetNillableAccountID(v *string) *SocialAccountUpdate {
+// SetNillableIdentityKind sets the "identity_kind" field if the given value is not nil.
+func (_u *SocialAccountUpdate) SetNillableIdentityKind(v *string) *SocialAccountUpdate {
 	if v != nil {
-		_u.SetAccountID(*v)
+		_u.SetIdentityKind(*v)
 	}
 	return _u
 }
 
-// ClearAccountID clears the value of the "account_id" field.
-func (_u *SocialAccountUpdate) ClearAccountID() *SocialAccountUpdate {
-	_u.mutation.ClearAccountID()
+// SetIdentityKey sets the "identity_key" field.
+func (_u *SocialAccountUpdate) SetIdentityKey(v string) *SocialAccountUpdate {
+	_u.mutation.SetIdentityKey(v)
+	return _u
+}
+
+// SetNillableIdentityKey sets the "identity_key" field if the given value is not nil.
+func (_u *SocialAccountUpdate) SetNillableIdentityKey(v *string) *SocialAccountUpdate {
+	if v != nil {
+		_u.SetIdentityKey(*v)
+	}
+	return _u
+}
+
+// SetPlatformUserID sets the "platform_user_id" field.
+func (_u *SocialAccountUpdate) SetPlatformUserID(v string) *SocialAccountUpdate {
+	_u.mutation.SetPlatformUserID(v)
+	return _u
+}
+
+// SetNillablePlatformUserID sets the "platform_user_id" field if the given value is not nil.
+func (_u *SocialAccountUpdate) SetNillablePlatformUserID(v *string) *SocialAccountUpdate {
+	if v != nil {
+		_u.SetPlatformUserID(*v)
+	}
+	return _u
+}
+
+// ClearPlatformUserID clears the value of the "platform_user_id" field.
+func (_u *SocialAccountUpdate) ClearPlatformUserID() *SocialAccountUpdate {
+	_u.mutation.ClearPlatformUserID()
 	return _u
 }
 
@@ -212,6 +240,146 @@ func (_u *SocialAccountUpdate) ClearEmailPassword() *SocialAccountUpdate {
 	return _u
 }
 
+// SetTwoFactor sets the "two_factor" field.
+func (_u *SocialAccountUpdate) SetTwoFactor(v string) *SocialAccountUpdate {
+	_u.mutation.SetTwoFactor(v)
+	return _u
+}
+
+// SetNillableTwoFactor sets the "two_factor" field if the given value is not nil.
+func (_u *SocialAccountUpdate) SetNillableTwoFactor(v *string) *SocialAccountUpdate {
+	if v != nil {
+		_u.SetTwoFactor(*v)
+	}
+	return _u
+}
+
+// ClearTwoFactor clears the value of the "two_factor" field.
+func (_u *SocialAccountUpdate) ClearTwoFactor() *SocialAccountUpdate {
+	_u.mutation.ClearTwoFactor()
+	return _u
+}
+
+// SetBackupCode sets the "backup_code" field.
+func (_u *SocialAccountUpdate) SetBackupCode(v string) *SocialAccountUpdate {
+	_u.mutation.SetBackupCode(v)
+	return _u
+}
+
+// SetNillableBackupCode sets the "backup_code" field if the given value is not nil.
+func (_u *SocialAccountUpdate) SetNillableBackupCode(v *string) *SocialAccountUpdate {
+	if v != nil {
+		_u.SetBackupCode(*v)
+	}
+	return _u
+}
+
+// ClearBackupCode clears the value of the "backup_code" field.
+func (_u *SocialAccountUpdate) ClearBackupCode() *SocialAccountUpdate {
+	_u.mutation.ClearBackupCode()
+	return _u
+}
+
+// SetEmailClientID sets the "email_client_id" field.
+func (_u *SocialAccountUpdate) SetEmailClientID(v string) *SocialAccountUpdate {
+	_u.mutation.SetEmailClientID(v)
+	return _u
+}
+
+// SetNillableEmailClientID sets the "email_client_id" field if the given value is not nil.
+func (_u *SocialAccountUpdate) SetNillableEmailClientID(v *string) *SocialAccountUpdate {
+	if v != nil {
+		_u.SetEmailClientID(*v)
+	}
+	return _u
+}
+
+// ClearEmailClientID clears the value of the "email_client_id" field.
+func (_u *SocialAccountUpdate) ClearEmailClientID() *SocialAccountUpdate {
+	_u.mutation.ClearEmailClientID()
+	return _u
+}
+
+// SetEmailToken sets the "email_token" field.
+func (_u *SocialAccountUpdate) SetEmailToken(v string) *SocialAccountUpdate {
+	_u.mutation.SetEmailToken(v)
+	return _u
+}
+
+// SetNillableEmailToken sets the "email_token" field if the given value is not nil.
+func (_u *SocialAccountUpdate) SetNillableEmailToken(v *string) *SocialAccountUpdate {
+	if v != nil {
+		_u.SetEmailToken(*v)
+	}
+	return _u
+}
+
+// ClearEmailToken clears the value of the "email_token" field.
+func (_u *SocialAccountUpdate) ClearEmailToken() *SocialAccountUpdate {
+	_u.mutation.ClearEmailToken()
+	return _u
+}
+
+// SetRegistrationIP sets the "registration_ip" field.
+func (_u *SocialAccountUpdate) SetRegistrationIP(v string) *SocialAccountUpdate {
+	_u.mutation.SetRegistrationIP(v)
+	return _u
+}
+
+// SetNillableRegistrationIP sets the "registration_ip" field if the given value is not nil.
+func (_u *SocialAccountUpdate) SetNillableRegistrationIP(v *string) *SocialAccountUpdate {
+	if v != nil {
+		_u.SetRegistrationIP(*v)
+	}
+	return _u
+}
+
+// ClearRegistrationIP clears the value of the "registration_ip" field.
+func (_u *SocialAccountUpdate) ClearRegistrationIP() *SocialAccountUpdate {
+	_u.mutation.ClearRegistrationIP()
+	return _u
+}
+
+// SetAuthCookie sets the "auth_cookie" field.
+func (_u *SocialAccountUpdate) SetAuthCookie(v string) *SocialAccountUpdate {
+	_u.mutation.SetAuthCookie(v)
+	return _u
+}
+
+// SetNillableAuthCookie sets the "auth_cookie" field if the given value is not nil.
+func (_u *SocialAccountUpdate) SetNillableAuthCookie(v *string) *SocialAccountUpdate {
+	if v != nil {
+		_u.SetAuthCookie(*v)
+	}
+	return _u
+}
+
+// ClearAuthCookie clears the value of the "auth_cookie" field.
+func (_u *SocialAccountUpdate) ClearAuthCookie() *SocialAccountUpdate {
+	_u.mutation.ClearAuthCookie()
+	return _u
+}
+
+// SetExecutionAuth sets the "execution_auth" field.
+func (_u *SocialAccountUpdate) SetExecutionAuth(v string) *SocialAccountUpdate {
+	_u.mutation.SetExecutionAuth(v)
+	return _u
+}
+
+// SetNillableExecutionAuth sets the "execution_auth" field if the given value is not nil.
+func (_u *SocialAccountUpdate) SetNillableExecutionAuth(v *string) *SocialAccountUpdate {
+	if v != nil {
+		_u.SetExecutionAuth(*v)
+	}
+	return _u
+}
+
+// ClearExecutionAuth clears the value of the "execution_auth" field.
+func (_u *SocialAccountUpdate) ClearExecutionAuth() *SocialAccountUpdate {
+	_u.mutation.ClearExecutionAuth()
+	return _u
+}
+
 // SetAccountStatus sets the "account_status" field.
 func (_u *SocialAccountUpdate) SetAccountStatus(v string) *SocialAccountUpdate {
 	_u.mutation.SetAccountStatus(v)
@@ -260,37 +428,23 @@ func (_u *SocialAccountUpdate) ClearTaskMessage() *SocialAccountUpdate {
 	return _u
 }
 
-// SetSource sets the "source" field.
-func (_u *SocialAccountUpdate) SetSource(v string) *SocialAccountUpdate {
-	_u.mutation.SetSource(v)
+// SetDefaultProxySnapshot sets the "default_proxy_snapshot" field.
+func (_u *SocialAccountUpdate) SetDefaultProxySnapshot(v string) *SocialAccountUpdate {
+	_u.mutation.SetDefaultProxySnapshot(v)
 	return _u
 }
 
-// SetNillableSource sets the "source" field if the given value is not nil.
-func (_u *SocialAccountUpdate) SetNillableSource(v *string) *SocialAccountUpdate {
+// SetNillableDefaultProxySnapshot sets the "default_proxy_snapshot" field if the given value is not nil.
+func (_u *SocialAccountUpdate) SetNillableDefaultProxySnapshot(v *string) *SocialAccountUpdate {
 	if v != nil {
-		_u.SetSource(*v)
+		_u.SetDefaultProxySnapshot(*v)
 	}
 	return _u
 }
 
-// SetBoundIP sets the "bound_ip" field.
-func (_u *SocialAccountUpdate) SetBoundIP(v string) *SocialAccountUpdate {
-	_u.mutation.SetBoundIP(v)
-	return _u
-}
-
-// SetNillableBoundIP sets the "bound_ip" field if the given value is not nil.
-func (_u *SocialAccountUpdate) SetNillableBoundIP(v *string) *SocialAccountUpdate {
-	if v != nil {
-		_u.SetBoundIP(*v)
-	}
-	return _u
-}
-
-// ClearBoundIP clears the value of the "bound_ip" field.
-func (_u *SocialAccountUpdate) ClearBoundIP() *SocialAccountUpdate {
-	_u.mutation.ClearBoundIP()
+// ClearDefaultProxySnapshot clears the value of the "default_proxy_snapshot" field.
+func (_u *SocialAccountUpdate) ClearDefaultProxySnapshot() *SocialAccountUpdate {
+	_u.mutation.ClearDefaultProxySnapshot()
 	return _u
 }
 
@@ -311,6 +465,26 @@ func (_u *SocialAccountUpdate) SetNillableAssignedUserID(v *int64) *SocialAccoun
 // ClearAssignedUserID clears the value of the "assigned_user_id" field.
 func (_u *SocialAccountUpdate) ClearAssignedUserID() *SocialAccountUpdate {
 	_u.mutation.ClearAssignedUserID()
+	return _u
+}
+
+// SetUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field.
+func (_u *SocialAccountUpdate) SetUserWorkbenchDeletedAt(v time.Time) *SocialAccountUpdate {
+	_u.mutation.SetUserWorkbenchDeletedAt(v)
+	return _u
+}
+
+// SetNillableUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field if the given value is not nil.
+func (_u *SocialAccountUpdate) SetNillableUserWorkbenchDeletedAt(v *time.Time) *SocialAccountUpdate {
+	if v != nil {
+		_u.SetUserWorkbenchDeletedAt(*v)
+	}
+	return _u
+}
+
+// ClearUserWorkbenchDeletedAt clears the value of the "user_workbench_deleted_at" field.
+func (_u *SocialAccountUpdate) ClearUserWorkbenchDeletedAt() *SocialAccountUpdate {
+	_u.mutation.ClearUserWorkbenchDeletedAt()
 	return _u
 }
 
@@ -450,9 +624,19 @@ func (_u *SocialAccountUpdate) check() error {
 			return &ValidationError{Name: "name_key", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.name_key": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.AccountID(); ok {
-		if err := socialaccount.AccountIDValidator(v); err != nil {
-			return &ValidationError{Name: "account_id", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.account_id": %w`, err)}
+	if v, ok := _u.mutation.IdentityKind(); ok {
+		if err := socialaccount.IdentityKindValidator(v); err != nil {
+			return &ValidationError{Name: "identity_kind", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.identity_kind": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.IdentityKey(); ok {
+		if err := socialaccount.IdentityKeyValidator(v); err != nil {
+			return &ValidationError{Name: "identity_key", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.identity_key": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.PlatformUserID(); ok {
+		if err := socialaccount.PlatformUserIDValidator(v); err != nil {
+			return &ValidationError{Name: "platform_user_id", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.platform_user_id": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.Password(); ok {
@@ -475,6 +659,26 @@ func (_u *SocialAccountUpdate) check() error {
 			return &ValidationError{Name: "email_password", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.email_password": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.TwoFactor(); ok {
+		if err := socialaccount.TwoFactorValidator(v); err != nil {
+			return &ValidationError{Name: "two_factor", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.two_factor": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.BackupCode(); ok {
+		if err := socialaccount.BackupCodeValidator(v); err != nil {
+			return &ValidationError{Name: "backup_code", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.backup_code": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.EmailClientID(); ok {
+		if err := socialaccount.EmailClientIDValidator(v); err != nil {
+			return &ValidationError{Name: "email_client_id", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.email_client_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RegistrationIP(); ok {
+		if err := socialaccount.RegistrationIPValidator(v); err != nil {
+			return &ValidationError{Name: "registration_ip", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.registration_ip": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.AccountStatus(); ok {
 		if err := socialaccount.AccountStatusValidator(v); err != nil {
 			return &ValidationError{Name: "account_status", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.account_status": %w`, err)}
@@ -483,11 +687,6 @@ func (_u *SocialAccountUpdate) check() error {
 	if v, ok := _u.mutation.TaskStatus(); ok {
 		if err := socialaccount.TaskStatusValidator(v); err != nil {
 			return &ValidationError{Name: "task_status", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.task_status": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.Source(); ok {
-		if err := socialaccount.SourceValidator(v); err != nil {
-			return &ValidationError{Name: "source", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.source": %w`, err)}
 		}
 	}
 	return nil
@@ -526,11 +725,17 @@ func (_u *SocialAccountUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if value, ok := _u.mutation.NameKey(); ok {
 		_spec.SetField(socialaccount.FieldNameKey, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.AccountID(); ok {
-		_spec.SetField(socialaccount.FieldAccountID, field.TypeString, value)
+	if value, ok := _u.mutation.IdentityKind(); ok {
+		_spec.SetField(socialaccount.FieldIdentityKind, field.TypeString, value)
 	}
-	if _u.mutation.AccountIDCleared() {
-		_spec.ClearField(socialaccount.FieldAccountID, field.TypeString)
+	if value, ok := _u.mutation.IdentityKey(); ok {
+		_spec.SetField(socialaccount.FieldIdentityKey, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.PlatformUserID(); ok {
+		_spec.SetField(socialaccount.FieldPlatformUserID, field.TypeString, value)
+	}
+	if _u.mutation.PlatformUserIDCleared() {
+		_spec.ClearField(socialaccount.FieldPlatformUserID, field.TypeString)
 	}
 	if value, ok := _u.mutation.Password(); ok {
 		_spec.SetField(socialaccount.FieldPassword, field.TypeString, value)
@@ -556,6 +761,48 @@ func (_u *SocialAccountUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if _u.mutation.EmailPasswordCleared() {
 		_spec.ClearField(socialaccount.FieldEmailPassword, field.TypeString)
 	}
+	if value, ok := _u.mutation.TwoFactor(); ok {
+		_spec.SetField(socialaccount.FieldTwoFactor, field.TypeString, value)
+	}
+	if _u.mutation.TwoFactorCleared() {
+		_spec.ClearField(socialaccount.FieldTwoFactor, field.TypeString)
+	}
+	if value, ok := _u.mutation.BackupCode(); ok {
+		_spec.SetField(socialaccount.FieldBackupCode, field.TypeString, value)
+	}
+	if _u.mutation.BackupCodeCleared() {
+		_spec.ClearField(socialaccount.FieldBackupCode, field.TypeString)
+	}
+	if value, ok := _u.mutation.EmailClientID(); ok {
+		_spec.SetField(socialaccount.FieldEmailClientID, field.TypeString, value)
+	}
+	if _u.mutation.EmailClientIDCleared() {
+		_spec.ClearField(socialaccount.FieldEmailClientID, field.TypeString)
+	}
+	if value, ok := _u.mutation.EmailToken(); ok {
+		_spec.SetField(socialaccount.FieldEmailToken, field.TypeString, value)
+	}
+	if _u.mutation.EmailTokenCleared() {
+		_spec.ClearField(socialaccount.FieldEmailToken, field.TypeString)
+	}
+	if value, ok := _u.mutation.RegistrationIP(); ok {
+		_spec.SetField(socialaccount.FieldRegistrationIP, field.TypeString, value)
+	}
+	if _u.mutation.RegistrationIPCleared() {
+		_spec.ClearField(socialaccount.FieldRegistrationIP, field.TypeString)
+	}
+	if value, ok := _u.mutation.AuthCookie(); ok {
+		_spec.SetField(socialaccount.FieldAuthCookie, field.TypeString, value)
+	}
+	if _u.mutation.AuthCookieCleared() {
+		_spec.ClearField(socialaccount.FieldAuthCookie, field.TypeString)
+	}
+	if value, ok := _u.mutation.ExecutionAuth(); ok {
+		_spec.SetField(socialaccount.FieldExecutionAuth, field.TypeString, value)
+	}
+	if _u.mutation.ExecutionAuthCleared() {
+		_spec.ClearField(socialaccount.FieldExecutionAuth, field.TypeString)
+	}
 	if value, ok := _u.mutation.AccountStatus(); ok {
 		_spec.SetField(socialaccount.FieldAccountStatus, field.TypeString, value)
 	}
@@ -568,14 +815,17 @@ func (_u *SocialAccountUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if _u.mutation.TaskMessageCleared() {
 		_spec.ClearField(socialaccount.FieldTaskMessage, field.TypeString)
 	}
-	if value, ok := _u.mutation.Source(); ok {
-		_spec.SetField(socialaccount.FieldSource, field.TypeString, value)
+	if value, ok := _u.mutation.DefaultProxySnapshot(); ok {
+		_spec.SetField(socialaccount.FieldDefaultProxySnapshot, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.BoundIP(); ok {
-		_spec.SetField(socialaccount.FieldBoundIP, field.TypeString, value)
+	if _u.mutation.DefaultProxySnapshotCleared() {
+		_spec.ClearField(socialaccount.FieldDefaultProxySnapshot, field.TypeString)
 	}
-	if _u.mutation.BoundIPCleared() {
-		_spec.ClearField(socialaccount.FieldBoundIP, field.TypeString)
+	if value, ok := _u.mutation.UserWorkbenchDeletedAt(); ok {
+		_spec.SetField(socialaccount.FieldUserWorkbenchDeletedAt, field.TypeTime, value)
+	}
+	if _u.mutation.UserWorkbenchDeletedAtCleared() {
+		_spec.ClearField(socialaccount.FieldUserWorkbenchDeletedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.Remark(); ok {
 		_spec.SetField(socialaccount.FieldRemark, field.TypeString, value)
@@ -759,23 +1009,51 @@ func (_u *SocialAccountUpdateOne) SetNillableNameKey(v *string) *SocialAccountUp
 	return _u
 }
 
-// SetAccountID sets the "account_id" field.
-func (_u *SocialAccountUpdateOne) SetAccountID(v string) *SocialAccountUpdateOne {
-	_u.mutation.SetAccountID(v)
+// SetIdentityKind sets the "identity_kind" field.
+func (_u *SocialAccountUpdateOne) SetIdentityKind(v string) *SocialAccountUpdateOne {
+	_u.mutation.SetIdentityKind(v)
 	return _u
 }
 
-// SetNillableAccountID sets the "account_id" field if the given value is not nil.
-func (_u *SocialAccountUpdateOne) SetNillableAccountID(v *string) *SocialAccountUpdateOne {
+// SetNillableIdentityKind sets the "identity_kind" field if the given value is not nil.
+func (_u *SocialAccountUpdateOne) SetNillableIdentityKind(v *string) *SocialAccountUpdateOne {
 	if v != nil {
-		_u.SetAccountID(*v)
+		_u.SetIdentityKind(*v)
 	}
 	return _u
 }
 
-// ClearAccountID clears the value of the "account_id" field.
-func (_u *SocialAccountUpdateOne) ClearAccountID() *SocialAccountUpdateOne {
-	_u.mutation.ClearAccountID()
+// SetIdentityKey sets the "identity_key" field.
+func (_u *SocialAccountUpdateOne) SetIdentityKey(v string) *SocialAccountUpdateOne {
+	_u.mutation.SetIdentityKey(v)
+	return _u
+}
+
+// SetNillableIdentityKey sets the "identity_key" field if the given value is not nil.
+func (_u *SocialAccountUpdateOne) SetNillableIdentityKey(v *string) *SocialAccountUpdateOne {
+	if v != nil {
+		_u.SetIdentityKey(*v)
+	}
+	return _u
+}
+
+// SetPlatformUserID sets the "platform_user_id" field.
+func (_u *SocialAccountUpdateOne) SetPlatformUserID(v string) *SocialAccountUpdateOne {
+	_u.mutation.SetPlatformUserID(v)
+	return _u
+}
+
+// SetNillablePlatformUserID sets the "platform_user_id" field if the given value is not nil.
+func (_u *SocialAccountUpdateOne) SetNillablePlatformUserID(v *string) *SocialAccountUpdateOne {
+	if v != nil {
+		_u.SetPlatformUserID(*v)
+	}
+	return _u
+}
+
+// ClearPlatformUserID clears the value of the "platform_user_id" field.
+func (_u *SocialAccountUpdateOne) ClearPlatformUserID() *SocialAccountUpdateOne {
+	_u.mutation.ClearPlatformUserID()
 	return _u
 }
 
@@ -859,6 +1137,146 @@ func (_u *SocialAccountUpdateOne) ClearEmailPassword() *SocialAccountUpdateOne {
 	return _u
 }
 
+// SetTwoFactor sets the "two_factor" field.
+func (_u *SocialAccountUpdateOne) SetTwoFactor(v string) *SocialAccountUpdateOne {
+	_u.mutation.SetTwoFactor(v)
+	return _u
+}
+
+// SetNillableTwoFactor sets the "two_factor" field if the given value is not nil.
+func (_u *SocialAccountUpdateOne) SetNillableTwoFactor(v *string) *SocialAccountUpdateOne {
+	if v != nil {
+		_u.SetTwoFactor(*v)
+	}
+	return _u
+}
+
+// ClearTwoFactor clears the value of the "two_factor" field.
+func (_u *SocialAccountUpdateOne) ClearTwoFactor() *SocialAccountUpdateOne {
+	_u.mutation.ClearTwoFactor()
+	return _u
+}
+
+// SetBackupCode sets the "backup_code" field.
+func (_u *SocialAccountUpdateOne) SetBackupCode(v string) *SocialAccountUpdateOne {
+	_u.mutation.SetBackupCode(v)
+	return _u
+}
+
+// SetNillableBackupCode sets the "backup_code" field if the given value is not nil.
+func (_u *SocialAccountUpdateOne) SetNillableBackupCode(v *string) *SocialAccountUpdateOne {
+	if v != nil {
+		_u.SetBackupCode(*v)
+	}
+	return _u
+}
+
+// ClearBackupCode clears the value of the "backup_code" field.
+func (_u *SocialAccountUpdateOne) ClearBackupCode() *SocialAccountUpdateOne {
+	_u.mutation.ClearBackupCode()
+	return _u
+}
+
+// SetEmailClientID sets the "email_client_id" field.
+func (_u *SocialAccountUpdateOne) SetEmailClientID(v string) *SocialAccountUpdateOne {
+	_u.mutation.SetEmailClientID(v)
+	return _u
+}
+
+// SetNillableEmailClientID sets the "email_client_id" field if the given value is not nil.
+func (_u *SocialAccountUpdateOne) SetNillableEmailClientID(v *string) *SocialAccountUpdateOne {
+	if v != nil {
+		_u.SetEmailClientID(*v)
+	}
+	return _u
+}
+
+// ClearEmailClientID clears the value of the "email_client_id" field.
+func (_u *SocialAccountUpdateOne) ClearEmailClientID() *SocialAccountUpdateOne {
+	_u.mutation.ClearEmailClientID()
+	return _u
+}
+
+// SetEmailToken sets the "email_token" field.
+func (_u *SocialAccountUpdateOne) SetEmailToken(v string) *SocialAccountUpdateOne {
+	_u.mutation.SetEmailToken(v)
+	return _u
+}
+
+// SetNillableEmailToken sets the "email_token" field if the given value is not nil.
+func (_u *SocialAccountUpdateOne) SetNillableEmailToken(v *string) *SocialAccountUpdateOne {
+	if v != nil {
+		_u.SetEmailToken(*v)
+	}
+	return _u
+}
+
+// ClearEmailToken clears the value of the "email_token" field.
+func (_u *SocialAccountUpdateOne) ClearEmailToken() *SocialAccountUpdateOne {
+	_u.mutation.ClearEmailToken()
+	return _u
+}
+
+// SetRegistrationIP sets the "registration_ip" field.
+func (_u *SocialAccountUpdateOne) SetRegistrationIP(v string) *SocialAccountUpdateOne {
+	_u.mutation.SetRegistrationIP(v)
+	return _u
+}
+
+// SetNillableRegistrationIP sets the "registration_ip" field if the given value is not nil.
+func (_u *SocialAccountUpdateOne) SetNillableRegistrationIP(v *string) *SocialAccountUpdateOne {
+	if v != nil {
+		_u.SetRegistrationIP(*v)
+	}
+	return _u
+}
+
+// ClearRegistrationIP clears the value of the "registration_ip" field.
+func (_u *SocialAccountUpdateOne) ClearRegistrationIP() *SocialAccountUpdateOne {
+	_u.mutation.ClearRegistrationIP()
+	return _u
+}
+
+// SetAuthCookie sets the "auth_cookie" field.
+func (_u *SocialAccountUpdateOne) SetAuthCookie(v string) *SocialAccountUpdateOne {
+	_u.mutation.SetAuthCookie(v)
+	return _u
+}
+
+// SetNillableAuthCookie sets the "auth_cookie" field if the given value is not nil.
+func (_u *SocialAccountUpdateOne) SetNillableAuthCookie(v *string) *SocialAccountUpdateOne {
+	if v != nil {
+		_u.SetAuthCookie(*v)
+	}
+	return _u
+}
+
+// ClearAuthCookie clears the value of the "auth_cookie" field.
+func (_u *SocialAccountUpdateOne) ClearAuthCookie() *SocialAccountUpdateOne {
+	_u.mutation.ClearAuthCookie()
+	return _u
+}
+
+// SetExecutionAuth sets the "execution_auth" field.
+func (_u *SocialAccountUpdateOne) SetExecutionAuth(v string) *SocialAccountUpdateOne {
+	_u.mutation.SetExecutionAuth(v)
+	return _u
+}
+
+// SetNillableExecutionAuth sets the "execution_auth" field if the given value is not nil.
+func (_u *SocialAccountUpdateOne) SetNillableExecutionAuth(v *string) *SocialAccountUpdateOne {
+	if v != nil {
+		_u.SetExecutionAuth(*v)
+	}
+	return _u
+}
+
+// ClearExecutionAuth clears the value of the "execution_auth" field.
+func (_u *SocialAccountUpdateOne) ClearExecutionAuth() *SocialAccountUpdateOne {
+	_u.mutation.ClearExecutionAuth()
+	return _u
+}
+
 // SetAccountStatus sets the "account_status" field.
 func (_u *SocialAccountUpdateOne) SetAccountStatus(v string) *SocialAccountUpdateOne {
 	_u.mutation.SetAccountStatus(v)
@@ -907,37 +1325,23 @@ func (_u *SocialAccountUpdateOne) ClearTaskMessage() *SocialAccountUpdateOne {
 	return _u
 }
 
-// SetSource sets the "source" field.
-func (_u *SocialAccountUpdateOne) SetSource(v string) *SocialAccountUpdateOne {
-	_u.mutation.SetSource(v)
+// SetDefaultProxySnapshot sets the "default_proxy_snapshot" field.
+func (_u *SocialAccountUpdateOne) SetDefaultProxySnapshot(v string) *SocialAccountUpdateOne {
+	_u.mutation.SetDefaultProxySnapshot(v)
 	return _u
 }
 
-// SetNillableSource sets the "source" field if the given value is not nil.
-func (_u *SocialAccountUpdateOne) SetNillableSource(v *string) *SocialAccountUpdateOne {
+// SetNillableDefaultProxySnapshot sets the "default_proxy_snapshot" field if the given value is not nil.
+func (_u *SocialAccountUpdateOne) SetNillableDefaultProxySnapshot(v *string) *SocialAccountUpdateOne {
 	if v != nil {
-		_u.SetSource(*v)
+		_u.SetDefaultProxySnapshot(*v)
 	}
 	return _u
 }
 
-// SetBoundIP sets the "bound_ip" field.
-func (_u *SocialAccountUpdateOne) SetBoundIP(v string) *SocialAccountUpdateOne {
-	_u.mutation.SetBoundIP(v)
-	return _u
-}
-
-// SetNillableBoundIP sets the "bound_ip" field if the given value is not nil.
-func (_u *SocialAccountUpdateOne) SetNillableBoundIP(v *string) *SocialAccountUpdateOne {
-	if v != nil {
-		_u.SetBoundIP(*v)
-	}
-	return _u
-}
-
-// ClearBoundIP clears the value of the "bound_ip" field.
-func (_u *SocialAccountUpdateOne) ClearBoundIP() *SocialAccountUpdateOne {
-	_u.mutation.ClearBoundIP()
+// ClearDefaultProxySnapshot clears the value of the "default_proxy_snapshot" field.
+func (_u *SocialAccountUpdateOne) ClearDefaultProxySnapshot() *SocialAccountUpdateOne {
+	_u.mutation.ClearDefaultProxySnapshot()
 	return _u
 }
 
@@ -958,6 +1362,26 @@ func (_u *SocialAccountUpdateOne) SetNillableAssignedUserID(v *int64) *SocialAcc
 // ClearAssignedUserID clears the value of the "assigned_user_id" field.
 func (_u *SocialAccountUpdateOne) ClearAssignedUserID() *SocialAccountUpdateOne {
 	_u.mutation.ClearAssignedUserID()
+	return _u
+}
+
+// SetUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field.
+func (_u *SocialAccountUpdateOne) SetUserWorkbenchDeletedAt(v time.Time) *SocialAccountUpdateOne {
+	_u.mutation.SetUserWorkbenchDeletedAt(v)
+	return _u
+}
+
+// SetNillableUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field if the given value is not nil.
+func (_u *SocialAccountUpdateOne) SetNillableUserWorkbenchDeletedAt(v *time.Time) *SocialAccountUpdateOne {
+	if v != nil {
+		_u.SetUserWorkbenchDeletedAt(*v)
+	}
+	return _u
+}
+
+// ClearUserWorkbenchDeletedAt clears the value of the "user_workbench_deleted_at" field.
+func (_u *SocialAccountUpdateOne) ClearUserWorkbenchDeletedAt() *SocialAccountUpdateOne {
+	_u.mutation.ClearUserWorkbenchDeletedAt()
 	return _u
 }
 
@@ -1110,9 +1534,19 @@ func (_u *SocialAccountUpdateOne) check() error {
 			return &ValidationError{Name: "name_key", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.name_key": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.AccountID(); ok {
-		if err := socialaccount.AccountIDValidator(v); err != nil {
-			return &ValidationError{Name: "account_id", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.account_id": %w`, err)}
+	if v, ok := _u.mutation.IdentityKind(); ok {
+		if err := socialaccount.IdentityKindValidator(v); err != nil {
+			return &ValidationError{Name: "identity_kind", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.identity_kind": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.IdentityKey(); ok {
+		if err := socialaccount.IdentityKeyValidator(v); err != nil {
+			return &ValidationError{Name: "identity_key", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.identity_key": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.PlatformUserID(); ok {
+		if err := socialaccount.PlatformUserIDValidator(v); err != nil {
+			return &ValidationError{Name: "platform_user_id", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.platform_user_id": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.Password(); ok {
@@ -1135,6 +1569,26 @@ func (_u *SocialAccountUpdateOne) check() error {
 			return &ValidationError{Name: "email_password", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.email_password": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.TwoFactor(); ok {
+		if err := socialaccount.TwoFactorValidator(v); err != nil {
+			return &ValidationError{Name: "two_factor", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.two_factor": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.BackupCode(); ok {
+		if err := socialaccount.BackupCodeValidator(v); err != nil {
+			return &ValidationError{Name: "backup_code", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.backup_code": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.EmailClientID(); ok {
+		if err := socialaccount.EmailClientIDValidator(v); err != nil {
+			return &ValidationError{Name: "email_client_id", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.email_client_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RegistrationIP(); ok {
+		if err := socialaccount.RegistrationIPValidator(v); err != nil {
+			return &ValidationError{Name: "registration_ip", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.registration_ip": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.AccountStatus(); ok {
 		if err := socialaccount.AccountStatusValidator(v); err != nil {
 			return &ValidationError{Name: "account_status", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.account_status": %w`, err)}
@@ -1143,11 +1597,6 @@ func (_u *SocialAccountUpdateOne) check() error {
 	if v, ok := _u.mutation.TaskStatus(); ok {
 		if err := socialaccount.TaskStatusValidator(v); err != nil {
 			return &ValidationError{Name: "task_status", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.task_status": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.Source(); ok {
-		if err := socialaccount.SourceValidator(v); err != nil {
-			return &ValidationError{Name: "source", err: fmt.Errorf(`ent: validator failed for field "SocialAccount.source": %w`, err)}
 		}
 	}
 	return nil
@@ -1203,11 +1652,17 @@ func (_u *SocialAccountUpdateOne) sqlSave(ctx context.Context) (_node *SocialAcc
 	if value, ok := _u.mutation.NameKey(); ok {
 		_spec.SetField(socialaccount.FieldNameKey, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.AccountID(); ok {
-		_spec.SetField(socialaccount.FieldAccountID, field.TypeString, value)
+	if value, ok := _u.mutation.IdentityKind(); ok {
+		_spec.SetField(socialaccount.FieldIdentityKind, field.TypeString, value)
 	}
-	if _u.mutation.AccountIDCleared() {
-		_spec.ClearField(socialaccount.FieldAccountID, field.TypeString)
+	if value, ok := _u.mutation.IdentityKey(); ok {
+		_spec.SetField(socialaccount.FieldIdentityKey, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.PlatformUserID(); ok {
+		_spec.SetField(socialaccount.FieldPlatformUserID, field.TypeString, value)
+	}
+	if _u.mutation.PlatformUserIDCleared() {
+		_spec.ClearField(socialaccount.FieldPlatformUserID, field.TypeString)
 	}
 	if value, ok := _u.mutation.Password(); ok {
 		_spec.SetField(socialaccount.FieldPassword, field.TypeString, value)
@@ -1233,6 +1688,48 @@ func (_u *SocialAccountUpdateOne) sqlSave(ctx context.Context) (_node *SocialAcc
 	if _u.mutation.EmailPasswordCleared() {
 		_spec.ClearField(socialaccount.FieldEmailPassword, field.TypeString)
 	}
+	if value, ok := _u.mutation.TwoFactor(); ok {
+		_spec.SetField(socialaccount.FieldTwoFactor, field.TypeString, value)
+	}
+	if _u.mutation.TwoFactorCleared() {
+		_spec.ClearField(socialaccount.FieldTwoFactor, field.TypeString)
+	}
+	if value, ok := _u.mutation.BackupCode(); ok {
+		_spec.SetField(socialaccount.FieldBackupCode, field.TypeString, value)
+	}
+	if _u.mutation.BackupCodeCleared() {
+		_spec.ClearField(socialaccount.FieldBackupCode, field.TypeString)
+	}
+	if value, ok := _u.mutation.EmailClientID(); ok {
+		_spec.SetField(socialaccount.FieldEmailClientID, field.TypeString, value)
+	}
+	if _u.mutation.EmailClientIDCleared() {
+		_spec.ClearField(socialaccount.FieldEmailClientID, field.TypeString)
+	}
+	if value, ok := _u.mutation.EmailToken(); ok {
+		_spec.SetField(socialaccount.FieldEmailToken, field.TypeString, value)
+	}
+	if _u.mutation.EmailTokenCleared() {
+		_spec.ClearField(socialaccount.FieldEmailToken, field.TypeString)
+	}
+	if value, ok := _u.mutation.RegistrationIP(); ok {
+		_spec.SetField(socialaccount.FieldRegistrationIP, field.TypeString, value)
+	}
+	if _u.mutation.RegistrationIPCleared() {
+		_spec.ClearField(socialaccount.FieldRegistrationIP, field.TypeString)
+	}
+	if value, ok := _u.mutation.AuthCookie(); ok {
+		_spec.SetField(socialaccount.FieldAuthCookie, field.TypeString, value)
+	}
+	if _u.mutation.AuthCookieCleared() {
+		_spec.ClearField(socialaccount.FieldAuthCookie, field.TypeString)
+	}
+	if value, ok := _u.mutation.ExecutionAuth(); ok {
+		_spec.SetField(socialaccount.FieldExecutionAuth, field.TypeString, value)
+	}
+	if _u.mutation.ExecutionAuthCleared() {
+		_spec.ClearField(socialaccount.FieldExecutionAuth, field.TypeString)
+	}
 	if value, ok := _u.mutation.AccountStatus(); ok {
 		_spec.SetField(socialaccount.FieldAccountStatus, field.TypeString, value)
 	}
@@ -1245,14 +1742,17 @@ func (_u *SocialAccountUpdateOne) sqlSave(ctx context.Context) (_node *SocialAcc
 	if _u.mutation.TaskMessageCleared() {
 		_spec.ClearField(socialaccount.FieldTaskMessage, field.TypeString)
 	}
-	if value, ok := _u.mutation.Source(); ok {
-		_spec.SetField(socialaccount.FieldSource, field.TypeString, value)
+	if value, ok := _u.mutation.DefaultProxySnapshot(); ok {
+		_spec.SetField(socialaccount.FieldDefaultProxySnapshot, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.BoundIP(); ok {
-		_spec.SetField(socialaccount.FieldBoundIP, field.TypeString, value)
+	if _u.mutation.DefaultProxySnapshotCleared() {
+		_spec.ClearField(socialaccount.FieldDefaultProxySnapshot, field.TypeString)
 	}
-	if _u.mutation.BoundIPCleared() {
-		_spec.ClearField(socialaccount.FieldBoundIP, field.TypeString)
+	if value, ok := _u.mutation.UserWorkbenchDeletedAt(); ok {
+		_spec.SetField(socialaccount.FieldUserWorkbenchDeletedAt, field.TypeTime, value)
+	}
+	if _u.mutation.UserWorkbenchDeletedAtCleared() {
+		_spec.ClearField(socialaccount.FieldUserWorkbenchDeletedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.Remark(); ok {
 		_spec.SetField(socialaccount.FieldRemark, field.TypeString, value)

@@ -1,4 +1,6 @@
-.PHONY: build build-backend build-frontend build-datamanagementd test test-backend test-frontend test-frontend-critical test-datamanagementd secret-scan
+.PHONY: build build-backend build-frontend test test-backend test-frontend test-frontend-critical secret-scan dev-services-up dev-services-down dev-backend dev-frontend
+
+DEV_ENV_FILE ?= deploy/.env.host-dev
 
 FRONTEND_CRITICAL_VITEST := \
 	src/views/auth/__tests__/LinuxDoCallbackView.spec.ts \
@@ -19,10 +21,6 @@ build-backend:
 build-frontend:
 	@pnpm --dir frontend run build
 
-# 编译 datamanagementd（宿主机数据管理进程）
-build-datamanagementd:
-	@cd datamanagement && go build -o datamanagementd ./cmd/datamanagementd
-
 # 运行测试（后端 + 前端）
 test: test-backend test-frontend
 
@@ -37,8 +35,17 @@ test-frontend:
 test-frontend-critical:
 	@pnpm --dir frontend exec vitest run $(FRONTEND_CRITICAL_VITEST)
 
-test-datamanagementd:
-	@cd datamanagement && go test ./...
-
 secret-scan:
 	@python3 tools/secret_scan.py
+
+dev-services-up:
+	@docker compose --env-file $(DEV_ENV_FILE) -f deploy/docker-compose.host-dev.yml up -d
+
+dev-services-down:
+	@docker compose --env-file $(DEV_ENV_FILE) -f deploy/docker-compose.host-dev.yml down
+
+dev-backend:
+	@./tools/dev/run-backend-watch.sh $(DEV_ENV_FILE)
+
+dev-frontend:
+	@cd frontend && VITE_DEV_PROXY_TARGET=http://127.0.0.1:8080 pnpm run dev

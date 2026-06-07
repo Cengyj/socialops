@@ -9,6 +9,8 @@ import type {
   SubscriptionProgress,
   AssignSubscriptionRequest,
   BulkAssignSubscriptionRequest,
+  CreateUserSubscriptionFromPlanRequest,
+  BulkCreateUserSubscriptionFromPlanRequest,
   ExtendSubscriptionRequest,
   PaginatedResponse
 } from '@/types'
@@ -17,7 +19,7 @@ import type {
  * List all subscriptions with pagination
  * @param page - Page number (default: 1)
  * @param pageSize - Items per page (default: 20)
- * @param filters - Optional filters (status, user_id, group_id, sort_by, sort_order)
+ * @param filters - Optional filters (status, user_id, plan_id, platform, sort_by, sort_order)
  * @returns Paginated list of subscriptions
  */
 export async function list(
@@ -27,6 +29,7 @@ export async function list(
     status?: 'active' | 'expired' | 'revoked'
     user_id?: number
     group_id?: number
+    plan_id?: number
     platform?: string
     sort_by?: string
     sort_order?: 'asc' | 'desc'
@@ -80,6 +83,15 @@ export async function assign(request: AssignSubscriptionRequest): Promise<UserSu
 }
 
 /**
+ * Create a subscription from a configured quota package.
+ * New admin UI should use this plan-only entrypoint; assign() is kept for legacy compatibility.
+ */
+export async function create(request: CreateUserSubscriptionFromPlanRequest): Promise<UserSubscription> {
+  const { data } = await apiClient.post<UserSubscription>('/admin/subscriptions', request)
+  return data
+}
+
+/**
  * Bulk assign subscriptions to multiple users
  * @param request - Bulk assignment request
  * @returns Created subscriptions
@@ -103,6 +115,33 @@ export async function bulkAssign(
     errors: string[]
   }>(
     '/admin/subscriptions/bulk-assign',
+    request
+  )
+  return data
+}
+
+/**
+ * Bulk create subscriptions from a configured quota package.
+ */
+export async function bulkCreate(
+  request: BulkCreateUserSubscriptionFromPlanRequest
+): Promise<{
+  success_count: number
+  created_count: number
+  reused_count: number
+  failed_count: number
+  subscriptions: UserSubscription[]
+  errors: string[]
+}> {
+  const { data } = await apiClient.post<{
+    success_count: number
+    created_count: number
+    reused_count: number
+    failed_count: number
+    subscriptions: UserSubscription[]
+    errors: string[]
+  }>(
+    '/admin/subscriptions/bulk',
     request
   )
   return data
@@ -153,8 +192,8 @@ export async function resetQuota(
 }
 
 /**
- * List subscriptions by group
- * @param groupId - Group ID
+ * List subscriptions by internal execution binding.
+ * @param groupId - Internal execution group ID
  * @param page - Page number
  * @param pageSize - Items per page
  * @returns Paginated list of subscriptions in the group
@@ -198,6 +237,8 @@ export const subscriptionsAPI = {
   list,
   getById,
   getProgress,
+  create,
+  bulkCreate,
   assign,
   bulkAssign,
   extend,

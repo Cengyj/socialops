@@ -40,7 +40,7 @@ describe('describePaymentScenarioError', () => {
 
   it('maps missing WeixinJSBridge to a JSAPI-specific prompt', () => {
     expect(describePaymentScenarioError(
-      new Error('WeixinJSBridge is unavailable'),
+      { reason: 'WECHAT_JSAPI_UNAVAILABLE' },
       { paymentMethod: 'wxpay', isMobile: true, isWechatBrowser: true },
     )).toEqual({
       messageKey: 'payment.errors.wechatJsapiUnavailable',
@@ -50,7 +50,7 @@ describe('describePaymentScenarioError', () => {
 
   it('maps the internal JSAPI unavailable marker to the same prompt', () => {
     expect(describePaymentScenarioError(
-      new Error('WECHAT_JSAPI_UNAVAILABLE'),
+      { reason: 'WECHAT_JSAPI_UNAVAILABLE' },
       { paymentMethod: 'wxpay', isMobile: true, isWechatBrowser: true },
     )).toEqual({
       messageKey: 'payment.errors.wechatJsapiUnavailable',

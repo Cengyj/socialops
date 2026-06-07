@@ -127,7 +127,8 @@ import { useI18n } from 'vue-i18n'
 import { usePaymentStore } from '@/stores/payment'
 import { useAppStore } from '@/stores'
 import { paymentAPI } from '@/api/payment'
-import { extractI18nErrorMessage } from '@/utils/apiError'
+import { extractSafeI18nErrorMessage } from '@/utils/apiError'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 import { getPaymentPopupFeatures } from '@/components/payment/providerConfig'
 import { formatPaymentAmount, normalizePaymentCurrency } from '@/components/payment/currency'
 import type { PaymentOrder } from '@/types/payment'
@@ -303,7 +304,8 @@ async function handleCancel() {
     cleanup()
     setOutcome('cancelled')
   } catch (err: unknown) {
-    appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
+    recordClientDiagnostic('payment.status_panel.cancel_order', err)
+    appStore.showError(extractSafeI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
   } finally {
     cancelling.value = false
   }

@@ -36,6 +36,7 @@ vi.mock('vue-i18n', async (importOriginal) => {
         if (key === 'profile.authBindings.providers.email') return 'Email'
         if (key === 'profile.authBindings.providers.linuxdo') return 'LinuxDo'
         if (key === 'profile.authBindings.providers.wechat') return 'WeChat'
+        if (key === 'profile.authBindings.providers.dingtalk') return 'DingTalk'
         if (key === 'profile.authBindings.providers.oidc') return params?.providerName || 'OIDC'
         if (key === 'profile.authBindings.source.avatar') {
           return `Avatar synced from ${params?.providerName || 'provider'}`
@@ -129,6 +130,26 @@ describe('ProfileInfoCard', () => {
     })
 
     expect(wrapper.text()).toContain('Username synced from ExampleID')
+  })
+
+  it('renders DingTalk as a third-party profile source', () => {
+    const wrapper = mount(ProfileInfoCard, {
+      props: {
+        user: createUser({
+          profile_sources: {
+            username: { provider: 'dingtalk', source: 'dingtalk' }
+          }
+        }),
+        dingtalkEnabled: true
+      },
+      global: {
+        stubs: {
+          Icon: true
+        }
+      }
+    })
+
+    expect(wrapper.text()).toContain('Username synced from DingTalk')
   })
 
   it('does not display synthetic oauth-only emails as a real bound email', () => {

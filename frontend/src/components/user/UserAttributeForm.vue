@@ -96,6 +96,7 @@ import { ref, watch, onMounted } from 'vue'
 import { adminAPI } from '@/api/admin'
 import type { UserAttributeDefinition, UserAttributeValuesMap } from '@/types'
 import Select from '@/components/common/Select.vue'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 interface Props {
   userId?: number
@@ -118,7 +119,7 @@ const loadAttributes = async () => {
   try {
     attributes.value = await adminAPI.userAttributes.listEnabledDefinitions()
   } catch (error) {
-    console.error('Failed to load attributes:', error)
+    recordClientDiagnostic('user_attributes.load_definitions', error)
   } finally {
     loading.value = false
   }
@@ -136,7 +137,7 @@ const loadUserValues = async () => {
     localValues.value = { ...valuesMap }
     emit('update:modelValue', localValues.value)
   } catch (error) {
-    console.error('Failed to load user attribute values:', error)
+    recordClientDiagnostic('user_attributes.load_values', error)
   }
 }
 
@@ -179,7 +180,7 @@ const toggleMultiSelectOption = (attrId: number, optionValue: string) => {
 }
 
 watch(() => props.modelValue, (newVal) => {
-  if (newVal && Object.keys(newVal).length > 0) {
+  if (newVal) {
     localValues.value = { ...newVal }
   }
 }, { immediate: true })

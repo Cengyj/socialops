@@ -27,7 +27,7 @@
       </div>
 
       <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-200">
-        {{ status.message || t('admin.riskControl.skeletonMessage') }}
+        {{ statusNotice }}
       </div>
 
       <div class="card overflow-hidden">
@@ -81,6 +81,11 @@ const logs = ref<RiskControlLog[]>([])
 const statusLabel = computed(() => {
   if (status.value.enabled) return t('admin.riskControl.enabled')
   return t('admin.riskControl.disabled')
+})
+
+const statusNotice = computed(() => {
+  if (status.value.enabled && status.value.message) return status.value.message
+  return t('admin.riskControl.skeletonMessage')
 })
 
 async function loadData() {

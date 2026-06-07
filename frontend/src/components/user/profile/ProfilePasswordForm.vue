@@ -74,10 +74,13 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 import { userAPI } from '@/api'
+import { showSafeProfileError } from './profileError'
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const authStore = useAuthStore()
 const props = withDefaults(defineProps<{
   embedded?: boolean
 }>(), {
@@ -107,8 +110,9 @@ const handleChangePassword = async () => {
     await userAPI.changePassword(form.value.old_password, form.value.new_password)
     form.value = { old_password: '', new_password: '', confirm_password: '' }
     appStore.showSuccess(t('profile.passwordChangeSuccess'))
-  } catch (error: any) {
-    appStore.showError(error.response?.data?.detail || t('profile.passwordChangeFailed'))
+    await authStore.logout()
+  } catch (error: unknown) {
+    showSafeProfileError(appStore, 'profile.password.change', error, t('profile.passwordChangeFailed'))
   } finally {
     loading.value = false
   }

@@ -43,6 +43,17 @@ export async function checkUpdates(force = false): Promise<VersionInfo> {
 export interface UpdateResult {
   message: string
   need_restart: boolean
+  operation_id?: string
+}
+
+function createSystemOperationHeaders(operation: string) {
+  const random =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  return {
+    'Idempotency-Key': `system-${operation}-${random}`,
+  }
 }
 
 /**
@@ -50,7 +61,9 @@ export interface UpdateResult {
  * Downloads and applies the latest version
  */
 export async function performUpdate(): Promise<UpdateResult> {
-  const { data } = await apiClient.post<UpdateResult>('/admin/system/update')
+  const { data } = await apiClient.post<UpdateResult>('/admin/system/update', undefined, {
+    headers: createSystemOperationHeaders('update'),
+  })
   return data
 }
 
@@ -58,7 +71,9 @@ export async function performUpdate(): Promise<UpdateResult> {
  * Rollback to previous version
  */
 export async function rollback(): Promise<UpdateResult> {
-  const { data } = await apiClient.post<UpdateResult>('/admin/system/rollback')
+  const { data } = await apiClient.post<UpdateResult>('/admin/system/rollback', undefined, {
+    headers: createSystemOperationHeaders('rollback'),
+  })
   return data
 }
 
@@ -66,7 +81,9 @@ export async function rollback(): Promise<UpdateResult> {
  * Restart the service
  */
 export async function restartService(): Promise<{ message: string }> {
-  const { data } = await apiClient.post<{ message: string }>('/admin/system/restart')
+  const { data } = await apiClient.post<{ message: string; operation_id?: string }>('/admin/system/restart', undefined, {
+    headers: createSystemOperationHeaders('restart'),
+  })
   return data
 }
 

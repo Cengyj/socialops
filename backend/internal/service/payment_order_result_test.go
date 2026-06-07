@@ -7,8 +7,10 @@ import (
 	"time"
 
 	dbent "github.com/Wei-Shaw/socialops/ent"
+	"github.com/Wei-Shaw/socialops/ent/paymentauditlog"
 	"github.com/Wei-Shaw/socialops/internal/payment"
 	infraerrors "github.com/Wei-Shaw/socialops/internal/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildCreateOrderResponseDefaultsToOrderCreated(t *testing.T) {
@@ -136,6 +138,104 @@ func TestCalculateCreateOrderPayAmountRejectsFractionalZeroDecimal(t *testing.T)
 	if appErr := infraerrors.FromError(err); appErr.Reason != "INVALID_AMOUNT" {
 		t.Fatalf("reason = %q, want INVALID_AMOUNT", appErr.Reason)
 	}
+}
+
+func TestValidateOrderInputRejectsUnknownOrderType(t *testing.T) {
+	t.Parallel()
+
+	svc := &PaymentService{}
+	_, err := svc.validateOrderInput(context.Background(), CreateOrderRequest{
+		Amount:    25,
+		OrderType: "gift",
+	}, &PaymentConfig{})
+	if err == nil {
+		t.Fatal("expected unknown order type to be rejected")
+	}
+	if appErr := infraerrors.FromError(err); appErr.Reason != "INVALID_ORDER_TYPE" {
+		t.Fatalf("reason = %q, want INVALID_ORDER_TYPE", appErr.Reason)
+	}
+}
+
+func TestCreateOrderMarksProviderCreationFailureAuditable(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+
+	user, err := client.User.Create().
+		SetEmail("payment-provider-failure@example.com").
+		SetPasswordHash("hash").
+		SetUsername("payment-provider-failure").
+		SetStatus(payment.EntityStatusActive).
+		Save(ctx)
+	require.NoError(t, err)
+
+	instance, err := client.PaymentProviderInstance.Create().
+		SetProviderKey(payment.TypeStripe).
+		SetName("Stripe missing secret").
+		SetConfig(`{"currency":"CNY"}`).
+		SetSupportedTypes(payment.TypeStripe).
+		SetPaymentMode("redirect").
+		SetEnabled(true).
+		Save(ctx)
+	require.NoError(t, err)
+
+	configRepo := &paymentConfigSettingRepoStub{values: map[string]string{
+		SettingPaymentEnabled:      "true",
+		SettingMinRechargeAmount:   "1",
+		SettingOrderTimeoutMinutes: "30",
+		SettingMaxPendingOrders:    "3",
+		SettingEnabledPaymentTypes: payment.TypeStripe,
+	}}
+	configService := &PaymentConfigService{entClient: client, settingRepo: configRepo}
+	userRepo := &mockUserRepo{getByIDUser: &User{
+		ID:       user.ID,
+		Email:    user.Email,
+		Username: user.Username,
+		Status:   payment.EntityStatusActive,
+	}}
+	svc := NewPaymentService(
+		client,
+		payment.NewRegistry(),
+		payment.NewDefaultLoadBalancer(client, nil),
+		nil,
+		nil,
+		configService,
+		userRepo,
+		nil,
+		nil,
+	)
+
+	_, err = svc.CreateOrder(ctx, CreateOrderRequest{
+		UserID:      user.ID,
+		Amount:      12,
+		PaymentType: payment.TypeStripe,
+		OrderType:   payment.OrderTypeBalance,
+		ClientIP:    "127.0.0.1",
+		SrcHost:     "app.example.com",
+		ReturnURL:   "https://app.example.com/payment/result",
+	})
+	require.Error(t, err)
+	require.Equal(t, "PAYMENT_PROVIDER_MISCONFIGURED", infraerrors.Reason(err))
+
+	orders, err := client.PaymentOrder.Query().All(ctx)
+	require.NoError(t, err)
+	require.Len(t, orders, 1)
+	order := orders[0]
+	require.Equal(t, OrderStatusFailed, order.Status)
+	require.NotNil(t, order.FailedAt)
+	require.NotNil(t, order.FailedReason)
+	require.Contains(t, *order.FailedReason, "PAYMENT_PROVIDER_MISCONFIGURED")
+	require.Equal(t, payment.TypeStripe, order.PaymentType)
+	require.Equal(t, payment.TypeStripe, valueOrEmpty(order.ProviderKey))
+	require.Equal(t, strconvFormatInt(instance.ID), valueOrEmpty(order.ProviderInstanceID))
+
+	audit, err := client.PaymentAuditLog.Query().
+		Where(paymentauditlog.OrderIDEQ(strconvFormatInt(order.ID)), paymentauditlog.ActionEQ("ORDER_CREATE_FAILED")).
+		Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "user:"+strconvFormatInt(user.ID), audit.Operator)
+	require.Contains(t, audit.Detail, "PAYMENT_PROVIDER_MISCONFIGURED")
+	require.Contains(t, audit.Detail, payment.TypeStripe)
+	require.Contains(t, audit.Detail, strconvFormatInt(instance.ID))
 }
 
 func TestBuildPaymentSubjectAppliesAffixToSubscriptionPlanProductName(t *testing.T) {

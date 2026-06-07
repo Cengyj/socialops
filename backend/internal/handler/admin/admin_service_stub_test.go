@@ -207,3 +207,18 @@ func (s *stubAdminService) AdminResetAPIKeyRateLimitUsage(_ context.Context, key
 	}
 	return nil, service.ErrAPIKeyNotFound
 }
+
+func (s *stubAdminService) AdminUpdateAPIKeyGroupAndRateLimitUsage(ctx context.Context, keyID int64, groupID *int64, resetRateLimitUsage bool) (*service.AdminUpdateAPIKeyGroupIDResult, error) {
+	result, err := s.AdminUpdateAPIKeyGroupID(ctx, keyID, groupID)
+	if err != nil {
+		return nil, err
+	}
+	if resetRateLimitUsage {
+		key, err := s.AdminResetAPIKeyRateLimitUsage(ctx, keyID)
+		if err != nil {
+			return nil, err
+		}
+		result.APIKey = key
+	}
+	return result, nil
+}

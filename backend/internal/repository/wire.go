@@ -32,6 +32,7 @@ var ProviderSet = wire.NewSet(
 	NewUserAttributeValueRepository,
 	NewUserGroupRateRepository,
 	NewAffiliateRepository,
+	NewIdempotencyRepository,
 	NewUsageCleanupRepository,
 	NewUsageLogRepository,
 
@@ -39,7 +40,6 @@ var ProviderSet = wire.NewSet(
 	NewBillingCache,
 	NewAPIKeyCache,
 	NewEmailCache,
-	NewIdentityCache,
 	NewRedeemCache,
 	NewUpdateCache,
 	NewTotpCache,

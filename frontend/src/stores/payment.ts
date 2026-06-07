@@ -7,6 +7,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { paymentAPI } from '@/api/payment'
 import type { PaymentConfig, PaymentOrder, SubscriptionPlan, CreateOrderRequest } from '@/types/payment'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 export const usePaymentStore = defineStore('payment', () => {
   // ==================== State ====================
@@ -35,7 +36,7 @@ export const usePaymentStore = defineStore('payment', () => {
       configLoaded.value = true
       return config.value
     } catch (error: unknown) {
-      console.error('[payment] Failed to fetch config:', error)
+      recordClientDiagnostic('payment.fetchConfig', error)
       return null
     } finally {
       configLoading.value = false
@@ -55,7 +56,7 @@ export const usePaymentStore = defineStore('payment', () => {
       }))
       return plans.value
     } catch (error: unknown) {
-      console.error('[payment] Failed to fetch plans:', error)
+      recordClientDiagnostic('payment.fetchPlans', error)
       return []
     }
   }
@@ -76,7 +77,7 @@ export const usePaymentStore = defineStore('payment', () => {
       }
       return order
     } catch (error: unknown) {
-      console.error('[payment] Failed to poll order status:', error)
+      recordClientDiagnostic('payment.pollOrderStatus', error)
       return null
     }
   }

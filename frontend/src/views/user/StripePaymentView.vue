@@ -99,7 +99,8 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { usePaymentStore } from '@/stores/payment'
 import { paymentAPI } from '@/api/payment'
-import { extractI18nErrorMessage } from '@/utils/apiError'
+import { extractSafeI18nErrorMessage } from '@/utils/apiError'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 import { isMobileDevice } from '@/utils/device'
 import { formatPaymentAmount, normalizePaymentCurrency } from '@/components/payment/currency'
 import { PAYMENT_RECOVERY_STORAGE_KEY, readPaymentRecoverySnapshot } from '@/components/payment/paymentFlow'
@@ -184,7 +185,8 @@ onMounted(async () => {
       mountPaymentElement(stripe, clientSecret)
     }
   } catch (err: unknown) {
-    initError.value = extractI18nErrorMessage(err, t, 'payment.errors', t('payment.stripeLoadFailed'))
+    recordClientDiagnostic('payment.stripe.init', err)
+    initError.value = extractSafeI18nErrorMessage(err, t, 'payment.errors', t('payment.stripeLoadFailed'))
   } finally {
     loading.value = false
   }
@@ -209,7 +211,8 @@ async function confirmAlipay(stripe: Stripe, clientSecret: string, orderId: numb
   const { error } = await stripe.confirmAlipayPayment(clientSecret, { return_url: returnUrl })
   if (error) {
     redirecting.value = false
-    stripeError.value = error.message || t('payment.result.failed')
+    recordClientDiagnostic('payment.stripe.confirm_alipay', error)
+    stripeError.value = t('payment.result.failed')
   }
   // 无错误时 Stripe 会自动跳转
 }
@@ -222,7 +225,8 @@ async function confirmWechatPay(stripe: Stripe, clientSecret: string) {
   })
 
   if (error) {
-    stripeError.value = error.message || t('payment.result.failed')
+    recordClientDiagnostic('payment.stripe.confirm_wechat', error)
+    stripeError.value = t('payment.result.failed')
     return
   }
 
@@ -268,13 +272,15 @@ async function handleGenericPay() {
       redirect: 'if_required',
     })
     if (error) {
-      stripeError.value = error.message || t('payment.result.failed')
+      recordClientDiagnostic('payment.stripe.confirm_payment', error)
+      stripeError.value = t('payment.result.failed')
     } else {
       stripeSuccess.value = true
       scheduleClose()
     }
   } catch (err: unknown) {
-    stripeError.value = extractI18nErrorMessage(err, t, 'payment.errors', t('payment.result.failed'))
+    recordClientDiagnostic('payment.stripe.confirm_payment_exception', err)
+    stripeError.value = extractSafeI18nErrorMessage(err, t, 'payment.errors', t('payment.result.failed'))
   } finally {
     stripeSubmitting.value = false
   }

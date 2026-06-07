@@ -63,7 +63,7 @@ func TestCreateAndRedeem_TypeDefaultsToBalance(t *testing.T) {
 		"omitting type should default to balance and pass validation")
 }
 
-func TestCreateAndRedeem_SubscriptionRequiresGroupID(t *testing.T) {
+func TestCreateAndRedeem_SubscriptionRequiresPlanOrGroupID(t *testing.T) {
 	h := newCreateAndRedeemHandler()
 	code := postCreateAndRedeemValidation(t, h, map[string]any{
 		"code":          "test-sub-no-group",
@@ -77,7 +77,7 @@ func TestCreateAndRedeem_SubscriptionRequiresGroupID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, code)
 }
 
-func TestCreateAndRedeem_SubscriptionRequiresNonZeroValidityDays(t *testing.T) {
+func TestCreateAndRedeem_LegacySubscriptionGroupRequiresNonZeroValidityDays(t *testing.T) {
 	groupID := int64(5)
 	h := newCreateAndRedeemHandler()
 
@@ -109,6 +109,21 @@ func TestCreateAndRedeem_SubscriptionRequiresNonZeroValidityDays(t *testing.T) {
 		assert.NotEqual(t, http.StatusBadRequest, code,
 			"negative validity_days should pass validation for refund")
 	})
+}
+
+func TestCreateAndRedeem_SubscriptionPlanDoesNotRequireValidityDays(t *testing.T) {
+	planID := int64(7)
+	h := newCreateAndRedeemHandler()
+	code := postCreateAndRedeemValidation(t, h, map[string]any{
+		"code":    "test-sub-plan-valid",
+		"type":    "subscription",
+		"value":   1,
+		"user_id": 1,
+		"plan_id": planID,
+	})
+
+	assert.NotEqual(t, http.StatusBadRequest, code,
+		"plan-based subscription should use package validity by default")
 }
 
 func TestCreateAndRedeem_SubscriptionValidParamsPassValidation(t *testing.T) {

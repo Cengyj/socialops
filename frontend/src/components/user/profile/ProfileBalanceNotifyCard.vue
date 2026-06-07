@@ -162,7 +162,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { userAPI } from '@/api'
-import { extractApiErrorMessage } from '@/utils/apiError'
+import { showSafeProfileError } from './profileError'
 import type { NotifyEmailEntry } from '@/types'
 
 const maxTotalEmails = 3
@@ -231,7 +231,7 @@ const handleToggle = async () => {
     const updated = await userAPI.updateProfile({ balance_notify_enabled: notifyEnabled.value })
     authStore.user = updated
   } catch (err: unknown) {
-    appStore.showError(extractApiErrorMessage(err, t('common.error')))
+    showSafeProfileError(appStore, 'profile.balance_notify.toggle', err, t('common.error'))
     notifyEnabled.value = !notifyEnabled.value
   }
 }
@@ -244,7 +244,7 @@ const handleThresholdUpdate = async () => {
     authStore.user = updated
     appStore.showSuccess(t('common.saved'))
   } catch (err: unknown) {
-    appStore.showError(extractApiErrorMessage(err, t('common.error')))
+    showSafeProfileError(appStore, 'profile.balance_notify.threshold', err, t('common.error'))
   } finally {
     savingThreshold.value = false
   }
@@ -257,7 +257,7 @@ async function handleEmailToggle(entry: NotifyEmailEntry) {
     authStore.user = updated
     emailEntries.value = [...updated.balance_notify_extra_emails]
   } catch (err: unknown) {
-    appStore.showError(extractApiErrorMessage(err, t('common.error')))
+    showSafeProfileError(appStore, 'profile.balance_notify.email_toggle', err, t('common.error'))
   }
 }
 
@@ -292,7 +292,7 @@ async function sendCodeFor(idx: number) {
     }, 1000)
     appStore.showSuccess(t('profile.balanceNotify.codeSent'))
   } catch (err: unknown) {
-    appStore.showError(extractApiErrorMessage(err, t('common.error')))
+    showSafeProfileError(appStore, 'profile.balance_notify.send_code', err, t('common.error'))
   } finally {
     pe.sending = false
   }
@@ -311,7 +311,7 @@ async function verifyPending(idx: number) {
     authStore.user = updated
     emailEntries.value = [...updated.balance_notify_extra_emails]
   } catch (err: unknown) {
-    appStore.showError(extractApiErrorMessage(err, t('common.error')))
+    showSafeProfileError(appStore, 'profile.balance_notify.verify_pending', err, t('common.error'))
   } finally {
     pe.verifying = false
   }
@@ -325,7 +325,7 @@ const handleRemoveEmail = async (email: string) => {
     authStore.user = updated
     emailEntries.value = [...updated.balance_notify_extra_emails]
   } catch (err: unknown) {
-    appStore.showError(extractApiErrorMessage(err, t('common.error')))
+    showSafeProfileError(appStore, 'profile.balance_notify.remove_email', err, t('common.error'))
   }
 }
 
@@ -347,7 +347,7 @@ async function sendCodeForSaved(email: string) {
     }, 1000)
     appStore.showSuccess(t('profile.balanceNotify.codeSent'))
   } catch (err: unknown) {
-    appStore.showError(extractApiErrorMessage(err, t('common.error')))
+    showSafeProfileError(appStore, 'profile.balance_notify.send_saved_code', err, t('common.error'))
   } finally {
     sendingSavedCode.value = false
   }
@@ -366,7 +366,7 @@ async function verifySavedEmail(email: string) {
     authStore.user = updated
     emailEntries.value = [...updated.balance_notify_extra_emails]
   } catch (err: unknown) {
-    appStore.showError(extractApiErrorMessage(err, t('common.error')))
+    showSafeProfileError(appStore, 'profile.balance_notify.verify_saved_email', err, t('common.error'))
   } finally {
     verifyingSaved.value = false
   }

@@ -30,10 +30,14 @@ type SocialAccount struct {
 	Platform string `json:"platform,omitempty"`
 	// Normalized platform key for total-pool uniqueness
 	PlatformKey string `json:"platform_key,omitempty"`
-	// Normalized username key for total-pool uniqueness
+	// Normalized username key for display/search and username fallback identity
 	NameKey string `json:"name_key,omitempty"`
-	// 平台账号 ID
-	AccountID *string `json:"account_id,omitempty"`
+	// Business identity type. SocialOps account identity is username-based.
+	IdentityKind string `json:"identity_kind,omitempty"`
+	// Normalized username identity key for pool uniqueness
+	IdentityKey string `json:"identity_key,omitempty"`
+	// Platform user ID / rest_id, e.g. Twitter/X numeric user ID
+	PlatformUserID *string `json:"platform_user_id,omitempty"`
 	// 账号密码（按业务要求原样存储和返回）
 	Password *string `json:"password,omitempty"`
 	// 绑定手机号
@@ -42,18 +46,32 @@ type SocialAccount struct {
 	Email *string `json:"email,omitempty"`
 	// 邮箱密码（按业务要求原样存储和返回）
 	EmailPassword *string `json:"email_password,omitempty"`
+	// Account two-factor secret or code
+	TwoFactor *string `json:"two_factor,omitempty"`
+	// Account backup/recovery code
+	BackupCode *string `json:"backup_code,omitempty"`
+	// Email OAuth/client identifier used for account support workflows
+	EmailClientID *string `json:"email_client_id,omitempty"`
+	// Email token used for account support workflows
+	EmailToken *string `json:"email_token,omitempty"`
+	// IP used when the social account was registered
+	RegistrationIP *string `json:"registration_ip,omitempty"`
+	// Platform auth cookie captured for account operations
+	AuthCookie *string `json:"auth_cookie,omitempty"`
+	// Platform execution authentication JSON/base64 JSON
+	ExecutionAuth *string `json:"execution_auth,omitempty"`
 	// 账号状态：pending_check / available / limited / invalid / not_stored
 	AccountStatus string `json:"account_status,omitempty"`
 	// 任务状态：pending / registering / importing / parsing / stored / register_failed / risk_rejected / duplicate / ip_unavailable / manual_review
 	TaskStatus string `json:"task_status,omitempty"`
 	// 任务状态描述
 	TaskMessage *string `json:"task_message,omitempty"`
-	// 账号来源：registered / manual_import / file_upload
-	Source string `json:"source,omitempty"`
-	// 默认执行代理快照
-	BoundIP *string `json:"bound_ip,omitempty"`
+	// Default execution proxy snapshot JSON
+	DefaultProxySnapshot *string `json:"default_proxy_snapshot,omitempty"`
 	// 分配给的用户 ID
 	AssignedUserID *int64 `json:"assigned_user_id,omitempty"`
+	// Timestamp when the assigned user removed this account from their workbench
+	UserWorkbenchDeletedAt *time.Time `json:"user_workbench_deleted_at,omitempty"`
 	// 备注
 	Remark *string `json:"remark,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -100,9 +118,9 @@ func (*SocialAccount) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case socialaccount.FieldID, socialaccount.FieldAssignedUserID:
 			values[i] = new(sql.NullInt64)
-		case socialaccount.FieldName, socialaccount.FieldPlatform, socialaccount.FieldPlatformKey, socialaccount.FieldNameKey, socialaccount.FieldAccountID, socialaccount.FieldPassword, socialaccount.FieldPhone, socialaccount.FieldEmail, socialaccount.FieldEmailPassword, socialaccount.FieldAccountStatus, socialaccount.FieldTaskStatus, socialaccount.FieldTaskMessage, socialaccount.FieldSource, socialaccount.FieldBoundIP, socialaccount.FieldRemark:
+		case socialaccount.FieldName, socialaccount.FieldPlatform, socialaccount.FieldPlatformKey, socialaccount.FieldNameKey, socialaccount.FieldIdentityKind, socialaccount.FieldIdentityKey, socialaccount.FieldPlatformUserID, socialaccount.FieldPassword, socialaccount.FieldPhone, socialaccount.FieldEmail, socialaccount.FieldEmailPassword, socialaccount.FieldTwoFactor, socialaccount.FieldBackupCode, socialaccount.FieldEmailClientID, socialaccount.FieldEmailToken, socialaccount.FieldRegistrationIP, socialaccount.FieldAuthCookie, socialaccount.FieldExecutionAuth, socialaccount.FieldAccountStatus, socialaccount.FieldTaskStatus, socialaccount.FieldTaskMessage, socialaccount.FieldDefaultProxySnapshot, socialaccount.FieldRemark:
 			values[i] = new(sql.NullString)
-		case socialaccount.FieldCreatedAt, socialaccount.FieldUpdatedAt, socialaccount.FieldDeletedAt:
+		case socialaccount.FieldCreatedAt, socialaccount.FieldUpdatedAt, socialaccount.FieldDeletedAt, socialaccount.FieldUserWorkbenchDeletedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -168,12 +186,24 @@ func (_m *SocialAccount) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.NameKey = value.String
 			}
-		case socialaccount.FieldAccountID:
+		case socialaccount.FieldIdentityKind:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field account_id", values[i])
+				return fmt.Errorf("unexpected type %T for field identity_kind", values[i])
 			} else if value.Valid {
-				_m.AccountID = new(string)
-				*_m.AccountID = value.String
+				_m.IdentityKind = value.String
+			}
+		case socialaccount.FieldIdentityKey:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field identity_key", values[i])
+			} else if value.Valid {
+				_m.IdentityKey = value.String
+			}
+		case socialaccount.FieldPlatformUserID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field platform_user_id", values[i])
+			} else if value.Valid {
+				_m.PlatformUserID = new(string)
+				*_m.PlatformUserID = value.String
 			}
 		case socialaccount.FieldPassword:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -203,6 +233,55 @@ func (_m *SocialAccount) assignValues(columns []string, values []any) error {
 				_m.EmailPassword = new(string)
 				*_m.EmailPassword = value.String
 			}
+		case socialaccount.FieldTwoFactor:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field two_factor", values[i])
+			} else if value.Valid {
+				_m.TwoFactor = new(string)
+				*_m.TwoFactor = value.String
+			}
+		case socialaccount.FieldBackupCode:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field backup_code", values[i])
+			} else if value.Valid {
+				_m.BackupCode = new(string)
+				*_m.BackupCode = value.String
+			}
+		case socialaccount.FieldEmailClientID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field email_client_id", values[i])
+			} else if value.Valid {
+				_m.EmailClientID = new(string)
+				*_m.EmailClientID = value.String
+			}
+		case socialaccount.FieldEmailToken:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field email_token", values[i])
+			} else if value.Valid {
+				_m.EmailToken = new(string)
+				*_m.EmailToken = value.String
+			}
+		case socialaccount.FieldRegistrationIP:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field registration_ip", values[i])
+			} else if value.Valid {
+				_m.RegistrationIP = new(string)
+				*_m.RegistrationIP = value.String
+			}
+		case socialaccount.FieldAuthCookie:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field auth_cookie", values[i])
+			} else if value.Valid {
+				_m.AuthCookie = new(string)
+				*_m.AuthCookie = value.String
+			}
+		case socialaccount.FieldExecutionAuth:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field execution_auth", values[i])
+			} else if value.Valid {
+				_m.ExecutionAuth = new(string)
+				*_m.ExecutionAuth = value.String
+			}
 		case socialaccount.FieldAccountStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field account_status", values[i])
@@ -222,18 +301,12 @@ func (_m *SocialAccount) assignValues(columns []string, values []any) error {
 				_m.TaskMessage = new(string)
 				*_m.TaskMessage = value.String
 			}
-		case socialaccount.FieldSource:
+		case socialaccount.FieldDefaultProxySnapshot:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field source", values[i])
+				return fmt.Errorf("unexpected type %T for field default_proxy_snapshot", values[i])
 			} else if value.Valid {
-				_m.Source = value.String
-			}
-		case socialaccount.FieldBoundIP:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field bound_ip", values[i])
-			} else if value.Valid {
-				_m.BoundIP = new(string)
-				*_m.BoundIP = value.String
+				_m.DefaultProxySnapshot = new(string)
+				*_m.DefaultProxySnapshot = value.String
 			}
 		case socialaccount.FieldAssignedUserID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -241,6 +314,13 @@ func (_m *SocialAccount) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.AssignedUserID = new(int64)
 				*_m.AssignedUserID = value.Int64
+			}
+		case socialaccount.FieldUserWorkbenchDeletedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field user_workbench_deleted_at", values[i])
+			} else if value.Valid {
+				_m.UserWorkbenchDeletedAt = new(time.Time)
+				*_m.UserWorkbenchDeletedAt = value.Time
 			}
 		case socialaccount.FieldRemark:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -318,8 +398,14 @@ func (_m *SocialAccount) String() string {
 	builder.WriteString("name_key=")
 	builder.WriteString(_m.NameKey)
 	builder.WriteString(", ")
-	if v := _m.AccountID; v != nil {
-		builder.WriteString("account_id=")
+	builder.WriteString("identity_kind=")
+	builder.WriteString(_m.IdentityKind)
+	builder.WriteString(", ")
+	builder.WriteString("identity_key=")
+	builder.WriteString(_m.IdentityKey)
+	builder.WriteString(", ")
+	if v := _m.PlatformUserID; v != nil {
+		builder.WriteString("platform_user_id=")
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")
@@ -343,6 +429,41 @@ func (_m *SocialAccount) String() string {
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")
+	if v := _m.TwoFactor; v != nil {
+		builder.WriteString("two_factor=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.BackupCode; v != nil {
+		builder.WriteString("backup_code=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.EmailClientID; v != nil {
+		builder.WriteString("email_client_id=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.EmailToken; v != nil {
+		builder.WriteString("email_token=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.RegistrationIP; v != nil {
+		builder.WriteString("registration_ip=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.AuthCookie; v != nil {
+		builder.WriteString("auth_cookie=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.ExecutionAuth; v != nil {
+		builder.WriteString("execution_auth=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
 	builder.WriteString("account_status=")
 	builder.WriteString(_m.AccountStatus)
 	builder.WriteString(", ")
@@ -354,17 +475,19 @@ func (_m *SocialAccount) String() string {
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")
-	builder.WriteString("source=")
-	builder.WriteString(_m.Source)
-	builder.WriteString(", ")
-	if v := _m.BoundIP; v != nil {
-		builder.WriteString("bound_ip=")
+	if v := _m.DefaultProxySnapshot; v != nil {
+		builder.WriteString("default_proxy_snapshot=")
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")
 	if v := _m.AssignedUserID; v != nil {
 		builder.WriteString("assigned_user_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.UserWorkbenchDeletedAt; v != nil {
+		builder.WriteString("user_workbench_deleted_at=")
+		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")
 	if v := _m.Remark; v != nil {

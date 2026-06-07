@@ -344,6 +344,394 @@ func TestGetPaymentConfigKeepsStoredEnabledTypes(t *testing.T) {
 	}
 }
 
+func TestPaymentConfigServiceGetGroupInfoMapUsesSocialOpsGroups(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	dailyLimit := 12.5
+	weeklyLimit := 70.0
+
+	group, err := client.Group.Create().
+		SetName("X Subscription").
+		SetPlatform("x_twitter").
+		SetStatus(StatusActive).
+		SetSubscriptionType(SubscriptionTypeSubscription).
+		SetRateMultiplier(1.25).
+		SetDailyLimitUsd(dailyLimit).
+		SetWeeklyLimitUsd(weeklyLimit).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create group: %v", err)
+	}
+	plan, err := client.SubscriptionPlan.Create().
+		SetGroupID(group.ID).
+		SetName("X Monthly").
+		SetPrice(19.99).
+		SetValidityDays(30).
+		SetValidityUnit("days").
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create plan: %v", err)
+	}
+
+	svc := &PaymentConfigService{entClient: client}
+	info := svc.GetGroupInfoMap(ctx, []*dbent.SubscriptionPlan{plan, nil, plan})
+	got, ok := info[group.ID]
+	if !ok {
+		t.Fatalf("expected group info for id %d, got %v", group.ID, info)
+	}
+	if got.Name != "X Subscription" || got.Platform != "x_twitter" {
+		t.Fatalf("group info name/platform = %q/%q", got.Name, got.Platform)
+	}
+	if got.Status != StatusActive || got.SubscriptionType != SubscriptionTypeSubscription {
+		t.Fatalf("group info status/type = %q/%q", got.Status, got.SubscriptionType)
+	}
+	if got.RateMultiplier != 1.25 {
+		t.Fatalf("rate multiplier = %v, want 1.25", got.RateMultiplier)
+	}
+	if got.DailyLimitUSD == nil || *got.DailyLimitUSD != dailyLimit {
+		t.Fatalf("daily limit = %v, want %v", got.DailyLimitUSD, dailyLimit)
+	}
+	if got.WeeklyLimitUSD == nil || *got.WeeklyLimitUSD != weeklyLimit {
+		t.Fatalf("weekly limit = %v, want %v", got.WeeklyLimitUSD, weeklyLimit)
+	}
+}
+
+func TestPaymentConfigServiceCreatePlanRejectsNonSubscriptionGroup(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+
+	group, err := client.Group.Create().
+		SetName("Standard Social").
+		SetPlatform("x_twitter").
+		SetStatus(StatusActive).
+		SetSubscriptionType(SubscriptionTypeStandard).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create group: %v", err)
+	}
+
+	svc := &PaymentConfigService{entClient: client}
+	groupID := group.ID
+	_, err = svc.CreatePlan(ctx, CreatePlanRequest{
+		GroupID:         &groupID,
+		Name:            "Invalid Standard Plan",
+		Price:           9.99,
+		ValidityDays:    30,
+		ValidityUnit:    "days",
+		MonthlyLimitUSD: paymentConfigFloatPtr(100),
+	})
+	if err == nil {
+		t.Fatal("expected CreatePlan to reject non-subscription group")
+	}
+	if !strings.Contains(err.Error(), "group is not a subscription type") {
+		t.Fatalf("CreatePlan error = %v", err)
+	}
+}
+
+func TestPaymentConfigServiceCreatePlanRejectsGroupPlatformMismatch(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+
+	groupID := createPaymentConfigSubscriptionGroup(t, ctx, client)
+	svc := &PaymentConfigService{entClient: client}
+
+	_, err := svc.CreatePlan(ctx, CreatePlanRequest{
+		GroupID:         &groupID,
+		Platform:        "instagram",
+		Name:            "Mismatched Platform Plan",
+		Price:           9.99,
+		ValidityDays:    30,
+		ValidityUnit:    "days",
+		MonthlyLimitUSD: paymentConfigFloatPtr(100),
+	})
+	if err == nil {
+		t.Fatal("expected CreatePlan to reject mismatched group and plan platform")
+	}
+	if !strings.Contains(err.Error(), "platform") {
+		t.Fatalf("CreatePlan error = %v", err)
+	}
+}
+
+func TestPaymentConfigServiceCreatePlanFindsLegacyTwitterSubscriptionGroup(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+
+	group, err := client.Group.Create().
+		SetName("Legacy Twitter Subscription").
+		SetPlatform("twitter").
+		SetStatus(StatusActive).
+		SetSubscriptionType(SubscriptionTypeSubscription).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create legacy subscription group: %v", err)
+	}
+
+	svc := &PaymentConfigService{entClient: client}
+	plan, err := svc.CreatePlan(ctx, CreatePlanRequest{
+		Platform:        "x_twitter",
+		Name:            "X Compatible Plan",
+		Price:           9.99,
+		ValidityDays:    30,
+		ValidityUnit:    "days",
+		MonthlyLimitUSD: paymentConfigFloatPtr(100),
+	})
+	if err != nil {
+		t.Fatalf("CreatePlan returned error: %v", err)
+	}
+	if plan.GroupID != group.ID {
+		t.Fatalf("plan group id = %d, want legacy twitter group %d", plan.GroupID, group.ID)
+	}
+	if plan.Platform != "x_twitter" {
+		t.Fatalf("plan platform = %q, want x_twitter", plan.Platform)
+	}
+}
+
+func TestPaymentConfigServiceCreatePlanRequiresQuota(t *testing.T) {
+	ctx := context.Background()
+	svc := &PaymentConfigService{entClient: newPaymentConfigServiceTestClient(t)}
+	groupID := int64(1)
+
+	_, err := svc.CreatePlan(ctx, CreatePlanRequest{
+		GroupID:      &groupID,
+		Name:         "Missing Quota Plan",
+		Price:        9.99,
+		ValidityDays: 30,
+		ValidityUnit: "days",
+	})
+	if err == nil {
+		t.Fatal("expected CreatePlan to reject missing quota")
+	}
+	if !strings.Contains(err.Error(), "quota") {
+		t.Fatalf("CreatePlan error = %v", err)
+	}
+}
+
+func TestPaymentConfigServiceCreatePlanSavesQuotaAndGuardrails(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	groupID := createPaymentConfigSubscriptionGroup(t, ctx, client)
+	svc := &PaymentConfigService{entClient: client}
+	zero := 0.0
+
+	plan, err := svc.CreatePlan(ctx, CreatePlanRequest{
+		GroupID:         &groupID,
+		Name:            "Quota Plan",
+		Price:           9.99,
+		ValidityDays:    30,
+		ValidityUnit:    "days",
+		MonthlyLimitUSD: paymentConfigFloatPtr(100),
+		DailyLimitUSD:   paymentConfigFloatPtr(10),
+		WeeklyLimitUSD:  &zero,
+	})
+	if err != nil {
+		t.Fatalf("CreatePlan returned error: %v", err)
+	}
+	if plan.MonthlyLimitUsd == nil || *plan.MonthlyLimitUsd != 100 {
+		t.Fatalf("monthly quota = %v, want 100", plan.MonthlyLimitUsd)
+	}
+	if plan.DailyLimitUsd == nil || *plan.DailyLimitUsd != 10 {
+		t.Fatalf("daily guardrail = %v, want 10", plan.DailyLimitUsd)
+	}
+	if plan.WeeklyLimitUsd != nil {
+		t.Fatalf("weekly guardrail = %v, want nil", plan.WeeklyLimitUsd)
+	}
+}
+
+func TestPaymentConfigServiceCreatePlanAcceptsSemanticQuotaField(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	groupID := createPaymentConfigSubscriptionGroup(t, ctx, client)
+	svc := &PaymentConfigService{entClient: client}
+
+	plan, err := svc.CreatePlan(ctx, CreatePlanRequest{
+		GroupID:      &groupID,
+		Name:         "Semantic Quota Plan",
+		Price:        9.99,
+		ValidityDays: 30,
+		ValidityUnit: "days",
+		QuotaUSD:     paymentConfigFloatPtr(150),
+	})
+	if err != nil {
+		t.Fatalf("CreatePlan returned error: %v", err)
+	}
+	if plan.MonthlyLimitUsd == nil || *plan.MonthlyLimitUsd != 150 {
+		t.Fatalf("monthly quota = %v, want 150", plan.MonthlyLimitUsd)
+	}
+}
+
+func TestPaymentConfigServiceCreatePlanRejectsConflictingQuotaFields(t *testing.T) {
+	ctx := context.Background()
+	svc := &PaymentConfigService{entClient: newPaymentConfigServiceTestClient(t)}
+	groupID := int64(1)
+
+	_, err := svc.CreatePlan(ctx, CreatePlanRequest{
+		GroupID:         &groupID,
+		Name:            "Conflicting Quota Plan",
+		Price:           9.99,
+		ValidityDays:    30,
+		ValidityUnit:    "days",
+		QuotaUSD:        paymentConfigFloatPtr(150),
+		MonthlyLimitUSD: paymentConfigFloatPtr(100),
+	})
+	if err == nil {
+		t.Fatal("expected CreatePlan to reject conflicting quota fields")
+	}
+	if !strings.Contains(err.Error(), "quota_usd") {
+		t.Fatalf("CreatePlan error = %v", err)
+	}
+}
+
+func TestPaymentConfigServiceCreatePlanRejectsInvalidGuardrail(t *testing.T) {
+	ctx := context.Background()
+	svc := &PaymentConfigService{entClient: newPaymentConfigServiceTestClient(t)}
+	groupID := int64(1)
+
+	_, err := svc.CreatePlan(ctx, CreatePlanRequest{
+		GroupID:         &groupID,
+		Name:            "Invalid Guardrail Plan",
+		Price:           9.99,
+		ValidityDays:    30,
+		ValidityUnit:    "days",
+		MonthlyLimitUSD: paymentConfigFloatPtr(100),
+		DailyLimitUSD:   paymentConfigFloatPtr(120),
+	})
+	if err == nil {
+		t.Fatal("expected CreatePlan to reject guardrail over quota")
+	}
+	if !strings.Contains(err.Error(), "quota") {
+		t.Fatalf("CreatePlan error = %v", err)
+	}
+}
+
+func TestPaymentConfigServiceUpdatePlanClearsGuardrailsWithZero(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	groupID := createPaymentConfigSubscriptionGroup(t, ctx, client)
+	svc := &PaymentConfigService{entClient: client}
+	plan, err := svc.CreatePlan(ctx, CreatePlanRequest{
+		GroupID:         &groupID,
+		Name:            "Clear Guardrails Plan",
+		Price:           9.99,
+		ValidityDays:    30,
+		ValidityUnit:    "days",
+		MonthlyLimitUSD: paymentConfigFloatPtr(100),
+		DailyLimitUSD:   paymentConfigFloatPtr(10),
+		WeeklyLimitUSD:  paymentConfigFloatPtr(50),
+	})
+	if err != nil {
+		t.Fatalf("CreatePlan returned error: %v", err)
+	}
+
+	updated, err := svc.UpdatePlan(ctx, plan.ID, UpdatePlanRequest{
+		DailyLimitUSD:  paymentConfigFloatPtr(0),
+		WeeklyLimitUSD: paymentConfigFloatPtr(0),
+	})
+	if err != nil {
+		t.Fatalf("UpdatePlan returned error: %v", err)
+	}
+	if updated.DailyLimitUsd != nil {
+		t.Fatalf("daily guardrail = %v, want nil", updated.DailyLimitUsd)
+	}
+	if updated.WeeklyLimitUsd != nil {
+		t.Fatalf("weekly guardrail = %v, want nil", updated.WeeklyLimitUsd)
+	}
+	if updated.MonthlyLimitUsd == nil || *updated.MonthlyLimitUsd != 100 {
+		t.Fatalf("monthly quota = %v, want 100", updated.MonthlyLimitUsd)
+	}
+}
+
+func TestPaymentConfigServiceUpdatePlanRejectsInvalidQuotaPatch(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	groupID := createPaymentConfigSubscriptionGroup(t, ctx, client)
+	svc := &PaymentConfigService{entClient: client}
+	plan, err := svc.CreatePlan(ctx, CreatePlanRequest{
+		GroupID:         &groupID,
+		Name:            "Invalid Patch Plan",
+		Price:           9.99,
+		ValidityDays:    30,
+		ValidityUnit:    "days",
+		MonthlyLimitUSD: paymentConfigFloatPtr(100),
+		DailyLimitUSD:   paymentConfigFloatPtr(30),
+		WeeklyLimitUSD:  paymentConfigFloatPtr(80),
+	})
+	if err != nil {
+		t.Fatalf("CreatePlan returned error: %v", err)
+	}
+
+	_, err = svc.UpdatePlan(ctx, plan.ID, UpdatePlanRequest{MonthlyLimitUSD: paymentConfigFloatPtr(0)})
+	if err == nil {
+		t.Fatal("expected UpdatePlan to reject zero quota")
+	}
+	if !strings.Contains(err.Error(), "quota") {
+		t.Fatalf("UpdatePlan zero quota error = %v", err)
+	}
+
+	_, err = svc.UpdatePlan(ctx, plan.ID, UpdatePlanRequest{WeeklyLimitUSD: paymentConfigFloatPtr(20)})
+	if err == nil {
+		t.Fatal("expected UpdatePlan to reject weekly guardrail below current daily guardrail")
+	}
+	if !strings.Contains(err.Error(), "weekly") {
+		t.Fatalf("UpdatePlan weekly guardrail error = %v", err)
+	}
+}
+
+func TestPaymentConfigServiceUpdatePlanAcceptsSemanticQuotaField(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	groupID := createPaymentConfigSubscriptionGroup(t, ctx, client)
+	svc := &PaymentConfigService{entClient: client}
+	plan, err := svc.CreatePlan(ctx, CreatePlanRequest{
+		GroupID:         &groupID,
+		Name:            "Update Semantic Quota Plan",
+		Price:           9.99,
+		ValidityDays:    30,
+		ValidityUnit:    "days",
+		MonthlyLimitUSD: paymentConfigFloatPtr(100),
+	})
+	if err != nil {
+		t.Fatalf("CreatePlan returned error: %v", err)
+	}
+
+	updated, err := svc.UpdatePlan(ctx, plan.ID, UpdatePlanRequest{QuotaUSD: paymentConfigFloatPtr(180)})
+	if err != nil {
+		t.Fatalf("UpdatePlan returned error: %v", err)
+	}
+	if updated.MonthlyLimitUsd == nil || *updated.MonthlyLimitUsd != 180 {
+		t.Fatalf("monthly quota = %v, want 180", updated.MonthlyLimitUsd)
+	}
+}
+
+func TestPaymentConfigServiceUpdatePlanRejectsGroupPlatformMismatch(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	groupID := createPaymentConfigSubscriptionGroup(t, ctx, client)
+	svc := &PaymentConfigService{entClient: client}
+	plan, err := svc.CreatePlan(ctx, CreatePlanRequest{
+		GroupID:         &groupID,
+		Name:            "Consistent Plan",
+		Price:           9.99,
+		ValidityDays:    30,
+		ValidityUnit:    "days",
+		MonthlyLimitUSD: paymentConfigFloatPtr(100),
+	})
+	if err != nil {
+		t.Fatalf("CreatePlan returned error: %v", err)
+	}
+
+	instagram := "instagram"
+	_, err = svc.UpdatePlan(ctx, plan.ID, UpdatePlanRequest{
+		GroupID:  &groupID,
+		Platform: &instagram,
+	})
+	if err == nil {
+		t.Fatal("expected UpdatePlan to reject mismatched group and plan platform")
+	}
+	if !strings.Contains(err.Error(), "platform") {
+		t.Fatalf("UpdatePlan error = %v", err)
+	}
+}
+
 func newPaymentConfigServiceTestClient(t *testing.T) *dbent.Client {
 	t.Helper()
 
@@ -432,6 +820,54 @@ func TestUpdatePaymentConfig_PersistsVisibleMethodRouting(t *testing.T) {
 	}
 }
 
+func TestUpdatePaymentConfig_PreservesUnspecifiedPatchFields(t *testing.T) {
+	repo := &paymentConfigSettingRepoStub{values: map[string]string{
+		SettingEnabledPaymentTypes: "alipay,wxpay",
+		SettingHelpText:            "existing payment help",
+		SettingMaxPendingOrders:    "5",
+	}}
+	svc := &PaymentConfigService{settingRepo: repo}
+
+	enabled := true
+	err := svc.UpdatePaymentConfig(context.Background(), UpdatePaymentConfigRequest{
+		Enabled: &enabled,
+	})
+	if err != nil {
+		t.Fatalf("UpdatePaymentConfig returned error: %v", err)
+	}
+
+	if repo.values[SettingPaymentEnabled] != "true" {
+		t.Fatalf("payment enabled = %q, want true", repo.values[SettingPaymentEnabled])
+	}
+	if repo.values[SettingEnabledPaymentTypes] != "alipay,wxpay" {
+		t.Fatalf("enabled payment types = %q, want existing value", repo.values[SettingEnabledPaymentTypes])
+	}
+	if repo.values[SettingHelpText] != "existing payment help" {
+		t.Fatalf("help text = %q, want existing value", repo.values[SettingHelpText])
+	}
+	if repo.values[SettingMaxPendingOrders] != "5" {
+		t.Fatalf("max pending orders = %q, want existing value", repo.values[SettingMaxPendingOrders])
+	}
+}
+
 func paymentConfigStrPtr(value string) *string {
 	return &value
+}
+
+func paymentConfigFloatPtr(value float64) *float64 {
+	return &value
+}
+
+func createPaymentConfigSubscriptionGroup(t *testing.T, ctx context.Context, client *dbent.Client) int64 {
+	t.Helper()
+	group, err := client.Group.Create().
+		SetName("X Subscription").
+		SetPlatform("x_twitter").
+		SetStatus(StatusActive).
+		SetSubscriptionType(SubscriptionTypeSubscription).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create subscription group: %v", err)
+	}
+	return group.ID
 }

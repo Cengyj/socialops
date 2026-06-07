@@ -162,6 +162,8 @@ import {
   loadOAuthAffiliateCode,
   oauthAffiliatePayload
 } from '@/utils/oauthAffiliate'
+import { buildSafeAuthErrorMessage } from '@/utils/authError'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 
 const route = useRoute()
 const router = useRouter()
@@ -311,10 +313,15 @@ async function resumePendingEmailOAuth() {
       return
     }
 
-    appStore.showError(completion.error || t('auth.loginFailed'))
+    if (completion.error) {
+      recordClientDiagnostic('auth.oauth.pending_completion_error', { code: completion.error })
+    }
+    appStore.showError(t('auth.loginFailed'))
   } catch (e: unknown) {
-    const err = e as { message?: string; response?: { data?: { message?: string } } }
-    const message = err.response?.data?.message || err.message || t('auth.loginFailed')
+    recordClientDiagnostic('auth.oauth.resume_pending_email', e)
+    const message = buildSafeAuthErrorMessage(e, {
+      fallback: t('auth.loginFailed')
+    })
     appStore.showError(message)
     invalidCallback.value = true
   } finally {
@@ -356,9 +363,10 @@ async function handleSubmitRegistration() {
     )
     await finalizeTokenResponse(data, redirectTo.value)
   } catch (e: unknown) {
-    const err = e as { message?: string; response?: { data?: { message?: string } } }
-    registrationError.value =
-      err.response?.data?.message || err.message || t('auth.oidc.completeRegistrationFailed')
+    recordClientDiagnostic('auth.oauth.complete_registration', e)
+    registrationError.value = buildSafeAuthErrorMessage(e, {
+      fallback: t('auth.oidc.completeRegistrationFailed')
+    })
   } finally {
     isSubmitting.value = false
   }
@@ -372,7 +380,11 @@ onMounted(async () => {
     params.get('error_description') || params.get('error_message') || ''
 
   if (fragmentError) {
-    appStore.showError(fragmentErrorDescription || fragmentError)
+    recordClientDiagnostic('auth.oauth.fragment_error', {
+      code: fragmentError,
+      message: fragmentErrorDescription
+    })
+    appStore.showError(t('auth.loginFailed'))
     return
   }
   if (!tokenResponse) {
@@ -391,8 +403,8 @@ onMounted(async () => {
   try {
     await finalizeTokenResponse(tokenResponse, params.get('redirect') || '/dashboard')
   } catch (error: unknown) {
-    const message = (error as { message?: string })?.message || t('auth.loginFailed')
-    appStore.showError(message)
+    recordClientDiagnostic('auth.oauth.finalize_token', error)
+    appStore.showError(buildSafeAuthErrorMessage(error, { fallback: t('auth.loginFailed') }))
     isProcessing.value = false
   }
 })
@@ -401,7 +413,8 @@ watch(
   error,
   (message) => {
     if (message) {
-      appStore.showError(message)
+      recordClientDiagnostic('auth.oauth.query_error', { code: message })
+      appStore.showError(t('auth.loginFailed'))
     }
   },
   { immediate: true }

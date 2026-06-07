@@ -669,7 +669,7 @@ install_service() {
     # Create service file with configured host and port
     cat > /etc/systemd/system/socialops.service << EOF
 [Unit]
-Description=SocialOps - Social Account Rental & Task Distribution Platform
+Description=SocialOps - Website Account Pool Social Operations Platform
 Documentation=https://github.com/Wei-Shaw/socialops
 After=network.target postgresql.service redis.service
 Wants=postgresql.service redis.service
@@ -694,7 +694,7 @@ PrivateTmp=true
 ReadWritePaths=/opt/socialops
 
 # Environment - Server configuration
-Environment=GIN_MODE=release
+Environment=SERVER_MODE=release
 Environment=SERVER_HOST=${SERVER_HOST}
 Environment=SERVER_PORT=${SERVER_PORT}
 

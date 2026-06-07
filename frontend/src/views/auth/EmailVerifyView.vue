@@ -162,7 +162,8 @@ import {
   sendVerifyCode,
 } from '@/api/auth'
 import { apiClient } from '@/api/client'
-import { buildAuthErrorMessage } from '@/utils/authError'
+import { buildSafeAuthErrorMessage } from '@/utils/authError'
+import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
 import {
   formatRegistrationEmailSuffixWhitelistForMessage,
   isRegistrationEmailSuffixAllowed,
@@ -299,7 +300,7 @@ onMounted(async () => {
       settings.registration_email_suffix_whitelist || []
     )
   } catch (error) {
-    console.error('Failed to load public settings:', error)
+    recordClientDiagnostic('auth.email_verify.load_public_settings', error)
   }
 
   // Auto-send verification code if we have valid data
@@ -439,7 +440,8 @@ async function sendCode(): Promise<void> {
     showResendTurnstile.value = false
     resendTurnstileToken.value = ''
   } catch (error: unknown) {
-    errorMessage.value = buildAuthErrorMessage(error, {
+    recordClientDiagnostic('auth.email_verify.send_code', error)
+    errorMessage.value = buildSafeAuthErrorMessage(error, {
       fallback: t('auth.sendCodeFailed')
     })
 
@@ -553,7 +555,8 @@ async function handleVerify(): Promise<void> {
     // Redirect to dashboard
     await router.push(pendingRedirect.value || '/dashboard')
   } catch (error: unknown) {
-    errorMessage.value = buildAuthErrorMessage(error, {
+    recordClientDiagnostic('auth.email_verify.verify', error)
+    errorMessage.value = buildSafeAuthErrorMessage(error, {
       fallback: t('auth.verifyFailed')
     })
 

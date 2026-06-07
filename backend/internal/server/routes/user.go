@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterUserRoutes 注册用户相关路由（需要认证）
+// RegisterUserRoutes registers authenticated user routes.
 func RegisterUserRoutes(
 	v1 *gin.RouterGroup,
 	h *handler.Handlers,
@@ -19,7 +19,7 @@ func RegisterUserRoutes(
 	authenticated.Use(gin.HandlerFunc(jwtAuth))
 	authenticated.Use(middleware.BackendModeUserGuard(settingService))
 	{
-		// 用户接口
+		// Profile, affiliate, and account binding routes.
 		user := authenticated.Group("/user")
 		{
 			user.GET("/profile", h.User.GetProfile)
@@ -32,7 +32,7 @@ func RegisterUserRoutes(
 			user.DELETE("/account-bindings/:provider", h.User.UnbindIdentity)
 			user.POST("/auth-identities/bind/start", h.User.StartIdentityBinding)
 
-			// 通知邮箱管理
+			// Notification email settings.
 			notifyEmail := user.Group("/notify-email")
 			{
 				notifyEmail.POST("/send-code", h.User.SendNotifyEmailCode)
@@ -41,7 +41,7 @@ func RegisterUserRoutes(
 				notifyEmail.DELETE("", h.User.RemoveNotifyEmail)
 			}
 
-			// TOTP 双因素认证
+			// TOTP two-factor authentication.
 			totp := user.Group("/totp")
 			{
 				totp.GET("/status", h.Totp.GetStatus)
@@ -53,7 +53,7 @@ func RegisterUserRoutes(
 			}
 		}
 
-		// API Key管理
+		// API key management.
 		keys := authenticated.Group("/keys")
 		{
 			keys.GET("", h.APIKey.List)
@@ -63,33 +63,33 @@ func RegisterUserRoutes(
 			keys.DELETE("/:id", h.APIKey.Delete)
 		}
 
-		// 使用记录
+		// Usage records and dashboard summaries.
 		usage := authenticated.Group("/usage")
 		{
 			usage.GET("", h.Usage.List)
 			usage.GET("/:id", h.Usage.GetByID)
+			usage.GET("/:id/media", h.Usage.PreviewTaskMedia)
 			usage.GET("/stats", h.Usage.Stats)
-			// User dashboard endpoints
 			usage.GET("/dashboard/stats", h.Usage.DashboardStats)
 			usage.GET("/dashboard/trend", h.Usage.DashboardTrend)
 			usage.POST("/dashboard/api-keys-usage", h.Usage.DashboardAPIKeysUsage)
 		}
 
-		// 公告（用户可见）
+		// User announcements.
 		announcements := authenticated.Group("/announcements")
 		{
 			announcements.GET("", h.Announcement.List)
 			announcements.POST("/:id/read", h.Announcement.MarkRead)
 		}
 
-		// 卡密兑换
+		// Redeem codes.
 		redeem := authenticated.Group("/redeem")
 		{
 			redeem.POST("", h.Redeem.Redeem)
 			redeem.GET("/history", h.Redeem.GetHistory)
 		}
 
-		// 用户订阅
+		// User subscriptions.
 		subscriptions := authenticated.Group("/subscriptions")
 		{
 			subscriptions.GET("", h.Subscription.List)
@@ -98,19 +98,46 @@ func RegisterUserRoutes(
 			subscriptions.GET("/summary", h.Subscription.GetSummary)
 		}
 
-		// 社交账号（用户端）
-		socialAccounts := authenticated.Group("/social-accounts")
+		// Unified account workbench.
+		accounts := authenticated.Group("/accounts")
 		{
-			socialAccounts.GET("", h.SocialAccount.ListMyAccounts)
-			socialAccounts.POST("/import", h.SocialAccount.ImportMyAccount)
-			socialAccounts.GET("/export", h.SocialAccount.ExportMyAccounts)
-			socialAccounts.PUT("/:id/default-proxy", h.SocialAccount.SetDefaultProxy)
-			socialAccounts.POST("/tasks/estimate", h.SocialAccount.EstimateTask)
-			socialAccounts.POST("/tasks", h.SocialAccount.SubmitTask)
-			socialAccounts.GET("/tasks", h.SocialAccount.ListMyTaskLogs)
+			accounts.GET("", h.AccountWorkbench.ListMyAccounts)
+			accounts.POST("/batch-import", h.AccountWorkbench.BatchImportMyAccounts)
+			accounts.POST("/batch-delete", h.AccountWorkbench.BatchDeleteMyAccounts)
+			accounts.GET("/export", h.AccountWorkbench.ExportMyAccounts)
+			accounts.POST("/default-proxy", h.AccountWorkbench.BatchSetDefaultProxy)
+			accounts.PUT("/:id", h.AccountWorkbench.UpdateMyAccount)
+			accounts.DELETE("/:id", h.AccountWorkbench.DeleteMyAccount)
+			accounts.PUT("/:id/default-proxy", h.AccountWorkbench.SetDefaultProxy)
+			accounts.POST("/tasks", h.AccountWorkbench.SubmitTask)
 		}
 
-		// 套餐（用户端）
+		proxies := authenticated.Group("/proxies")
+		{
+			proxies.GET("", h.Proxy.List)
+			proxies.GET("/usable", h.Proxy.ListUsable)
+			proxies.POST("", h.Proxy.Create)
+			proxies.POST("/test", h.Proxy.TestAll)
+			proxies.PUT("/:id", h.Proxy.Update)
+			proxies.DELETE("/:id", h.Proxy.Delete)
+			proxies.POST("/:id/test", h.Proxy.Test)
+		}
+
+		taskSettings := authenticated.Group("/task-settings")
+		{
+			taskSettings.GET("/media", h.TaskSettings.PreviewTemplateMedia)
+			templates := taskSettings.Group("/templates")
+			{
+				templates.GET("", h.TaskSettings.ListTemplates)
+				templates.POST("", h.TaskSettings.SaveTemplate)
+				templates.POST("/validate", h.TaskSettings.ValidateTemplate)
+				templates.DELETE("/:id", h.TaskSettings.DeleteTemplate)
+				templates.POST("/:id/copy", h.TaskSettings.CopyTemplate)
+				templates.POST("/:id/default", h.TaskSettings.SetDefaultTemplate)
+			}
+		}
+
+		// Public plan catalog.
 		authenticated.GET("/plans", h.Plan.ListPlansForSale)
 		authenticated.GET("/my-plan", h.Plan.GetMyPlan)
 	}

@@ -19,10 +19,7 @@ This directory contains files for deploying SocialOps on Linux servers.
 | `.env.example` | Docker environment variables template |
 | `DOCKER.md` | Docker Hub documentation |
 | `install.sh` | One-click binary installation script |
-| `install-datamanagementd.sh` | datamanagementd 一键安装脚本 |
 | `socialops.service` | Systemd service unit file |
-| `socialops-datamanagementd.service` | datamanagementd systemd service unit file |
-| `DATAMANAGEMENTD_CN.md` | datamanagementd 部署与联动说明（中文） |
 | `config.example.yaml` | Example configuration file |
 
 ---
@@ -44,22 +41,22 @@ chmod +x docker-deploy.sh
 ```
 
 **What the script does:**
-- Downloads `docker-compose.local.yml` and `.env.example`
+- Downloads `docker-compose.local.yml` as `docker-compose.yml` and downloads `.env.example`
 - Automatically generates secure secrets (JWT_SECRET, TOTP_ENCRYPTION_KEY, POSTGRES_PASSWORD)
 - Creates `.env` file with generated secrets
 - Creates necessary data directories (data/, postgres_data/, redis_data/)
-- **Displays generated credentials** (POSTGRES_PASSWORD, JWT_SECRET, etc.)
+- Stores generated secrets in `.env` without printing secret values to the terminal
 
 **After running the script:**
 ```bash
 # Start services
-docker compose -f docker-compose.local.yml up -d
+docker compose up -d
 
 # View logs
-docker compose -f docker-compose.local.yml logs -f socialops
+docker compose logs -f socialops
 
 # If admin password was auto-generated, find it in logs:
-docker compose -f docker-compose.local.yml logs socialops | grep "admin password"
+docker compose logs socialops | grep "admin password"
 
 # Access Web UI
 # http://localhost:8080
@@ -104,7 +101,7 @@ docker compose -f docker-compose.local.yml logs -f socialops
 | **docker-compose.local.yml** | Local directories (./data, ./postgres_data, ./redis_data) | ✅ Easy (tar entire directory) | Production, need frequent backups/migration |
 | **docker-compose.yml** | Named volumes (/var/lib/docker/volumes/) | ⚠️ Requires docker commands | Simple setup, don't need migration |
 
-**Recommendation:** Use `docker-compose.local.yml` (deployed by `docker-deploy.sh`) for easier data management and migration.
+**Recommendation:** Use the local-directory compose layout (`docker-compose.local.yml` in the repository, saved as `docker-compose.yml` by `docker-deploy.sh`) for easier data management and migration.
 
 ### How Auto-Setup Works
 
@@ -147,14 +144,6 @@ SELECT
   (SELECT COUNT(*) FROM old_pairs)           AS old_pair_count,
   (SELECT COUNT(*) FROM user_allowed_groups) AS new_pair_count;
 ```
-
-### datamanagementd（数据管理）联动
-
-如需启用管理后台“数据管理”功能，请额外部署宿主机 `datamanagementd`：
-
-- 主进程固定探测 `/tmp/socialops-datamanagement.sock`
-- Docker 场景下需把宿主机 Socket 挂载到容器内同路径
-- 详细步骤见：`deploy/DATAMANAGEMENTD_CN.md`
 
 ### Commands
 

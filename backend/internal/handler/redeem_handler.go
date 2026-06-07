@@ -26,15 +26,6 @@ type RedeemRequest struct {
 	Code string `json:"code" binding:"required"`
 }
 
-// RedeemResponse represents the redeem response
-type RedeemResponse struct {
-	Message        string   `json:"message"`
-	Type           string   `json:"type"`
-	Value          float64  `json:"value"`
-	NewBalance     *float64 `json:"new_balance,omitempty"`
-	NewConcurrency *int     `json:"new_concurrency,omitempty"`
-}
-
 // Redeem handles redeeming a code
 // POST /api/v1/redeem
 func (h *RedeemHandler) Redeem(c *gin.Context) {

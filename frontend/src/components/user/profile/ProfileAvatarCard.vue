@@ -85,7 +85,7 @@ import { userAPI } from '@/api'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import type { User } from '@/types'
-import { extractApiErrorMessage } from '@/utils/apiError'
+import { ProfileDisplayError, showSafeProfileError } from './profileError'
 
 const props = withDefaults(defineProps<{
   user: User | null
@@ -142,7 +142,7 @@ function loadImage(dataURL: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image()
     image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error(t('profile.avatar.readFailed')))
+    image.onerror = () => reject(new ProfileDisplayError(t('profile.avatar.readFailed')))
     image.src = dataURL
   })
 }
@@ -151,7 +151,7 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number):
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (!blob) {
-        reject(new Error(t('profile.avatar.compressFailed')))
+        reject(new ProfileDisplayError(t('profile.avatar.compressFailed')))
         return
       }
       resolve(blob)
@@ -165,7 +165,7 @@ async function compressAvatarFile(file: File): Promise<File> {
   const canvas = document.createElement('canvas')
   const ctx = canvas.getContext('2d')
   if (!ctx) {
-    throw new Error(t('profile.avatar.compressFailed'))
+    throw new ProfileDisplayError(t('profile.avatar.compressFailed'))
   }
 
   for (const scale of avatarScaleSteps) {
@@ -185,16 +185,16 @@ async function compressAvatarFile(file: File): Promise<File> {
     }
   }
 
-  throw new Error(t('profile.avatar.compressTooLarge'))
+  throw new ProfileDisplayError(t('profile.avatar.compressTooLarge'))
 }
 
 async function prepareAvatarUpload(file: File): Promise<File> {
   if (!file.type.startsWith('image/')) {
-    throw new Error(t('profile.avatar.invalidType'))
+    throw new ProfileDisplayError(t('profile.avatar.invalidType'))
   }
   if (file.type === 'image/gif') {
     if (file.size > targetAvatarUploadBytes) {
-      throw new Error(t('profile.avatar.gifTooLarge'))
+      throw new ProfileDisplayError(t('profile.avatar.gifTooLarge'))
     }
     return file
   }
@@ -223,7 +223,7 @@ async function handleAvatarFileChange(event: Event) {
     }
     avatarDraft.value = normalized
   } catch (error: unknown) {
-    appStore.showError(extractApiErrorMessage(error, t('common.error')))
+    showSafeProfileError(appStore, 'profile.avatar.prepare_upload', error, t('profile.avatar.readFailed'))
   }
 }
 
@@ -240,7 +240,7 @@ async function handleAvatarSave() {
     avatarDraft.value = updated.avatar_url?.trim() || ''
     appStore.showSuccess(t('profile.avatar.saveSuccess'))
   } catch (error: unknown) {
-    appStore.showError(extractApiErrorMessage(error, t('common.error')))
+    showSafeProfileError(appStore, 'profile.avatar.save', error, t('common.error'))
   } finally {
     avatarSaving.value = false
   }
@@ -262,7 +262,7 @@ async function handleAvatarDelete() {
     avatarDraft.value = ''
     appStore.showSuccess(t('profile.avatar.deleteSuccess'))
   } catch (error: unknown) {
-    appStore.showError(extractApiErrorMessage(error, t('common.error')))
+    showSafeProfileError(appStore, 'profile.avatar.delete', error, t('common.error'))
   } finally {
     avatarSaving.value = false
   }

@@ -17,6 +17,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 SKIP_DIR_NAMES = {
+    ".codex-artifacts",
+    ".codex-logs",
+    ".codex-qa",
+    ".codex-screenshots",
     ".cache",
     ".git",
     ".idea",
@@ -25,7 +29,11 @@ SKIP_DIR_NAMES = {
     ".pytest_cache",
     ".venv",
     "dist",
+    "artifacts",
+    "codex-screenshots",
     "node_modules",
+    "qa-artifacts",
+    "qa-screenshots",
 }
 
 SKIP_PATHS = {

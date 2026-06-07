@@ -131,6 +131,11 @@ func testDatabase(c *gin.Context) {
 		return
 	}
 
+	req.Host = strings.TrimSpace(req.Host)
+	req.User = strings.TrimSpace(req.User)
+	req.DBName = strings.TrimSpace(req.DBName)
+	req.SSLMode = strings.TrimSpace(req.SSLMode)
+
 	// Security: Validate all inputs to prevent injection attacks
 	if !validateHostname(req.Host) {
 		response.Error(c, http.StatusBadRequest, "Invalid hostname format")
@@ -190,6 +195,8 @@ func testRedis(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "Invalid request: "+err.Error())
 		return
 	}
+
+	req.Host = strings.TrimSpace(req.Host)
 
 	// Security: Validate inputs
 	if !validateHostname(req.Host) {
@@ -251,6 +258,7 @@ func install(c *gin.Context) {
 	req.Database.Host = strings.TrimSpace(req.Database.Host)
 	req.Database.User = strings.TrimSpace(req.Database.User)
 	req.Database.DBName = strings.TrimSpace(req.Database.DBName)
+	req.Database.SSLMode = strings.TrimSpace(req.Database.SSLMode)
 	req.Redis.Host = strings.TrimSpace(req.Redis.Host)
 
 	// ========== COMPREHENSIVE INPUT VALIDATION ==========
