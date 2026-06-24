@@ -45,7 +45,7 @@ describe('subscriptionPlanForm', () => {
     })
   })
 
-  it('reads quota_usd with monthly limit compatibility', () => {
+  it('reads quota_usd from the stored monthly limit fallback', () => {
     const form = subscriptionPlanToFormState({
       id: 1,
       group_id: 10,

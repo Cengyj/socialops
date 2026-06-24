@@ -100,10 +100,10 @@ func TestSettingService_GetPublicSettingsForInjection_ExposesForceEmailOnThirdPa
 	}
 	svc := NewSettingService(repo, &config.Config{})
 
-	payloadAny, err := svc.GetPublicSettingsForInjection(context.Background())
+	raw, err := svc.GetPublicSettingsForInjection(context.Background())
 	require.NoError(t, err)
-	payload, ok := payloadAny.(*PublicSettingsInjectionPayload)
-	require.True(t, ok)
+	var payload PublicSettingsInjectionPayload
+	require.NoError(t, json.Unmarshal(raw, &payload))
 	require.True(t, payload.ForceEmailOnThirdPartySignup)
 }
 
@@ -189,10 +189,10 @@ func TestSettingService_GetPublicSettingsForInjection_OnlyInjectsUserCustomMenuI
 		},
 	}, &config.Config{})
 
-	payloadAny, err := svc.GetPublicSettingsForInjection(context.Background())
+	raw, err := svc.GetPublicSettingsForInjection(context.Background())
 	require.NoError(t, err)
-	payload, ok := payloadAny.(*PublicSettingsInjectionPayload)
-	require.True(t, ok)
+	var payload PublicSettingsInjectionPayload
+	require.NoError(t, json.Unmarshal(raw, &payload))
 
 	var items []struct {
 		ID         string `json:"id"`
@@ -212,10 +212,10 @@ func TestSettingService_GetPublicSettingsForInjection_InjectsEmptyCustomEndpoint
 		},
 	}, &config.Config{})
 
-	payloadAny, err := svc.GetPublicSettingsForInjection(context.Background())
+	raw, err := svc.GetPublicSettingsForInjection(context.Background())
 	require.NoError(t, err)
-	payload, ok := payloadAny.(*PublicSettingsInjectionPayload)
-	require.True(t, ok)
+	var payload PublicSettingsInjectionPayload
+	require.NoError(t, json.Unmarshal(raw, &payload))
 
 	require.JSONEq(t, `[]`, string(payload.CustomEndpoints))
 }

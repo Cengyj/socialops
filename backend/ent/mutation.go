@@ -17,6 +17,7 @@ import (
 	"github.com/Wei-Shaw/socialops/ent/apikey"
 	"github.com/Wei-Shaw/socialops/ent/authidentity"
 	"github.com/Wei-Shaw/socialops/ent/authidentitychannel"
+	"github.com/Wei-Shaw/socialops/ent/globalproxy"
 	"github.com/Wei-Shaw/socialops/ent/group"
 	"github.com/Wei-Shaw/socialops/ent/identityadoptiondecision"
 	"github.com/Wei-Shaw/socialops/ent/paymentauditlog"
@@ -57,6 +58,7 @@ const (
 	TypeAnnouncementRead         = "AnnouncementRead"
 	TypeAuthIdentity             = "AuthIdentity"
 	TypeAuthIdentityChannel      = "AuthIdentityChannel"
+	TypeGlobalProxy              = "GlobalProxy"
 	TypeGroup                    = "Group"
 	TypeIdentityAdoptionDecision = "IdentityAdoptionDecision"
 	TypePaymentAuditLog          = "PaymentAuditLog"
@@ -5811,6 +5813,1026 @@ func (m *AuthIdentityChannelMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown AuthIdentityChannel edge %s", name)
+}
+
+// GlobalProxyMutation represents an operation that mutates the GlobalProxy nodes in the graph.
+type GlobalProxyMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *int64
+	created_at    *time.Time
+	updated_at    *time.Time
+	deleted_at    *time.Time
+	name          *string
+	ip_type       *string
+	endpoint      *string
+	status        *string
+	latency_ms    *int
+	addlatency_ms *int
+	last_check_at *time.Time
+	last_used_at  *time.Time
+	remark        *string
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*GlobalProxy, error)
+	predicates    []predicate.GlobalProxy
+}
+
+var _ ent.Mutation = (*GlobalProxyMutation)(nil)
+
+// globalproxyOption allows management of the mutation configuration using functional options.
+type globalproxyOption func(*GlobalProxyMutation)
+
+// newGlobalProxyMutation creates new mutation for the GlobalProxy entity.
+func newGlobalProxyMutation(c config, op Op, opts ...globalproxyOption) *GlobalProxyMutation {
+	m := &GlobalProxyMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeGlobalProxy,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withGlobalProxyID sets the ID field of the mutation.
+func withGlobalProxyID(id int64) globalproxyOption {
+	return func(m *GlobalProxyMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *GlobalProxy
+		)
+		m.oldValue = func(ctx context.Context) (*GlobalProxy, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().GlobalProxy.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withGlobalProxy sets the old GlobalProxy of the mutation.
+func withGlobalProxy(node *GlobalProxy) globalproxyOption {
+	return func(m *GlobalProxyMutation) {
+		m.oldValue = func(context.Context) (*GlobalProxy, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m GlobalProxyMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m GlobalProxyMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *GlobalProxyMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *GlobalProxyMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().GlobalProxy.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *GlobalProxyMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *GlobalProxyMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the GlobalProxy entity.
+// If the GlobalProxy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GlobalProxyMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *GlobalProxyMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *GlobalProxyMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *GlobalProxyMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the GlobalProxy entity.
+// If the GlobalProxy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GlobalProxyMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *GlobalProxyMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetDeletedAt sets the "deleted_at" field.
+func (m *GlobalProxyMutation) SetDeletedAt(t time.Time) {
+	m.deleted_at = &t
+}
+
+// DeletedAt returns the value of the "deleted_at" field in the mutation.
+func (m *GlobalProxyMutation) DeletedAt() (r time.Time, exists bool) {
+	v := m.deleted_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDeletedAt returns the old "deleted_at" field's value of the GlobalProxy entity.
+// If the GlobalProxy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GlobalProxyMutation) OldDeletedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDeletedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDeletedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDeletedAt: %w", err)
+	}
+	return oldValue.DeletedAt, nil
+}
+
+// ClearDeletedAt clears the value of the "deleted_at" field.
+func (m *GlobalProxyMutation) ClearDeletedAt() {
+	m.deleted_at = nil
+	m.clearedFields[globalproxy.FieldDeletedAt] = struct{}{}
+}
+
+// DeletedAtCleared returns if the "deleted_at" field was cleared in this mutation.
+func (m *GlobalProxyMutation) DeletedAtCleared() bool {
+	_, ok := m.clearedFields[globalproxy.FieldDeletedAt]
+	return ok
+}
+
+// ResetDeletedAt resets all changes to the "deleted_at" field.
+func (m *GlobalProxyMutation) ResetDeletedAt() {
+	m.deleted_at = nil
+	delete(m.clearedFields, globalproxy.FieldDeletedAt)
+}
+
+// SetName sets the "name" field.
+func (m *GlobalProxyMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *GlobalProxyMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the GlobalProxy entity.
+// If the GlobalProxy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GlobalProxyMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *GlobalProxyMutation) ResetName() {
+	m.name = nil
+}
+
+// SetIPType sets the "ip_type" field.
+func (m *GlobalProxyMutation) SetIPType(s string) {
+	m.ip_type = &s
+}
+
+// IPType returns the value of the "ip_type" field in the mutation.
+func (m *GlobalProxyMutation) IPType() (r string, exists bool) {
+	v := m.ip_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIPType returns the old "ip_type" field's value of the GlobalProxy entity.
+// If the GlobalProxy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GlobalProxyMutation) OldIPType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIPType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIPType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIPType: %w", err)
+	}
+	return oldValue.IPType, nil
+}
+
+// ResetIPType resets all changes to the "ip_type" field.
+func (m *GlobalProxyMutation) ResetIPType() {
+	m.ip_type = nil
+}
+
+// SetEndpoint sets the "endpoint" field.
+func (m *GlobalProxyMutation) SetEndpoint(s string) {
+	m.endpoint = &s
+}
+
+// Endpoint returns the value of the "endpoint" field in the mutation.
+func (m *GlobalProxyMutation) Endpoint() (r string, exists bool) {
+	v := m.endpoint
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEndpoint returns the old "endpoint" field's value of the GlobalProxy entity.
+// If the GlobalProxy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GlobalProxyMutation) OldEndpoint(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEndpoint is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEndpoint requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEndpoint: %w", err)
+	}
+	return oldValue.Endpoint, nil
+}
+
+// ClearEndpoint clears the value of the "endpoint" field.
+func (m *GlobalProxyMutation) ClearEndpoint() {
+	m.endpoint = nil
+	m.clearedFields[globalproxy.FieldEndpoint] = struct{}{}
+}
+
+// EndpointCleared returns if the "endpoint" field was cleared in this mutation.
+func (m *GlobalProxyMutation) EndpointCleared() bool {
+	_, ok := m.clearedFields[globalproxy.FieldEndpoint]
+	return ok
+}
+
+// ResetEndpoint resets all changes to the "endpoint" field.
+func (m *GlobalProxyMutation) ResetEndpoint() {
+	m.endpoint = nil
+	delete(m.clearedFields, globalproxy.FieldEndpoint)
+}
+
+// SetStatus sets the "status" field.
+func (m *GlobalProxyMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *GlobalProxyMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the GlobalProxy entity.
+// If the GlobalProxy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GlobalProxyMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *GlobalProxyMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetLatencyMs sets the "latency_ms" field.
+func (m *GlobalProxyMutation) SetLatencyMs(i int) {
+	m.latency_ms = &i
+	m.addlatency_ms = nil
+}
+
+// LatencyMs returns the value of the "latency_ms" field in the mutation.
+func (m *GlobalProxyMutation) LatencyMs() (r int, exists bool) {
+	v := m.latency_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLatencyMs returns the old "latency_ms" field's value of the GlobalProxy entity.
+// If the GlobalProxy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GlobalProxyMutation) OldLatencyMs(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLatencyMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLatencyMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLatencyMs: %w", err)
+	}
+	return oldValue.LatencyMs, nil
+}
+
+// AddLatencyMs adds i to the "latency_ms" field.
+func (m *GlobalProxyMutation) AddLatencyMs(i int) {
+	if m.addlatency_ms != nil {
+		*m.addlatency_ms += i
+	} else {
+		m.addlatency_ms = &i
+	}
+}
+
+// AddedLatencyMs returns the value that was added to the "latency_ms" field in this mutation.
+func (m *GlobalProxyMutation) AddedLatencyMs() (r int, exists bool) {
+	v := m.addlatency_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearLatencyMs clears the value of the "latency_ms" field.
+func (m *GlobalProxyMutation) ClearLatencyMs() {
+	m.latency_ms = nil
+	m.addlatency_ms = nil
+	m.clearedFields[globalproxy.FieldLatencyMs] = struct{}{}
+}
+
+// LatencyMsCleared returns if the "latency_ms" field was cleared in this mutation.
+func (m *GlobalProxyMutation) LatencyMsCleared() bool {
+	_, ok := m.clearedFields[globalproxy.FieldLatencyMs]
+	return ok
+}
+
+// ResetLatencyMs resets all changes to the "latency_ms" field.
+func (m *GlobalProxyMutation) ResetLatencyMs() {
+	m.latency_ms = nil
+	m.addlatency_ms = nil
+	delete(m.clearedFields, globalproxy.FieldLatencyMs)
+}
+
+// SetLastCheckAt sets the "last_check_at" field.
+func (m *GlobalProxyMutation) SetLastCheckAt(t time.Time) {
+	m.last_check_at = &t
+}
+
+// LastCheckAt returns the value of the "last_check_at" field in the mutation.
+func (m *GlobalProxyMutation) LastCheckAt() (r time.Time, exists bool) {
+	v := m.last_check_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastCheckAt returns the old "last_check_at" field's value of the GlobalProxy entity.
+// If the GlobalProxy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GlobalProxyMutation) OldLastCheckAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastCheckAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastCheckAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastCheckAt: %w", err)
+	}
+	return oldValue.LastCheckAt, nil
+}
+
+// ClearLastCheckAt clears the value of the "last_check_at" field.
+func (m *GlobalProxyMutation) ClearLastCheckAt() {
+	m.last_check_at = nil
+	m.clearedFields[globalproxy.FieldLastCheckAt] = struct{}{}
+}
+
+// LastCheckAtCleared returns if the "last_check_at" field was cleared in this mutation.
+func (m *GlobalProxyMutation) LastCheckAtCleared() bool {
+	_, ok := m.clearedFields[globalproxy.FieldLastCheckAt]
+	return ok
+}
+
+// ResetLastCheckAt resets all changes to the "last_check_at" field.
+func (m *GlobalProxyMutation) ResetLastCheckAt() {
+	m.last_check_at = nil
+	delete(m.clearedFields, globalproxy.FieldLastCheckAt)
+}
+
+// SetLastUsedAt sets the "last_used_at" field.
+func (m *GlobalProxyMutation) SetLastUsedAt(t time.Time) {
+	m.last_used_at = &t
+}
+
+// LastUsedAt returns the value of the "last_used_at" field in the mutation.
+func (m *GlobalProxyMutation) LastUsedAt() (r time.Time, exists bool) {
+	v := m.last_used_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastUsedAt returns the old "last_used_at" field's value of the GlobalProxy entity.
+// If the GlobalProxy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GlobalProxyMutation) OldLastUsedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastUsedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastUsedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastUsedAt: %w", err)
+	}
+	return oldValue.LastUsedAt, nil
+}
+
+// ClearLastUsedAt clears the value of the "last_used_at" field.
+func (m *GlobalProxyMutation) ClearLastUsedAt() {
+	m.last_used_at = nil
+	m.clearedFields[globalproxy.FieldLastUsedAt] = struct{}{}
+}
+
+// LastUsedAtCleared returns if the "last_used_at" field was cleared in this mutation.
+func (m *GlobalProxyMutation) LastUsedAtCleared() bool {
+	_, ok := m.clearedFields[globalproxy.FieldLastUsedAt]
+	return ok
+}
+
+// ResetLastUsedAt resets all changes to the "last_used_at" field.
+func (m *GlobalProxyMutation) ResetLastUsedAt() {
+	m.last_used_at = nil
+	delete(m.clearedFields, globalproxy.FieldLastUsedAt)
+}
+
+// SetRemark sets the "remark" field.
+func (m *GlobalProxyMutation) SetRemark(s string) {
+	m.remark = &s
+}
+
+// Remark returns the value of the "remark" field in the mutation.
+func (m *GlobalProxyMutation) Remark() (r string, exists bool) {
+	v := m.remark
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRemark returns the old "remark" field's value of the GlobalProxy entity.
+// If the GlobalProxy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GlobalProxyMutation) OldRemark(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRemark is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRemark requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRemark: %w", err)
+	}
+	return oldValue.Remark, nil
+}
+
+// ClearRemark clears the value of the "remark" field.
+func (m *GlobalProxyMutation) ClearRemark() {
+	m.remark = nil
+	m.clearedFields[globalproxy.FieldRemark] = struct{}{}
+}
+
+// RemarkCleared returns if the "remark" field was cleared in this mutation.
+func (m *GlobalProxyMutation) RemarkCleared() bool {
+	_, ok := m.clearedFields[globalproxy.FieldRemark]
+	return ok
+}
+
+// ResetRemark resets all changes to the "remark" field.
+func (m *GlobalProxyMutation) ResetRemark() {
+	m.remark = nil
+	delete(m.clearedFields, globalproxy.FieldRemark)
+}
+
+// Where appends a list predicates to the GlobalProxyMutation builder.
+func (m *GlobalProxyMutation) Where(ps ...predicate.GlobalProxy) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the GlobalProxyMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *GlobalProxyMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.GlobalProxy, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *GlobalProxyMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *GlobalProxyMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (GlobalProxy).
+func (m *GlobalProxyMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *GlobalProxyMutation) Fields() []string {
+	fields := make([]string, 0, 11)
+	if m.created_at != nil {
+		fields = append(fields, globalproxy.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, globalproxy.FieldUpdatedAt)
+	}
+	if m.deleted_at != nil {
+		fields = append(fields, globalproxy.FieldDeletedAt)
+	}
+	if m.name != nil {
+		fields = append(fields, globalproxy.FieldName)
+	}
+	if m.ip_type != nil {
+		fields = append(fields, globalproxy.FieldIPType)
+	}
+	if m.endpoint != nil {
+		fields = append(fields, globalproxy.FieldEndpoint)
+	}
+	if m.status != nil {
+		fields = append(fields, globalproxy.FieldStatus)
+	}
+	if m.latency_ms != nil {
+		fields = append(fields, globalproxy.FieldLatencyMs)
+	}
+	if m.last_check_at != nil {
+		fields = append(fields, globalproxy.FieldLastCheckAt)
+	}
+	if m.last_used_at != nil {
+		fields = append(fields, globalproxy.FieldLastUsedAt)
+	}
+	if m.remark != nil {
+		fields = append(fields, globalproxy.FieldRemark)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *GlobalProxyMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case globalproxy.FieldCreatedAt:
+		return m.CreatedAt()
+	case globalproxy.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case globalproxy.FieldDeletedAt:
+		return m.DeletedAt()
+	case globalproxy.FieldName:
+		return m.Name()
+	case globalproxy.FieldIPType:
+		return m.IPType()
+	case globalproxy.FieldEndpoint:
+		return m.Endpoint()
+	case globalproxy.FieldStatus:
+		return m.Status()
+	case globalproxy.FieldLatencyMs:
+		return m.LatencyMs()
+	case globalproxy.FieldLastCheckAt:
+		return m.LastCheckAt()
+	case globalproxy.FieldLastUsedAt:
+		return m.LastUsedAt()
+	case globalproxy.FieldRemark:
+		return m.Remark()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *GlobalProxyMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case globalproxy.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case globalproxy.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case globalproxy.FieldDeletedAt:
+		return m.OldDeletedAt(ctx)
+	case globalproxy.FieldName:
+		return m.OldName(ctx)
+	case globalproxy.FieldIPType:
+		return m.OldIPType(ctx)
+	case globalproxy.FieldEndpoint:
+		return m.OldEndpoint(ctx)
+	case globalproxy.FieldStatus:
+		return m.OldStatus(ctx)
+	case globalproxy.FieldLatencyMs:
+		return m.OldLatencyMs(ctx)
+	case globalproxy.FieldLastCheckAt:
+		return m.OldLastCheckAt(ctx)
+	case globalproxy.FieldLastUsedAt:
+		return m.OldLastUsedAt(ctx)
+	case globalproxy.FieldRemark:
+		return m.OldRemark(ctx)
+	}
+	return nil, fmt.Errorf("unknown GlobalProxy field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *GlobalProxyMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case globalproxy.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case globalproxy.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case globalproxy.FieldDeletedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDeletedAt(v)
+		return nil
+	case globalproxy.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case globalproxy.FieldIPType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIPType(v)
+		return nil
+	case globalproxy.FieldEndpoint:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEndpoint(v)
+		return nil
+	case globalproxy.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case globalproxy.FieldLatencyMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLatencyMs(v)
+		return nil
+	case globalproxy.FieldLastCheckAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastCheckAt(v)
+		return nil
+	case globalproxy.FieldLastUsedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastUsedAt(v)
+		return nil
+	case globalproxy.FieldRemark:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRemark(v)
+		return nil
+	}
+	return fmt.Errorf("unknown GlobalProxy field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *GlobalProxyMutation) AddedFields() []string {
+	var fields []string
+	if m.addlatency_ms != nil {
+		fields = append(fields, globalproxy.FieldLatencyMs)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *GlobalProxyMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case globalproxy.FieldLatencyMs:
+		return m.AddedLatencyMs()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *GlobalProxyMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case globalproxy.FieldLatencyMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddLatencyMs(v)
+		return nil
+	}
+	return fmt.Errorf("unknown GlobalProxy numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *GlobalProxyMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(globalproxy.FieldDeletedAt) {
+		fields = append(fields, globalproxy.FieldDeletedAt)
+	}
+	if m.FieldCleared(globalproxy.FieldEndpoint) {
+		fields = append(fields, globalproxy.FieldEndpoint)
+	}
+	if m.FieldCleared(globalproxy.FieldLatencyMs) {
+		fields = append(fields, globalproxy.FieldLatencyMs)
+	}
+	if m.FieldCleared(globalproxy.FieldLastCheckAt) {
+		fields = append(fields, globalproxy.FieldLastCheckAt)
+	}
+	if m.FieldCleared(globalproxy.FieldLastUsedAt) {
+		fields = append(fields, globalproxy.FieldLastUsedAt)
+	}
+	if m.FieldCleared(globalproxy.FieldRemark) {
+		fields = append(fields, globalproxy.FieldRemark)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *GlobalProxyMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *GlobalProxyMutation) ClearField(name string) error {
+	switch name {
+	case globalproxy.FieldDeletedAt:
+		m.ClearDeletedAt()
+		return nil
+	case globalproxy.FieldEndpoint:
+		m.ClearEndpoint()
+		return nil
+	case globalproxy.FieldLatencyMs:
+		m.ClearLatencyMs()
+		return nil
+	case globalproxy.FieldLastCheckAt:
+		m.ClearLastCheckAt()
+		return nil
+	case globalproxy.FieldLastUsedAt:
+		m.ClearLastUsedAt()
+		return nil
+	case globalproxy.FieldRemark:
+		m.ClearRemark()
+		return nil
+	}
+	return fmt.Errorf("unknown GlobalProxy nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *GlobalProxyMutation) ResetField(name string) error {
+	switch name {
+	case globalproxy.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case globalproxy.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case globalproxy.FieldDeletedAt:
+		m.ResetDeletedAt()
+		return nil
+	case globalproxy.FieldName:
+		m.ResetName()
+		return nil
+	case globalproxy.FieldIPType:
+		m.ResetIPType()
+		return nil
+	case globalproxy.FieldEndpoint:
+		m.ResetEndpoint()
+		return nil
+	case globalproxy.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case globalproxy.FieldLatencyMs:
+		m.ResetLatencyMs()
+		return nil
+	case globalproxy.FieldLastCheckAt:
+		m.ResetLastCheckAt()
+		return nil
+	case globalproxy.FieldLastUsedAt:
+		m.ResetLastUsedAt()
+		return nil
+	case globalproxy.FieldRemark:
+		m.ResetRemark()
+		return nil
+	}
+	return fmt.Errorf("unknown GlobalProxy field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *GlobalProxyMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *GlobalProxyMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *GlobalProxyMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *GlobalProxyMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *GlobalProxyMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *GlobalProxyMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *GlobalProxyMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown GlobalProxy unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *GlobalProxyMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown GlobalProxy edge %s", name)
 }
 
 // GroupMutation represents an operation that mutates the Group nodes in the graph.
@@ -18469,45 +19491,43 @@ func (m *SettingMutation) ResetEdge(name string) error {
 // SocialAccountMutation represents an operation that mutates the SocialAccount nodes in the graph.
 type SocialAccountMutation struct {
 	config
-	op                        Op
-	typ                       string
-	id                        *int64
-	created_at                *time.Time
-	updated_at                *time.Time
-	deleted_at                *time.Time
-	name                      *string
-	platform                  *string
-	platform_key              *string
-	name_key                  *string
-	identity_kind             *string
-	identity_key              *string
-	platform_user_id          *string
-	password                  *string
-	phone                     *string
-	email                     *string
-	email_password            *string
-	two_factor                *string
-	backup_code               *string
-	email_client_id           *string
-	email_token               *string
-	registration_ip           *string
-	auth_cookie               *string
-	execution_auth            *string
-	account_status            *string
-	task_status               *string
-	task_message              *string
-	default_proxy_snapshot    *string
-	user_workbench_deleted_at *time.Time
-	remark                    *string
-	clearedFields             map[string]struct{}
-	assigned_user             *int64
-	clearedassigned_user      bool
-	task_logs                 map[int64]struct{}
-	removedtask_logs          map[int64]struct{}
-	clearedtask_logs          bool
-	done                      bool
-	oldValue                  func(context.Context) (*SocialAccount, error)
-	predicates                []predicate.SocialAccount
+	op                     Op
+	typ                    string
+	id                     *int64
+	created_at             *time.Time
+	updated_at             *time.Time
+	name                   *string
+	platform               *string
+	platform_key           *string
+	name_key               *string
+	identity_kind          *string
+	identity_key           *string
+	platform_user_id       *string
+	password               *string
+	phone                  *string
+	email                  *string
+	email_password         *string
+	two_factor             *string
+	backup_code            *string
+	email_client_id        *string
+	email_token            *string
+	registration_ip        *string
+	auth_cookie            *string
+	execution_auth         *string
+	account_status         *string
+	task_status            *string
+	task_message           *string
+	default_proxy_snapshot *string
+	remark                 *string
+	clearedFields          map[string]struct{}
+	assigned_user          *int64
+	clearedassigned_user   bool
+	task_logs              map[int64]struct{}
+	removedtask_logs       map[int64]struct{}
+	clearedtask_logs       bool
+	done                   bool
+	oldValue               func(context.Context) (*SocialAccount, error)
+	predicates             []predicate.SocialAccount
 }
 
 var _ ent.Mutation = (*SocialAccountMutation)(nil)
@@ -18678,55 +19698,6 @@ func (m *SocialAccountMutation) OldUpdatedAt(ctx context.Context) (v time.Time, 
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *SocialAccountMutation) ResetUpdatedAt() {
 	m.updated_at = nil
-}
-
-// SetDeletedAt sets the "deleted_at" field.
-func (m *SocialAccountMutation) SetDeletedAt(t time.Time) {
-	m.deleted_at = &t
-}
-
-// DeletedAt returns the value of the "deleted_at" field in the mutation.
-func (m *SocialAccountMutation) DeletedAt() (r time.Time, exists bool) {
-	v := m.deleted_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldDeletedAt returns the old "deleted_at" field's value of the SocialAccount entity.
-// If the SocialAccount object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SocialAccountMutation) OldDeletedAt(ctx context.Context) (v *time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldDeletedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldDeletedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldDeletedAt: %w", err)
-	}
-	return oldValue.DeletedAt, nil
-}
-
-// ClearDeletedAt clears the value of the "deleted_at" field.
-func (m *SocialAccountMutation) ClearDeletedAt() {
-	m.deleted_at = nil
-	m.clearedFields[socialaccount.FieldDeletedAt] = struct{}{}
-}
-
-// DeletedAtCleared returns if the "deleted_at" field was cleared in this mutation.
-func (m *SocialAccountMutation) DeletedAtCleared() bool {
-	_, ok := m.clearedFields[socialaccount.FieldDeletedAt]
-	return ok
-}
-
-// ResetDeletedAt resets all changes to the "deleted_at" field.
-func (m *SocialAccountMutation) ResetDeletedAt() {
-	m.deleted_at = nil
-	delete(m.clearedFields, socialaccount.FieldDeletedAt)
 }
 
 // SetName sets the "name" field.
@@ -19752,55 +20723,6 @@ func (m *SocialAccountMutation) ResetAssignedUserID() {
 	delete(m.clearedFields, socialaccount.FieldAssignedUserID)
 }
 
-// SetUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field.
-func (m *SocialAccountMutation) SetUserWorkbenchDeletedAt(t time.Time) {
-	m.user_workbench_deleted_at = &t
-}
-
-// UserWorkbenchDeletedAt returns the value of the "user_workbench_deleted_at" field in the mutation.
-func (m *SocialAccountMutation) UserWorkbenchDeletedAt() (r time.Time, exists bool) {
-	v := m.user_workbench_deleted_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldUserWorkbenchDeletedAt returns the old "user_workbench_deleted_at" field's value of the SocialAccount entity.
-// If the SocialAccount object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SocialAccountMutation) OldUserWorkbenchDeletedAt(ctx context.Context) (v *time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldUserWorkbenchDeletedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldUserWorkbenchDeletedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldUserWorkbenchDeletedAt: %w", err)
-	}
-	return oldValue.UserWorkbenchDeletedAt, nil
-}
-
-// ClearUserWorkbenchDeletedAt clears the value of the "user_workbench_deleted_at" field.
-func (m *SocialAccountMutation) ClearUserWorkbenchDeletedAt() {
-	m.user_workbench_deleted_at = nil
-	m.clearedFields[socialaccount.FieldUserWorkbenchDeletedAt] = struct{}{}
-}
-
-// UserWorkbenchDeletedAtCleared returns if the "user_workbench_deleted_at" field was cleared in this mutation.
-func (m *SocialAccountMutation) UserWorkbenchDeletedAtCleared() bool {
-	_, ok := m.clearedFields[socialaccount.FieldUserWorkbenchDeletedAt]
-	return ok
-}
-
-// ResetUserWorkbenchDeletedAt resets all changes to the "user_workbench_deleted_at" field.
-func (m *SocialAccountMutation) ResetUserWorkbenchDeletedAt() {
-	m.user_workbench_deleted_at = nil
-	delete(m.clearedFields, socialaccount.FieldUserWorkbenchDeletedAt)
-}
-
 // SetRemark sets the "remark" field.
 func (m *SocialAccountMutation) SetRemark(s string) {
 	m.remark = &s
@@ -19965,15 +20887,12 @@ func (m *SocialAccountMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SocialAccountMutation) Fields() []string {
-	fields := make([]string, 0, 28)
+	fields := make([]string, 0, 26)
 	if m.created_at != nil {
 		fields = append(fields, socialaccount.FieldCreatedAt)
 	}
 	if m.updated_at != nil {
 		fields = append(fields, socialaccount.FieldUpdatedAt)
-	}
-	if m.deleted_at != nil {
-		fields = append(fields, socialaccount.FieldDeletedAt)
 	}
 	if m.name != nil {
 		fields = append(fields, socialaccount.FieldName)
@@ -20044,9 +20963,6 @@ func (m *SocialAccountMutation) Fields() []string {
 	if m.assigned_user != nil {
 		fields = append(fields, socialaccount.FieldAssignedUserID)
 	}
-	if m.user_workbench_deleted_at != nil {
-		fields = append(fields, socialaccount.FieldUserWorkbenchDeletedAt)
-	}
 	if m.remark != nil {
 		fields = append(fields, socialaccount.FieldRemark)
 	}
@@ -20062,8 +20978,6 @@ func (m *SocialAccountMutation) Field(name string) (ent.Value, bool) {
 		return m.CreatedAt()
 	case socialaccount.FieldUpdatedAt:
 		return m.UpdatedAt()
-	case socialaccount.FieldDeletedAt:
-		return m.DeletedAt()
 	case socialaccount.FieldName:
 		return m.Name()
 	case socialaccount.FieldPlatform:
@@ -20110,8 +21024,6 @@ func (m *SocialAccountMutation) Field(name string) (ent.Value, bool) {
 		return m.DefaultProxySnapshot()
 	case socialaccount.FieldAssignedUserID:
 		return m.AssignedUserID()
-	case socialaccount.FieldUserWorkbenchDeletedAt:
-		return m.UserWorkbenchDeletedAt()
 	case socialaccount.FieldRemark:
 		return m.Remark()
 	}
@@ -20127,8 +21039,6 @@ func (m *SocialAccountMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldCreatedAt(ctx)
 	case socialaccount.FieldUpdatedAt:
 		return m.OldUpdatedAt(ctx)
-	case socialaccount.FieldDeletedAt:
-		return m.OldDeletedAt(ctx)
 	case socialaccount.FieldName:
 		return m.OldName(ctx)
 	case socialaccount.FieldPlatform:
@@ -20175,8 +21085,6 @@ func (m *SocialAccountMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldDefaultProxySnapshot(ctx)
 	case socialaccount.FieldAssignedUserID:
 		return m.OldAssignedUserID(ctx)
-	case socialaccount.FieldUserWorkbenchDeletedAt:
-		return m.OldUserWorkbenchDeletedAt(ctx)
 	case socialaccount.FieldRemark:
 		return m.OldRemark(ctx)
 	}
@@ -20201,13 +21109,6 @@ func (m *SocialAccountMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUpdatedAt(v)
-		return nil
-	case socialaccount.FieldDeletedAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetDeletedAt(v)
 		return nil
 	case socialaccount.FieldName:
 		v, ok := value.(string)
@@ -20370,13 +21271,6 @@ func (m *SocialAccountMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetAssignedUserID(v)
 		return nil
-	case socialaccount.FieldUserWorkbenchDeletedAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetUserWorkbenchDeletedAt(v)
-		return nil
 	case socialaccount.FieldRemark:
 		v, ok := value.(string)
 		if !ok {
@@ -20417,9 +21311,6 @@ func (m *SocialAccountMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *SocialAccountMutation) ClearedFields() []string {
 	var fields []string
-	if m.FieldCleared(socialaccount.FieldDeletedAt) {
-		fields = append(fields, socialaccount.FieldDeletedAt)
-	}
 	if m.FieldCleared(socialaccount.FieldPlatformUserID) {
 		fields = append(fields, socialaccount.FieldPlatformUserID)
 	}
@@ -20465,9 +21356,6 @@ func (m *SocialAccountMutation) ClearedFields() []string {
 	if m.FieldCleared(socialaccount.FieldAssignedUserID) {
 		fields = append(fields, socialaccount.FieldAssignedUserID)
 	}
-	if m.FieldCleared(socialaccount.FieldUserWorkbenchDeletedAt) {
-		fields = append(fields, socialaccount.FieldUserWorkbenchDeletedAt)
-	}
 	if m.FieldCleared(socialaccount.FieldRemark) {
 		fields = append(fields, socialaccount.FieldRemark)
 	}
@@ -20485,9 +21373,6 @@ func (m *SocialAccountMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *SocialAccountMutation) ClearField(name string) error {
 	switch name {
-	case socialaccount.FieldDeletedAt:
-		m.ClearDeletedAt()
-		return nil
 	case socialaccount.FieldPlatformUserID:
 		m.ClearPlatformUserID()
 		return nil
@@ -20533,9 +21418,6 @@ func (m *SocialAccountMutation) ClearField(name string) error {
 	case socialaccount.FieldAssignedUserID:
 		m.ClearAssignedUserID()
 		return nil
-	case socialaccount.FieldUserWorkbenchDeletedAt:
-		m.ClearUserWorkbenchDeletedAt()
-		return nil
 	case socialaccount.FieldRemark:
 		m.ClearRemark()
 		return nil
@@ -20552,9 +21434,6 @@ func (m *SocialAccountMutation) ResetField(name string) error {
 		return nil
 	case socialaccount.FieldUpdatedAt:
 		m.ResetUpdatedAt()
-		return nil
-	case socialaccount.FieldDeletedAt:
-		m.ResetDeletedAt()
 		return nil
 	case socialaccount.FieldName:
 		m.ResetName()
@@ -20624,9 +21503,6 @@ func (m *SocialAccountMutation) ResetField(name string) error {
 		return nil
 	case socialaccount.FieldAssignedUserID:
 		m.ResetAssignedUserID()
-		return nil
-	case socialaccount.FieldUserWorkbenchDeletedAt:
-		m.ResetUserWorkbenchDeletedAt()
 		return nil
 	case socialaccount.FieldRemark:
 		m.ResetRemark()
@@ -22343,22 +23219,9 @@ func (m *SocialTaskLogMutation) OldPayload(ctx context.Context) (v domain.Social
 	return oldValue.Payload, nil
 }
 
-// ClearPayload clears the value of the "payload" field.
-func (m *SocialTaskLogMutation) ClearPayload() {
-	m.payload = nil
-	m.clearedFields[socialtasklog.FieldPayload] = struct{}{}
-}
-
-// PayloadCleared returns if the "payload" field was cleared in this mutation.
-func (m *SocialTaskLogMutation) PayloadCleared() bool {
-	_, ok := m.clearedFields[socialtasklog.FieldPayload]
-	return ok
-}
-
 // ResetPayload resets all changes to the "payload" field.
 func (m *SocialTaskLogMutation) ResetPayload() {
 	m.payload = nil
-	delete(m.clearedFields, socialtasklog.FieldPayload)
 }
 
 // SetTemplateSnapshot sets the "template_snapshot" field.
@@ -22392,22 +23255,9 @@ func (m *SocialTaskLogMutation) OldTemplateSnapshot(ctx context.Context) (v doma
 	return oldValue.TemplateSnapshot, nil
 }
 
-// ClearTemplateSnapshot clears the value of the "template_snapshot" field.
-func (m *SocialTaskLogMutation) ClearTemplateSnapshot() {
-	m.template_snapshot = nil
-	m.clearedFields[socialtasklog.FieldTemplateSnapshot] = struct{}{}
-}
-
-// TemplateSnapshotCleared returns if the "template_snapshot" field was cleared in this mutation.
-func (m *SocialTaskLogMutation) TemplateSnapshotCleared() bool {
-	_, ok := m.clearedFields[socialtasklog.FieldTemplateSnapshot]
-	return ok
-}
-
 // ResetTemplateSnapshot resets all changes to the "template_snapshot" field.
 func (m *SocialTaskLogMutation) ResetTemplateSnapshot() {
 	m.template_snapshot = nil
-	delete(m.clearedFields, socialtasklog.FieldTemplateSnapshot)
 }
 
 // SetStatus sets the "status" field.
@@ -23428,12 +24278,6 @@ func (m *SocialTaskLogMutation) ClearedFields() []string {
 	if m.FieldCleared(socialtasklog.FieldContent) {
 		fields = append(fields, socialtasklog.FieldContent)
 	}
-	if m.FieldCleared(socialtasklog.FieldPayload) {
-		fields = append(fields, socialtasklog.FieldPayload)
-	}
-	if m.FieldCleared(socialtasklog.FieldTemplateSnapshot) {
-		fields = append(fields, socialtasklog.FieldTemplateSnapshot)
-	}
 	if m.FieldCleared(socialtasklog.FieldResultMessage) {
 		fields = append(fields, socialtasklog.FieldResultMessage)
 	}
@@ -23474,12 +24318,6 @@ func (m *SocialTaskLogMutation) ClearField(name string) error {
 		return nil
 	case socialtasklog.FieldContent:
 		m.ClearContent()
-		return nil
-	case socialtasklog.FieldPayload:
-		m.ClearPayload()
-		return nil
-	case socialtasklog.FieldTemplateSnapshot:
-		m.ClearTemplateSnapshot()
 		return nil
 	case socialtasklog.FieldResultMessage:
 		m.ClearResultMessage()

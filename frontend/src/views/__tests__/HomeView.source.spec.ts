@@ -20,4 +20,13 @@ describe('HomeView source', () => {
     expect(source).toContain('width: 100%;')
     expect(source).toContain('@media (max-width: 640px)')
   })
+
+  it('uses current SocialOps home tag locale keys', () => {
+    expect(source).toContain("t('home.tags.subscriptionAccess')")
+    expect(source).toContain("t('home.tags.accountAssignment')")
+    expect(source).toContain("t('home.tags.taskRecords')")
+    expect(source).not.toContain('home.tags.subscriptionToApi')
+    expect(source).not.toContain('home.tags.stickySession')
+    expect(source).not.toContain('home.tags.realtimeBilling')
+  })
 })

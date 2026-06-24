@@ -8,11 +8,16 @@ type Translate = (key: string) => string
 const backendSafeResultKeys: Record<string, string> = {
   '任务已完成，详细结果已隐藏': 'usage.taskResults.completedHidden',
   '任务执行失败，本次未扣费': 'usage.taskResults.failedNoCharge',
+  '任务执行超时，本次未扣费': 'usage.taskResults.executionTimeout',
   '任务队列繁忙，本次未扣费': 'usage.taskResults.queueBusy',
   '该平台动作暂不可用，本次未扣费': 'usage.taskResults.platformUnavailable',
   '执行已完成，但扣费确认异常，请联系管理员处理': 'usage.taskResults.billingAnomaly',
   '账号认证信息不可用，本次未扣费': 'usage.taskResults.authUnavailable',
+  '账号不存在，本次未扣费': 'usage.taskResults.accountNotFound',
   '执行代理不可用，本次未扣费': 'usage.taskResults.proxyUnavailable',
+  '平台网络请求失败，本次未扣费': 'usage.taskResults.platformNetworkFailed',
+  '密码错误，本次未扣费': 'usage.taskResults.passwordInvalid',
+  '登录依赖服务未配置，本次未扣费': 'usage.taskResults.loginDependencyNotConfigured',
   '该动作暂不支持，本次未扣费': 'usage.taskResults.unsupportedAction',
   '任务参数不完整，本次未扣费': 'usage.taskResults.invalidParams',
   '头像图片尺寸必须为 400x400，本次未扣费': 'usage.taskResults.avatarSizeInvalid',
@@ -39,27 +44,5 @@ export function formatSocialTaskResultMessage(row: SocialTaskResultRecord, trans
     return translated === localizedKey ? message : translated
   }
 
-  if (String(row.status || '').toLowerCase() === 'failed' && hasUnsafeDiagnosticDetail(message)) {
-    return translate('usage.safeResult')
-  }
-
   return message
-}
-
-function hasUnsafeDiagnosticDetail(message: string) {
-  const normalized = message.toLowerCase()
-  return [
-    'http://',
-    'https://',
-    'authorization',
-    'bearer ',
-    'token',
-    'secret',
-    'cookie',
-    'password',
-    'proxy',
-    'trace',
-    'trace_id',
-    '127.0.0.1',
-  ].some(marker => normalized.includes(marker))
 }

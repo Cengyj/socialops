@@ -7,7 +7,6 @@ import { apiClient } from './client'
 import type {
   PaymentConfig,
   SubscriptionPlan,
-  PaymentChannel,
   MethodLimitsResponse,
   CheckoutInfoResponse,
   CreateOrderRequest,
@@ -25,11 +24,6 @@ export const paymentAPI = {
   /** Get available subscription plans */
   getPlans() {
     return apiClient.get<SubscriptionPlan[]>('/payment/plans')
-  },
-
-  /** Get available payment channels */
-  getChannels() {
-    return apiClient.get<PaymentChannel[]>('/payment/channels')
   },
 
   /** Get all checkout page data in a single call */
@@ -62,12 +56,12 @@ export const paymentAPI = {
     return apiClient.post(`/payment/orders/${id}/cancel`)
   },
 
-  /** Verify order payment status with upstream provider */
+  /** Verify order payment status with the payment provider */
   verifyOrder(outTradeNo: string) {
     return apiClient.post<PaymentOrder>('/payment/orders/verify', { out_trade_no: outTradeNo })
   },
 
-  /** Legacy-compatible public order lookup by out_trade_no */
+  /** Public out_trade_no lookup used by provider return recovery */
   verifyOrderPublic(outTradeNo: string) {
     return apiClient.post<PaymentOrder>('/payment/public/orders/verify', { out_trade_no: outTradeNo })
   },

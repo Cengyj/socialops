@@ -19,16 +19,12 @@ const (
 	SocialTaskActionLogin         = "login"
 	SocialTaskActionLoginCheck    = "login_check"
 	SocialTaskActionFollow        = "follow"
-	SocialTaskActionMessage       = "message"
 	SocialTaskActionPost          = "post"
 	SocialTaskActionLike          = "like"
 	SocialTaskActionRetweet       = "retweet"
 	SocialTaskActionUpdateProfile = "update_profile"
 	SocialTaskActionUpdateAvatar  = "update_avatar"
 	SocialTaskActionUpdateBanner  = "update_banner"
-
-	legacySocialTaskActionDM    = "dm"
-	legacySocialTaskActionTweet = "tweet"
 )
 
 // SocialTaskLogStatus constants for execution
@@ -39,21 +35,26 @@ const (
 	SocialTaskLogStatusFailed  = "failed"
 )
 
-const socialTaskRunningRecoveryTimeout = 2 * time.Minute
+const (
+	socialTaskExecutionTimeout       = 60 * time.Second
+	socialTaskRunningRecoveryTimeout = 2 * time.Minute
+)
 
 // SocialTaskExecutor handles async execution of social tasks.
 type SocialTaskExecutor struct {
-	entClient   *dbent.Client
-	billing     *SocialBillingService
-	workerCount int
-	taskCh      chan int64 // task log IDs to process
-	stopCh      chan struct{}
-	wg          sync.WaitGroup
-	stopOnce    sync.Once
-	stopped     atomic.Bool
-	minInterval time.Duration // minimum interval between operations per account
-	maxRetries  int
-	executors   map[string]SocialPlatformExecutor
+	entClient           *dbent.Client
+	billing             *SocialBillingService
+	proxyChecker        *SocialIPChecker
+	workerCount         int
+	taskCh              chan int64 // task log IDs to process
+	stopCh              chan struct{}
+	wg                  sync.WaitGroup
+	stopOnce            sync.Once
+	stopped             atomic.Bool
+	minInterval         time.Duration // minimum interval between operations per account
+	maxRetries          int
+	executors           map[string]SocialPlatformExecutor
+	credentialEncryptor ExecutionAuthEncryptor
 }
 
 // SocialTaskExecutorConfig holds configuration for the task executor.
@@ -79,15 +80,24 @@ func NewSocialTaskExecutor(entClient *dbent.Client, billing *SocialBillingServic
 		cfg.MaxRetries = 2
 	}
 	return &SocialTaskExecutor{
-		entClient:   entClient,
-		billing:     billing,
-		workerCount: cfg.WorkerCount,
-		taskCh:      make(chan int64, cfg.QueueSize),
-		stopCh:      make(chan struct{}),
-		minInterval: time.Duration(cfg.MinIntervalMs) * time.Millisecond,
-		maxRetries:  cfg.MaxRetries,
-		executors:   make(map[string]SocialPlatformExecutor),
+		entClient:    entClient,
+		billing:      billing,
+		proxyChecker: NewSocialIPChecker(entClient),
+		workerCount:  cfg.WorkerCount,
+		taskCh:       make(chan int64, cfg.QueueSize),
+		stopCh:       make(chan struct{}),
+		minInterval:  time.Duration(cfg.MinIntervalMs) * time.Millisecond,
+		maxRetries:   cfg.MaxRetries,
+		executors:    make(map[string]SocialPlatformExecutor),
 	}
+}
+
+func (e *SocialTaskExecutor) WithCredentialEncryptor(encryptor ExecutionAuthEncryptor) *SocialTaskExecutor {
+	if e == nil {
+		return nil
+	}
+	e.credentialEncryptor = encryptor
+	return e
 }
 
 // RegisterPlatformExecutor attaches a real platform adapter to the task worker.
@@ -230,26 +240,37 @@ func (e *SocialTaskExecutor) failStaleRunningTasks(ctx context.Context, staleBef
 	if e == nil || e.entClient == nil {
 		return 0, nil
 	}
-	now := time.Now()
 	message := "任务执行超时，本次未扣费"
-	return e.entClient.SocialTaskLog.Update().
+	tasks, err := e.entClient.SocialTaskLog.Query().
 		Where(
 			socialtasklog.StatusEQ(SocialTaskLogStatusRunning),
 			socialtasklog.ChargeStatusEQ(SocialTaskChargeStatusNotCharged),
 			socialtasklog.UpdatedAtLTE(staleBefore),
 		).
-		SetStatus(SocialTaskLogStatusFailed).
-		SetResultMessage(message).
-		SetExecutedAt(now).
-		SetChargedAmount(0).
-		SetChargeStatus(SocialTaskChargeStatusNotCharged).
-		ClearChargeSource().
-		ClearBillingRequestID().
-		Save(ctx)
+		Order(dbent.Asc(socialtasklog.FieldUpdatedAt)).
+		All(ctx)
+	if err != nil {
+		return 0, err
+	}
+	accounts := NewSocialAccountServiceWithCredentialEncryptor(e.entClient, e.credentialEncryptor)
+	failed := 0
+	for _, task := range tasks {
+		if task == nil {
+			continue
+		}
+		if _, err := accounts.MarkStaleRunningTaskLogFailedNotCharged(ctx, int64(task.ID), staleBefore, message); err != nil {
+			if infraerrors.Reason(err) == "SOCIAL_TASK_LOG_FINALIZED" || infraerrors.Reason(err) == "SOCIAL_TASK_LOG_NOT_FOUND" {
+				continue
+			}
+			return failed, err
+		}
+		failed++
+	}
+	return failed, nil
 }
 
 func (e *SocialTaskExecutor) processTask(taskLogID int64) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), socialTaskExecutionTimeout)
 	defer cancel()
 
 	// Mark as running only from pending so duplicate enqueues cannot double-charge.
@@ -257,6 +278,7 @@ func (e *SocialTaskExecutor) processTask(taskLogID int64) {
 		Where(
 			socialtasklog.IDEQ(taskLogID),
 			socialtasklog.StatusEQ(SocialTaskLogStatusPending),
+			socialtasklog.ChargeStatusEQ(SocialTaskChargeStatusNotCharged),
 		).
 		SetStatus(SocialTaskLogStatusRunning).
 		Save(ctx)
@@ -276,31 +298,26 @@ func (e *SocialTaskExecutor) processTask(taskLogID int64) {
 
 	result, execErr := e.executeActionSafely(ctx, taskLog)
 
-	// Update status based on result
 	now := time.Now()
-	update := e.entClient.SocialTaskLog.UpdateOneID(int64(taskLogID)).
-		SetExecutedAt(now)
-
 	if execErr != nil {
-		e.recordAccountExecutionOutcome(ctx, taskLog, result, execErr)
+		e.refreshProxyStatusAfterNetworkFailure(taskLog, execErr)
 		errMsg := safeSocialTaskFailureMessage(execErr)
-		update.SetStatus(SocialTaskLogStatusFailed).
-			SetResultMessage(errMsg).
-			SetChargedAmount(0).
-			SetChargeStatus(SocialTaskChargeStatusNotCharged).
-			ClearChargeSource().
-			ClearBillingRequestID()
+		if err := e.markRunningTaskFailedNotCharged(ctx, taskLogID, errMsg, now); err != nil {
+			slog.Error("failed to update failed task result", "task_log_id", taskLogID, "error", err)
+			return
+		}
+		e.recordAccountExecutionOutcome(ctx, taskLog, result, execErr)
 		slog.Warn("social task failed", "task_log_id", taskLogID, "action", taskLog.Action, "error", errMsg)
+		return
 	} else {
 		charge, chargeErr := e.finalizeSuccessfulTask(ctx, taskLogID, taskLog.UserID, taskLog.Price, result)
 		if chargeErr != nil {
 			errMsg := safeSocialTaskFailureMessage(fmt.Errorf("execution succeeded but billing failed: %w", chargeErr))
-			update.SetStatus(SocialTaskLogStatusFailed).
-				SetResultMessage(errMsg).
-				SetChargedAmount(0).
-				SetChargeStatus(SocialTaskChargeStatusNotCharged).
-				ClearChargeSource().
-				ClearBillingRequestID()
+			if err := e.markRunningTaskFailedNotCharged(ctx, taskLogID, errMsg, now); err != nil {
+				slog.Error("failed to update billing-failed task result", "task_log_id", taskLogID, "error", err)
+				return
+			}
+			e.recordAccountBillingFailure(ctx, taskLog, errMsg)
 			slog.Error("social task billing failed after execution", "task_log_id", taskLogID, "action", taskLog.Action, "error", chargeErr)
 		} else {
 			e.recordAccountExecutionOutcome(ctx, taskLog, result, nil)
@@ -308,13 +325,63 @@ func (e *SocialTaskExecutor) processTask(taskLogID int64) {
 			return
 		}
 	}
+}
 
-	if _, err := update.Save(ctx); err != nil {
-		slog.Error("failed to update task result", "task_log_id", taskLogID, "error", err)
+func (e *SocialTaskExecutor) markRunningTaskFailedNotCharged(ctx context.Context, taskLogID int64, message string, executedAt time.Time) error {
+	if e == nil || e.entClient == nil {
+		return fmt.Errorf("social task executor is unavailable")
+	}
+	updated, err := e.entClient.SocialTaskLog.Update().
+		Where(
+			socialtasklog.IDEQ(taskLogID),
+			socialtasklog.StatusEQ(SocialTaskLogStatusRunning),
+			socialtasklog.ChargeStatusEQ(SocialTaskChargeStatusNotCharged),
+		).
+		SetStatus(SocialTaskLogStatusFailed).
+		SetResultMessage(message).
+		SetExecutedAt(executedAt).
+		SetChargedAmount(0).
+		SetChargeStatus(SocialTaskChargeStatusNotCharged).
+		ClearChargeSource().
+		ClearBillingRequestID().
+		Save(ctx)
+	if err != nil {
+		return err
+	}
+	if updated == 0 {
+		return fmt.Errorf("social task log is unavailable")
+	}
+	return nil
+}
+
+func (e *SocialTaskExecutor) refreshProxyStatusAfterNetworkFailure(taskLog *dbent.SocialTaskLog, execErr error) {
+	if e == nil || e.entClient == nil || taskLog == nil || taskLog.ProxyID == nil {
+		return
+	}
+	kind, ok := socialExecutionFailureKind(execErr)
+	if !ok || kind != SocialExecutionFailureNetwork {
+		return
+	}
+	checker := e.proxyChecker
+	if checker == nil {
+		checker = NewSocialIPChecker(e.entClient)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if _, err := checker.TestIP(ctx, int64(*taskLog.ProxyID)); err != nil {
+		slog.Warn(
+			"failed to refresh proxy status after social task network failure",
+			"task_log_id", taskLog.ID,
+			"proxy_id", *taskLog.ProxyID,
+			"error", err,
+		)
 	}
 }
 
 func (e *SocialTaskExecutor) executeAction(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
+	if taskLog == nil {
+		return "", fmt.Errorf("social task log is unavailable")
+	}
 	switch taskLog.Action {
 	case SocialTaskActionLogin:
 		return e.doLogin(ctx, taskLog)
@@ -322,8 +389,6 @@ func (e *SocialTaskExecutor) executeAction(ctx context.Context, taskLog *dbent.S
 		return e.doLoginCheck(ctx, taskLog)
 	case SocialTaskActionFollow:
 		return e.doFollow(ctx, taskLog)
-	case SocialTaskActionMessage:
-		return e.doMessage(ctx, taskLog)
 	case SocialTaskActionPost:
 		return e.doPost(ctx, taskLog)
 	case SocialTaskActionLike:
@@ -337,7 +402,7 @@ func (e *SocialTaskExecutor) executeAction(ctx context.Context, taskLog *dbent.S
 	case SocialTaskActionUpdateBanner:
 		return e.doUpdateBanner(ctx, taskLog)
 	default:
-		return "", fmt.Errorf("unsupported action: %s", taskLog.Action)
+		return "", newSocialExecutionError(SocialExecutionFailureUnsupported, fmt.Sprintf("unsupported action: %s", taskLog.Action), nil)
 	}
 }
 
@@ -359,7 +424,11 @@ func (e *SocialTaskExecutor) executeActionSafely(ctx context.Context, taskLog *d
 // --- Action implementations ---
 
 func unsupportedSocialAction(action string) (string, error) {
-	return "", fmt.Errorf("%s is not configured: social platform executor is not available", action)
+	return "", newSocialExecutionError(SocialExecutionFailurePlatform, fmt.Sprintf("%s is not configured: social platform executor is not available", action), nil)
+}
+
+func socialTaskActionInputError(message string) error {
+	return newSocialExecutionError(SocialExecutionFailureActionInput, message, nil)
 }
 
 func (e *SocialTaskExecutor) executePlatformAction(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
@@ -392,9 +461,6 @@ func validateTaskExecutionAccountScope(taskLog *dbent.SocialTaskLog, account *db
 	if account.AssignedUserID == nil || int64(*account.AssignedUserID) != taskLog.UserID {
 		return fmt.Errorf("social account is unavailable")
 	}
-	if account.UserWorkbenchDeletedAt != nil {
-		return fmt.Errorf("social account is unavailable")
-	}
 	if account.AccountStatus != SocialAccountStatusAvailable {
 		return fmt.Errorf("social account is unavailable")
 	}
@@ -408,15 +474,12 @@ func (e *SocialTaskExecutor) doLoginCheck(ctx context.Context, taskLog *dbent.So
 // validateLoginAccountScope mirrors validateTaskExecutionAccountScope but omits
 // the "available" requirement: login is the action that acquires credentials and
 // makes a freshly imported account available, so it must run on not-yet-available
-// accounts. Ownership and workbench presence are still enforced.
+// accounts. Ownership is still enforced.
 func validateLoginAccountScope(taskLog *dbent.SocialTaskLog, account *dbent.SocialAccount) error {
 	if taskLog == nil || account == nil {
 		return fmt.Errorf("social account is unavailable")
 	}
 	if account.AssignedUserID == nil || int64(*account.AssignedUserID) != taskLog.UserID {
-		return fmt.Errorf("social account is unavailable")
-	}
-	if account.UserWorkbenchDeletedAt != nil {
 		return fmt.Errorf("social account is unavailable")
 	}
 	return nil
@@ -453,7 +516,7 @@ func (e *SocialTaskExecutor) doLogin(ctx context.Context, taskLog *dbent.SocialT
 	if result == nil || strings.TrimSpace(result.ExecutionAuth) == "" {
 		return "", newSocialExecutionError(SocialExecutionFailureAuthInvalid, "login succeeded without usable auth credentials", nil)
 	}
-	if err := e.persistLoginCredentials(ctx, account.ID, result); err != nil {
+	if err := e.persistLoginCredentials(ctx, account.ID, account.Name, result); err != nil {
 		slog.Error("social login credential write-back failed", "task_log_id", taskLog.ID, "account_id", account.ID, "error", err)
 		return "", newSocialExecutionError(SocialExecutionFailurePlatform, "failed to store login credentials", err)
 	}
@@ -467,9 +530,13 @@ func (e *SocialTaskExecutor) doLogin(ctx context.Context, taskLog *dbent.SocialT
 // persistLoginCredentials writes acquired execution credentials back to the
 // account. It runs before the billing finalizer so a write failure fails the
 // task closed without charge.
-func (e *SocialTaskExecutor) persistLoginCredentials(ctx context.Context, accountID int64, result *SocialAccountCredentialResult) error {
+func (e *SocialTaskExecutor) persistLoginCredentials(ctx context.Context, accountID int64, accountName string, result *SocialAccountCredentialResult) error {
+	executionAuth, err := normalizeTwitterExecutionAuthForEncryptedStorage(result.ExecutionAuth, accountName, e.credentialEncryptor)
+	if err != nil {
+		return err
+	}
 	update := e.entClient.SocialAccount.UpdateOneID(accountID).
-		SetExecutionAuth(strings.TrimSpace(result.ExecutionAuth)).
+		SetExecutionAuth(executionAuth).
 		SetAccountStatus(SocialAccountStatusAvailable).
 		SetTaskStatus(SocialTaskStatusStored)
 	if authCookie := strings.TrimSpace(result.AuthCookie); authCookie != "" {
@@ -478,67 +545,57 @@ func (e *SocialTaskExecutor) persistLoginCredentials(ctx context.Context, accoun
 	if platformUserID := trimPtr(result.PlatformUserID); platformUserID != "" {
 		update.SetPlatformUserID(platformUserID)
 	}
-	_, err := update.Save(ctx)
+	_, err = update.Save(ctx)
 	return err
-}
-
-func (e *SocialTaskExecutor) doMessage(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
-	if taskLog.Target == nil || *taskLog.Target == "" {
-		return "", fmt.Errorf("message target is required")
-	}
-	if taskLog.Content == nil || *taskLog.Content == "" {
-		return "", fmt.Errorf("message content is required")
-	}
-	return e.executePlatformAction(ctx, taskLog)
 }
 
 func (e *SocialTaskExecutor) doFollow(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
 	if socialTaskLogTarget(taskLog) == "" {
-		return "", fmt.Errorf("follow target is required")
+		return "", socialTaskActionInputError("follow target is required")
 	}
 	return e.executePlatformAction(ctx, taskLog)
 }
 
 func (e *SocialTaskExecutor) doPost(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
-	hasContent := taskLog.Content != nil && strings.TrimSpace(*taskLog.Content) != ""
+	hasContent := taskLog != nil && taskLog.Content != nil && strings.TrimSpace(*taskLog.Content) != ""
 	hasMedia := taskLog != nil && taskLog.Payload.Post != nil && len(taskLog.Payload.Post.Media) > 0
 	if !hasContent && !hasMedia {
-		return "", fmt.Errorf("post content or media is required")
+		return "", socialTaskActionInputError("post content or media is required")
 	}
 	return e.executePlatformAction(ctx, taskLog)
 }
 
 func (e *SocialTaskExecutor) doUpdateProfile(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
 	if taskLog == nil || taskLog.Payload.Profile == nil || taskLog.Payload.Profile.IsZero() {
-		return "", fmt.Errorf("profile payload is required")
+		return "", socialTaskActionInputError("profile payload is required")
 	}
 	return e.executePlatformAction(ctx, taskLog)
 }
 
 func (e *SocialTaskExecutor) doUpdateAvatar(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
 	if taskLog == nil || taskLog.Payload.Avatar == nil || taskLog.Payload.Avatar.IsZero() {
-		return "", fmt.Errorf("avatar media is required")
+		return "", socialTaskActionInputError("avatar media is required")
 	}
 	return e.executePlatformAction(ctx, taskLog)
 }
 
 func (e *SocialTaskExecutor) doUpdateBanner(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
 	if taskLog == nil || taskLog.Payload.Banner == nil || taskLog.Payload.Banner.IsZero() {
-		return "", fmt.Errorf("banner media is required")
+		return "", socialTaskActionInputError("banner media is required")
 	}
 	return e.executePlatformAction(ctx, taskLog)
 }
 
 func (e *SocialTaskExecutor) doLike(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
 	if socialTaskLogTarget(taskLog) == "" {
-		return "", fmt.Errorf("like target (post URL/ID) is required")
+		return "", socialTaskActionInputError("like target (post URL/ID) is required")
 	}
 	return e.executePlatformAction(ctx, taskLog)
 }
 
 func (e *SocialTaskExecutor) doRetweet(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
 	if socialTaskLogTarget(taskLog) == "" {
-		return "", fmt.Errorf("retweet target (post URL/ID) is required")
+		return "", socialTaskActionInputError("retweet target (post URL/ID) is required")
 	}
 	return e.executePlatformAction(ctx, taskLog)
 }
@@ -566,7 +623,10 @@ func (e *SocialTaskExecutor) ProcessPendingTasks(ctx context.Context, limit int)
 		limit = 50
 	}
 	tasks, err := e.entClient.SocialTaskLog.Query().
-		Where(socialtasklog.StatusEQ(SocialTaskLogStatusPending)).
+		Where(
+			socialtasklog.StatusEQ(SocialTaskLogStatusPending),
+			socialtasklog.ChargeStatusEQ(SocialTaskChargeStatusNotCharged),
+		).
 		Order(dbent.Asc(socialtasklog.FieldCreatedAt)).
 		Limit(limit).
 		All(ctx)
@@ -582,7 +642,7 @@ func (e *SocialTaskExecutor) ProcessPendingTasks(ctx context.Context, limit int)
 		return 0, nil
 	}
 	if e.taskCh == nil || e.isStopped() {
-		message := "social platform executor queue is not configured; task was not charged"
+		message := safeSocialTaskFailureMessage(fmt.Errorf("social platform executor queue is not configured; task was not charged"))
 		if err := e.markPendingTasksFailedNotCharged(ctx, ids, message); err != nil {
 			return 0, err
 		}
@@ -590,7 +650,7 @@ func (e *SocialTaskExecutor) ProcessPendingTasks(ctx context.Context, limit int)
 	}
 	enqueued, failedIDs := e.EnqueueBatch(ids)
 	if len(failedIDs) > 0 {
-		message := "social platform executor queue is full; task was not charged"
+		message := safeSocialTaskFailureMessage(fmt.Errorf("social platform executor queue is full; task was not charged"))
 		if err := e.markPendingTasksFailedNotCharged(ctx, failedIDs, message); err != nil {
 			return enqueued, err
 		}
@@ -599,21 +659,9 @@ func (e *SocialTaskExecutor) ProcessPendingTasks(ctx context.Context, limit int)
 }
 
 func (e *SocialTaskExecutor) markPendingTasksFailedNotCharged(ctx context.Context, taskLogIDs []int64, message string) error {
-	now := time.Now()
+	accounts := NewSocialAccountServiceWithCredentialEncryptor(e.entClient, e.credentialEncryptor)
 	for _, taskLogID := range taskLogIDs {
-		if _, err := e.entClient.SocialTaskLog.Update().
-			Where(
-				socialtasklog.IDEQ(taskLogID),
-				socialtasklog.StatusEQ(SocialTaskLogStatusPending),
-			).
-			SetStatus(SocialTaskLogStatusFailed).
-			SetResultMessage(message).
-			SetExecutedAt(now).
-			SetChargedAmount(0).
-			SetChargeStatus(SocialTaskChargeStatusNotCharged).
-			ClearChargeSource().
-			ClearBillingRequestID().
-			Save(ctx); err != nil {
+		if _, err := accounts.MarkTaskLogFailedNotCharged(ctx, taskLogID, message); err != nil {
 			return err
 		}
 	}
@@ -625,6 +673,23 @@ func (e *SocialTaskExecutor) finalizeSuccessfulTask(ctx context.Context, taskLog
 		return nil, fmt.Errorf("social billing finalizer is unavailable")
 	}
 	return e.billing.FinalizeSuccessfulTask(ctx, e.entClient, taskLogID, userID, amount, result)
+}
+
+func (e *SocialTaskExecutor) recordAccountBillingFailure(ctx context.Context, taskLog *dbent.SocialTaskLog, message string) {
+	if e == nil || e.entClient == nil || taskLog == nil || taskLog.SocialAccountID <= 0 {
+		return
+	}
+	update := e.entClient.SocialAccount.UpdateOneID(taskLog.SocialAccountID).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored)
+	if strings.TrimSpace(message) != "" {
+		update.SetTaskMessage(message)
+	} else {
+		update.ClearTaskMessage()
+	}
+	if _, err := update.Save(ctx); err != nil {
+		slog.Warn("failed to update social account billing failure state", "task_log_id", taskLog.ID, "account_id", taskLog.SocialAccountID, "error", err)
+	}
 }
 
 func (e *SocialTaskExecutor) recordAccountExecutionOutcome(ctx context.Context, taskLog *dbent.SocialTaskLog, result string, execErr error) {
@@ -653,6 +718,10 @@ func (e *SocialTaskExecutor) recordAccountExecutionOutcome(ctx context.Context, 
 	update := e.entClient.SocialAccount.UpdateOneID(taskLog.SocialAccountID).
 		SetTaskMessage(safeSocialTaskFailureMessage(execErr))
 	accountStatus, taskStatus, shouldUpdate := socialAccountStateForExecutionFailure(kind)
+	if !shouldUpdate && taskLog.Action == SocialTaskActionLogin {
+		taskStatus = SocialTaskStatusFailed
+		shouldUpdate = true
+	}
 	if !shouldUpdate {
 		if _, err := update.Save(ctx); err != nil {
 			slog.Warn(
@@ -683,8 +752,20 @@ func (e *SocialTaskExecutor) recordAccountExecutionOutcome(ctx context.Context, 
 }
 
 func safeSocialTaskFailureMessage(err error) string {
-	rawMessage := strings.TrimSpace(fmt.Sprint(err))
+	rawMessage := strings.Join(strings.Fields(fmt.Sprint(err)), " ")
 	normalizedMessage := strings.ToLower(rawMessage)
+	if rawMessage == "" {
+		return "任务执行失败，本次未扣费"
+	}
+	if kind, ok := socialExecutionFailureKind(err); ok && kind == SocialExecutionFailurePasswordInvalid {
+		return "密码错误，本次未扣费"
+	}
+	if message, ok := knownSocialTaskFailureMessage(rawMessage); ok {
+		return message
+	}
+	if IsTwitterPlatformFailureMessage(rawMessage) {
+		return rawMessage
+	}
 	switch {
 	case strings.Contains(normalizedMessage, "avatar image must be 400x400 pixels"):
 		return "头像图片尺寸必须为 400x400，本次未扣费"
@@ -692,9 +773,9 @@ func safeSocialTaskFailureMessage(err error) string {
 		return "背景图图片尺寸必须为 1500x500，本次未扣费"
 	case strings.Contains(normalizedMessage, "media asset is unavailable"):
 		return "任务媒体资源不可用，本次未扣费"
-	case strings.Contains(normalizedMessage, "media source is not supported yet"):
+	case strings.Contains(normalizedMessage, "media source is not supported for socialops execution"):
 		return "媒体引用暂未开放，本次未扣费"
-	case strings.Contains(normalizedMessage, "video media is not implemented yet"):
+	case strings.Contains(normalizedMessage, "video media is not supported for socialops execution"):
 		return "视频发帖媒体暂未开放，本次未扣费"
 	case strings.Contains(normalizedMessage, "post media content type is not supported"):
 		return "发帖媒体类型暂不支持，本次未扣费"
@@ -716,10 +797,16 @@ func safeSocialTaskFailureMessage(err error) string {
 	kind, ok := socialExecutionFailureKind(err)
 	if ok {
 		switch kind {
+		case SocialExecutionFailurePasswordInvalid:
+			return "密码错误，本次未扣费"
 		case SocialExecutionFailureAuthMissing, SocialExecutionFailureAuthInvalid:
 			return "账号认证信息不可用，本次未扣费"
-		case SocialExecutionFailureProxyMissing, SocialExecutionFailureProxyInvalid, SocialExecutionFailureProxyUnavailable, SocialExecutionFailureNetwork:
+		case SocialExecutionFailureProxyMissing, SocialExecutionFailureProxyInvalid, SocialExecutionFailureProxyUnavailable:
 			return "执行代理不可用，本次未扣费"
+		case SocialExecutionFailureNetwork:
+			return "平台网络请求失败，本次未扣费"
+		case SocialExecutionFailureConfiguration:
+			return "登录依赖服务未配置，本次未扣费"
 		case SocialExecutionFailureUnsupported:
 			return "该动作暂不支持，本次未扣费"
 		case SocialExecutionFailureActionInput:
@@ -729,21 +816,33 @@ func safeSocialTaskFailureMessage(err error) string {
 		case SocialExecutionFailureAccountLimited:
 			return "账号状态或频率受限，本次未扣费"
 		case SocialExecutionFailurePlatform:
-			return "该平台动作暂不可用，本次未扣费"
+			return rawMessage
 		}
 	}
 	message := normalizedMessage
 	switch {
+	case strings.Contains(message, "wrong password") ||
+		strings.Contains(message, "incorrect password") ||
+		strings.Contains(message, "invalid password") ||
+		strings.Contains(message, "password is incorrect") ||
+		strings.Contains(message, "password you entered is incorrect") ||
+		strings.Contains(message, "密码错误"):
+		return "密码错误，本次未扣费"
 	case strings.Contains(message, "queue is full"):
 		return "任务队列繁忙，本次未扣费"
 	case strings.Contains(message, "billing failed"):
 		return "执行已完成，但扣费确认异常，请联系管理员处理"
-	case strings.Contains(message, "not configured") || strings.Contains(message, "executor is not available") || strings.Contains(message, "executor queue"):
-		return "该平台动作暂不可用，本次未扣费"
+	case strings.Contains(message, "device fingerprint provider is not configured") ||
+		strings.Contains(message, "twitter login is not configured"):
+		return "登录依赖服务未配置，本次未扣费"
 	case strings.Contains(message, "auth cookie") || strings.Contains(message, "authentication failed") || strings.Contains(message, "oauth") || strings.Contains(message, "token"):
 		return "账号认证信息不可用，本次未扣费"
+	case strings.Contains(message, "global proxy"):
+		return "全局代理不可用，本次未扣费"
 	case strings.Contains(message, "proxy"):
 		return "执行代理不可用，本次未扣费"
+	case strings.Contains(message, "network") || strings.Contains(message, "timeout") || strings.Contains(message, "connection"):
+		return "平台网络请求失败，本次未扣费"
 	case strings.Contains(message, "unsupported action"):
 		return "该动作暂不支持，本次未扣费"
 	case strings.Contains(message, "target is required") || strings.Contains(message, "content is required"):
@@ -763,21 +862,66 @@ func safeSocialTaskFailureMessage(err error) string {
 	case strings.Contains(message, "access denied"):
 		return "平台拒绝执行，本次未扣费"
 	default:
-		return "任务执行失败，本次未扣费"
+		return rawMessage
 	}
+}
+
+func knownSocialTaskFailureMessage(message string) (string, bool) {
+	if translated, ok := KnownTwitterTaskFailureMessage(message); ok {
+		return translated, true
+	}
+	if IsTwitterPlatformFailureMessage(message) {
+		return "", false
+	}
+	normalized := strings.ToLower(strings.Join(strings.Fields(message), " "))
+	switch {
+	case strings.Contains(normalized, "wrong password") ||
+		strings.Contains(normalized, "incorrect password") ||
+		strings.Contains(normalized, "invalid password") ||
+		strings.Contains(normalized, "password is incorrect") ||
+		strings.Contains(normalized, "password you entered is incorrect") ||
+		strings.Contains(normalized, "密码错误"):
+		return "密码错误，本次未扣费", true
+	case strings.Contains(normalized, "could not find your account") ||
+		strings.Contains(normalized, "account not found") ||
+		strings.Contains(normalized, "user not found"):
+		return "账号不存在，本次未扣费", true
+	case strings.Contains(normalized, "challenge required") ||
+		strings.Contains(normalized, "captcha challenge") ||
+		strings.Contains(normalized, "verification required") ||
+		strings.Contains(normalized, "verify login") ||
+		strings.Contains(normalized, "additional verification") ||
+		strings.Contains(normalized, "confirm your identity"):
+		return "账号需要额外验证，本次未扣费", true
+	case strings.Contains(normalized, "suspended") ||
+		strings.Contains(normalized, "locked") ||
+		strings.Contains(normalized, "automated") ||
+		strings.Contains(normalized, "rate limit") ||
+		strings.Contains(normalized, "too frequent") ||
+		strings.Contains(normalized, "follow limit"):
+		return "账号状态或频率受限，本次未扣费", true
+	case strings.Contains(normalized, "content is too long") ||
+		strings.Contains(normalized, "duplicate") ||
+		strings.Contains(normalized, "already") ||
+		strings.Contains(normalized, "restricted"):
+		return "内容或目标状态不符合平台要求，本次未扣费", true
+	case strings.Contains(normalized, "authentication failed"):
+		return "账号认证信息不可用，本次未扣费", true
+	}
+	return "", false
 }
 
 func socialAccountStateForExecutionFailure(kind SocialExecutionFailureKind) (accountStatus, taskStatus string, shouldUpdate bool) {
 	switch kind {
 	case SocialExecutionFailureAuthMissing:
 		return SocialAccountStatusNotStored, SocialTaskStatusManualReview, true
-	case SocialExecutionFailureAuthInvalid:
+	case SocialExecutionFailureAuthInvalid, SocialExecutionFailurePasswordInvalid:
 		return SocialAccountStatusInvalid, SocialTaskStatusManualReview, true
 	case SocialExecutionFailureAccountLimited:
 		return SocialAccountStatusLimited, SocialTaskStatusManualReview, true
 	case SocialExecutionFailureChallengeRequired:
 		return SocialAccountStatusPendingCheck, SocialTaskStatusManualReview, true
-	case SocialExecutionFailureProxyMissing, SocialExecutionFailureProxyInvalid, SocialExecutionFailureProxyUnavailable, SocialExecutionFailureNetwork:
+	case SocialExecutionFailureProxyMissing, SocialExecutionFailureProxyInvalid, SocialExecutionFailureProxyUnavailable:
 		return "", SocialTaskStatusIPUnavailable, true
 	default:
 		return "", "", false

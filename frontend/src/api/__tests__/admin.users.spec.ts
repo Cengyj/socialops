@@ -1,19 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { post } = vi.hoisted(() => ({
+const { get, post } = vi.hoisted(() => ({
+  get: vi.fn(),
   post: vi.fn(),
 }))
 
 vi.mock('@/api/client', () => ({
   apiClient: {
+    get,
     post,
   },
 }))
 
 import {
   bindUserAuthIdentity,
+  getUserUsageStats,
   type AdminBindAuthIdentityRequest,
   type AdminBoundAuthIdentity,
+  type AdminUserUsageStats,
 } from '@/api/admin/users'
 
 type Assert<T extends true> = T
@@ -57,15 +61,24 @@ type ExpectedAdminBoundAuthIdentity = {
   } | null
 }
 
+type ExpectedAdminUserUsageStats = {
+  total_operations: number
+  total_charged: number
+}
+
 const requestContractExact: Assert<
   IsExact<AdminBindAuthIdentityRequest, ExpectedAdminBindAuthIdentityRequest>
 > = true
 const responseContractExact: Assert<
   IsExact<AdminBoundAuthIdentity, ExpectedAdminBoundAuthIdentity>
 > = true
+const userUsageStatsContractExact: Assert<
+  IsExact<AdminUserUsageStats, ExpectedAdminUserUsageStats>
+> = true
 
 describe('admin users api auth identity binding', () => {
   beforeEach(() => {
+    get.mockReset()
     post.mockReset()
   })
 
@@ -110,8 +123,25 @@ describe('admin users api auth identity binding', () => {
     expect(result).toEqual(response)
   })
 
+  it('loads user SocialOps task stats without removed period or token fields', async () => {
+    const stats: AdminUserUsageStats = {
+      total_operations: 12,
+      total_charged: 1.2,
+    }
+    get.mockResolvedValue({ data: stats })
+
+    const result = await getUserUsageStats(9)
+
+    expect(get).toHaveBeenCalledWith('/admin/users/9/usage')
+    expect(result).toEqual(stats)
+    expect(result).not.toHaveProperty('total_requests')
+    expect(result).not.toHaveProperty('total_cost')
+    expect(result).not.toHaveProperty('total_tokens')
+  })
+
   it('keeps bind auth identity request and response types aligned with the backend contract', () => {
     expect(requestContractExact).toBe(true)
     expect(responseContractExact).toBe(true)
+    expect(userUsageStatsContractExact).toBe(true)
   })
 })

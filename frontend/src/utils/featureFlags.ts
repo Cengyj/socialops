@@ -29,7 +29,7 @@
  *     that ship enabled by default (for example Payment).
  *   - **`opt-in`**  (default disabled) — menu hidden when settings unloaded,
  *     visible only when the backend explicitly sends `true`. Use for features
- *     that ship disabled until explicitly enabled (for example Risk Control).
+ *     that ship disabled until explicitly enabled (for example Affiliate).
  *
  * For `opt-in` flags to render immediately on refresh, the backend **must**
  * inject the field through `PublicSettingsInjectionPayload`. A drift test in
@@ -97,11 +97,6 @@ export const FeatureFlags = {
     key: 'payment_enabled',
     mode: 'opt-out',
     label: 'Payment',
-  }),
-  riskControl: defineFlag({
-    key: 'risk_control_enabled',
-    mode: 'opt-in',
-    label: 'Risk Control',
   }),
   affiliate: defineFlag({
     key: 'affiliate_enabled',

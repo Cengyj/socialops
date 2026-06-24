@@ -19,8 +19,6 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
-	// FieldDeletedAt holds the string denoting the deleted_at field in the database.
-	FieldDeletedAt = "deleted_at"
 	// FieldName holds the string denoting the name field in the database.
 	FieldName = "name"
 	// FieldPlatform holds the string denoting the platform field in the database.
@@ -67,8 +65,6 @@ const (
 	FieldDefaultProxySnapshot = "default_proxy_snapshot"
 	// FieldAssignedUserID holds the string denoting the assigned_user_id field in the database.
 	FieldAssignedUserID = "assigned_user_id"
-	// FieldUserWorkbenchDeletedAt holds the string denoting the user_workbench_deleted_at field in the database.
-	FieldUserWorkbenchDeletedAt = "user_workbench_deleted_at"
 	// FieldRemark holds the string denoting the remark field in the database.
 	FieldRemark = "remark"
 	// EdgeAssignedUser holds the string denoting the assigned_user edge name in mutations.
@@ -98,7 +94,6 @@ var Columns = []string{
 	FieldID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
-	FieldDeletedAt,
 	FieldName,
 	FieldPlatform,
 	FieldPlatformKey,
@@ -122,7 +117,6 @@ var Columns = []string{
 	FieldTaskMessage,
 	FieldDefaultProxySnapshot,
 	FieldAssignedUserID,
-	FieldUserWorkbenchDeletedAt,
 	FieldRemark,
 }
 
@@ -142,8 +136,7 @@ func ValidColumn(column string) bool {
 //
 //	import _ "github.com/Wei-Shaw/socialops/ent/runtime"
 var (
-	Hooks        [2]ent.Hook
-	Interceptors [1]ent.Interceptor
+	Hooks [1]ent.Hook
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -208,11 +201,6 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
-}
-
-// ByDeletedAt orders the results by the deleted_at field.
-func ByDeletedAt(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldDeletedAt, opts...).ToFunc()
 }
 
 // ByName orders the results by the name field.
@@ -328,11 +316,6 @@ func ByDefaultProxySnapshot(opts ...sql.OrderTermOption) OrderOption {
 // ByAssignedUserID orders the results by the assigned_user_id field.
 func ByAssignedUserID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAssignedUserID, opts...).ToFunc()
-}
-
-// ByUserWorkbenchDeletedAt orders the results by the user_workbench_deleted_at field.
-func ByUserWorkbenchDeletedAt(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldUserWorkbenchDeletedAt, opts...).ToFunc()
 }
 
 // ByRemark orders the results by the remark field.

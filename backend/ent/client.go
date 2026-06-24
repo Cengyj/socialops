@@ -20,6 +20,7 @@ import (
 	"github.com/Wei-Shaw/socialops/ent/apikey"
 	"github.com/Wei-Shaw/socialops/ent/authidentity"
 	"github.com/Wei-Shaw/socialops/ent/authidentitychannel"
+	"github.com/Wei-Shaw/socialops/ent/globalproxy"
 	"github.com/Wei-Shaw/socialops/ent/group"
 	"github.com/Wei-Shaw/socialops/ent/identityadoptiondecision"
 	"github.com/Wei-Shaw/socialops/ent/paymentauditlog"
@@ -61,6 +62,8 @@ type Client struct {
 	AuthIdentity *AuthIdentityClient
 	// AuthIdentityChannel is the client for interacting with the AuthIdentityChannel builders.
 	AuthIdentityChannel *AuthIdentityChannelClient
+	// GlobalProxy is the client for interacting with the GlobalProxy builders.
+	GlobalProxy *GlobalProxyClient
 	// Group is the client for interacting with the Group builders.
 	Group *GroupClient
 	// IdentityAdoptionDecision is the client for interacting with the IdentityAdoptionDecision builders.
@@ -121,6 +124,7 @@ func (c *Client) init() {
 	c.AnnouncementRead = NewAnnouncementReadClient(c.config)
 	c.AuthIdentity = NewAuthIdentityClient(c.config)
 	c.AuthIdentityChannel = NewAuthIdentityChannelClient(c.config)
+	c.GlobalProxy = NewGlobalProxyClient(c.config)
 	c.Group = NewGroupClient(c.config)
 	c.IdentityAdoptionDecision = NewIdentityAdoptionDecisionClient(c.config)
 	c.PaymentAuditLog = NewPaymentAuditLogClient(c.config)
@@ -240,6 +244,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		AnnouncementRead:         NewAnnouncementReadClient(cfg),
 		AuthIdentity:             NewAuthIdentityClient(cfg),
 		AuthIdentityChannel:      NewAuthIdentityChannelClient(cfg),
+		GlobalProxy:              NewGlobalProxyClient(cfg),
 		Group:                    NewGroupClient(cfg),
 		IdentityAdoptionDecision: NewIdentityAdoptionDecisionClient(cfg),
 		PaymentAuditLog:          NewPaymentAuditLogClient(cfg),
@@ -286,6 +291,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		AnnouncementRead:         NewAnnouncementReadClient(cfg),
 		AuthIdentity:             NewAuthIdentityClient(cfg),
 		AuthIdentityChannel:      NewAuthIdentityChannelClient(cfg),
+		GlobalProxy:              NewGlobalProxyClient(cfg),
 		Group:                    NewGroupClient(cfg),
 		IdentityAdoptionDecision: NewIdentityAdoptionDecisionClient(cfg),
 		PaymentAuditLog:          NewPaymentAuditLogClient(cfg),
@@ -338,12 +344,12 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.APIKey, c.Announcement, c.AnnouncementRead, c.AuthIdentity,
-		c.AuthIdentityChannel, c.Group, c.IdentityAdoptionDecision, c.PaymentAuditLog,
-		c.PaymentOrder, c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode,
-		c.PromoCodeUsage, c.RedeemCode, c.SecuritySecret, c.Setting, c.SocialAccount,
-		c.SocialIP, c.SocialTaskLog, c.SubscriptionPlan, c.UsageCleanupTask,
-		c.UsageLog, c.User, c.UserAllowedGroup, c.UserAttributeDefinition,
-		c.UserAttributeValue, c.UserSubscription,
+		c.AuthIdentityChannel, c.GlobalProxy, c.Group, c.IdentityAdoptionDecision,
+		c.PaymentAuditLog, c.PaymentOrder, c.PaymentProviderInstance,
+		c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage, c.RedeemCode,
+		c.SecuritySecret, c.Setting, c.SocialAccount, c.SocialIP, c.SocialTaskLog,
+		c.SubscriptionPlan, c.UsageCleanupTask, c.UsageLog, c.User, c.UserAllowedGroup,
+		c.UserAttributeDefinition, c.UserAttributeValue, c.UserSubscription,
 	} {
 		n.Use(hooks...)
 	}
@@ -354,12 +360,12 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.APIKey, c.Announcement, c.AnnouncementRead, c.AuthIdentity,
-		c.AuthIdentityChannel, c.Group, c.IdentityAdoptionDecision, c.PaymentAuditLog,
-		c.PaymentOrder, c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode,
-		c.PromoCodeUsage, c.RedeemCode, c.SecuritySecret, c.Setting, c.SocialAccount,
-		c.SocialIP, c.SocialTaskLog, c.SubscriptionPlan, c.UsageCleanupTask,
-		c.UsageLog, c.User, c.UserAllowedGroup, c.UserAttributeDefinition,
-		c.UserAttributeValue, c.UserSubscription,
+		c.AuthIdentityChannel, c.GlobalProxy, c.Group, c.IdentityAdoptionDecision,
+		c.PaymentAuditLog, c.PaymentOrder, c.PaymentProviderInstance,
+		c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage, c.RedeemCode,
+		c.SecuritySecret, c.Setting, c.SocialAccount, c.SocialIP, c.SocialTaskLog,
+		c.SubscriptionPlan, c.UsageCleanupTask, c.UsageLog, c.User, c.UserAllowedGroup,
+		c.UserAttributeDefinition, c.UserAttributeValue, c.UserSubscription,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -378,6 +384,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.AuthIdentity.mutate(ctx, m)
 	case *AuthIdentityChannelMutation:
 		return c.AuthIdentityChannel.mutate(ctx, m)
+	case *GlobalProxyMutation:
+		return c.GlobalProxy.mutate(ctx, m)
 	case *GroupMutation:
 		return c.Group.mutate(ctx, m)
 	case *IdentityAdoptionDecisionMutation:
@@ -1251,6 +1259,141 @@ func (c *AuthIdentityChannelClient) mutate(ctx context.Context, m *AuthIdentityC
 		return (&AuthIdentityChannelDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown AuthIdentityChannel mutation op: %q", m.Op())
+	}
+}
+
+// GlobalProxyClient is a client for the GlobalProxy schema.
+type GlobalProxyClient struct {
+	config
+}
+
+// NewGlobalProxyClient returns a client for the GlobalProxy from the given config.
+func NewGlobalProxyClient(c config) *GlobalProxyClient {
+	return &GlobalProxyClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `globalproxy.Hooks(f(g(h())))`.
+func (c *GlobalProxyClient) Use(hooks ...Hook) {
+	c.hooks.GlobalProxy = append(c.hooks.GlobalProxy, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `globalproxy.Intercept(f(g(h())))`.
+func (c *GlobalProxyClient) Intercept(interceptors ...Interceptor) {
+	c.inters.GlobalProxy = append(c.inters.GlobalProxy, interceptors...)
+}
+
+// Create returns a builder for creating a GlobalProxy entity.
+func (c *GlobalProxyClient) Create() *GlobalProxyCreate {
+	mutation := newGlobalProxyMutation(c.config, OpCreate)
+	return &GlobalProxyCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of GlobalProxy entities.
+func (c *GlobalProxyClient) CreateBulk(builders ...*GlobalProxyCreate) *GlobalProxyCreateBulk {
+	return &GlobalProxyCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GlobalProxyClient) MapCreateBulk(slice any, setFunc func(*GlobalProxyCreate, int)) *GlobalProxyCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GlobalProxyCreateBulk{err: fmt.Errorf("calling to GlobalProxyClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GlobalProxyCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GlobalProxyCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for GlobalProxy.
+func (c *GlobalProxyClient) Update() *GlobalProxyUpdate {
+	mutation := newGlobalProxyMutation(c.config, OpUpdate)
+	return &GlobalProxyUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GlobalProxyClient) UpdateOne(_m *GlobalProxy) *GlobalProxyUpdateOne {
+	mutation := newGlobalProxyMutation(c.config, OpUpdateOne, withGlobalProxy(_m))
+	return &GlobalProxyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GlobalProxyClient) UpdateOneID(id int64) *GlobalProxyUpdateOne {
+	mutation := newGlobalProxyMutation(c.config, OpUpdateOne, withGlobalProxyID(id))
+	return &GlobalProxyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for GlobalProxy.
+func (c *GlobalProxyClient) Delete() *GlobalProxyDelete {
+	mutation := newGlobalProxyMutation(c.config, OpDelete)
+	return &GlobalProxyDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GlobalProxyClient) DeleteOne(_m *GlobalProxy) *GlobalProxyDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GlobalProxyClient) DeleteOneID(id int64) *GlobalProxyDeleteOne {
+	builder := c.Delete().Where(globalproxy.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GlobalProxyDeleteOne{builder}
+}
+
+// Query returns a query builder for GlobalProxy.
+func (c *GlobalProxyClient) Query() *GlobalProxyQuery {
+	return &GlobalProxyQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGlobalProxy},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a GlobalProxy entity by its id.
+func (c *GlobalProxyClient) Get(ctx context.Context, id int64) (*GlobalProxy, error) {
+	return c.Query().Where(globalproxy.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GlobalProxyClient) GetX(ctx context.Context, id int64) *GlobalProxy {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *GlobalProxyClient) Hooks() []Hook {
+	hooks := c.hooks.GlobalProxy
+	return append(hooks[:len(hooks):len(hooks)], globalproxy.Hooks[:]...)
+}
+
+// Interceptors returns the client interceptors.
+func (c *GlobalProxyClient) Interceptors() []Interceptor {
+	inters := c.inters.GlobalProxy
+	return append(inters[:len(inters):len(inters)], globalproxy.Interceptors[:]...)
+}
+
+func (c *GlobalProxyClient) mutate(ctx context.Context, m *GlobalProxyMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GlobalProxyCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GlobalProxyUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GlobalProxyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GlobalProxyDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown GlobalProxy mutation op: %q", m.Op())
 	}
 }
 
@@ -3123,8 +3266,7 @@ func (c *SocialAccountClient) Hooks() []Hook {
 
 // Interceptors returns the client interceptors.
 func (c *SocialAccountClient) Interceptors() []Interceptor {
-	inters := c.inters.SocialAccount
-	return append(inters[:len(inters):len(inters)], socialaccount.Interceptors[:]...)
+	return c.inters.SocialAccount
 }
 
 func (c *SocialAccountClient) mutate(ctx context.Context, m *SocialAccountMutation) (Value, error) {
@@ -4947,7 +5089,7 @@ func (c *UserSubscriptionClient) mutate(ctx context.Context, m *UserSubscription
 type (
 	hooks struct {
 		APIKey, Announcement, AnnouncementRead, AuthIdentity, AuthIdentityChannel,
-		Group, IdentityAdoptionDecision, PaymentAuditLog, PaymentOrder,
+		GlobalProxy, Group, IdentityAdoptionDecision, PaymentAuditLog, PaymentOrder,
 		PaymentProviderInstance, PendingAuthSession, PromoCode, PromoCodeUsage,
 		RedeemCode, SecuritySecret, Setting, SocialAccount, SocialIP, SocialTaskLog,
 		SubscriptionPlan, UsageCleanupTask, UsageLog, User, UserAllowedGroup,
@@ -4955,7 +5097,7 @@ type (
 	}
 	inters struct {
 		APIKey, Announcement, AnnouncementRead, AuthIdentity, AuthIdentityChannel,
-		Group, IdentityAdoptionDecision, PaymentAuditLog, PaymentOrder,
+		GlobalProxy, Group, IdentityAdoptionDecision, PaymentAuditLog, PaymentOrder,
 		PaymentProviderInstance, PendingAuthSession, PromoCode, PromoCodeUsage,
 		RedeemCode, SecuritySecret, Setting, SocialAccount, SocialIP, SocialTaskLog,
 		SubscriptionPlan, UsageCleanupTask, UsageLog, User, UserAllowedGroup,

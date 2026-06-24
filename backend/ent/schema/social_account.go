@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"entgo.io/ent"
-	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
@@ -29,7 +28,6 @@ func (SocialAccount) Annotations() []schema.Annotation {
 func (SocialAccount) Mixin() []ent.Mixin {
 	return []ent.Mixin{
 		mixins.TimeMixin{},
-		mixins.SoftDeleteMixin{},
 	}
 }
 
@@ -113,7 +111,7 @@ func (SocialAccount) Fields() []ent.Field {
 		field.Text("execution_auth").
 			Optional().
 			Nillable().
-			Comment("Platform execution authentication JSON/base64 JSON"),
+			Comment("Encrypted platform execution authentication"),
 		field.String("account_status").
 			MaxLen(30).
 			Default("pending_check").
@@ -138,15 +136,6 @@ func (SocialAccount) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("分配给的用户 ID"),
-
-		// 备注
-		field.Time("user_workbench_deleted_at").
-			Optional().
-			Nillable().
-			SchemaType(map[string]string{
-				dialect.Postgres: "timestamptz",
-			}).
-			Comment("Timestamp when the assigned user removed this account from their workbench"),
 
 		field.Text("remark").
 			Optional().
@@ -184,13 +173,12 @@ func (SocialAccount) Indexes() []ent.Index {
 		index.Fields("account_status"),
 		index.Fields("task_status"),
 		index.Fields("assigned_user_id"),
-		index.Fields("assigned_user_id", "user_workbench_deleted_at"),
-		index.Fields("deleted_at"),
 		index.Fields("platform", "account_status"),
-		index.Fields("platform_user_id"),
+		index.Fields("platform_user_id").
+			StorageKey("idx_social_accounts_platform_user_id"),
 		index.Fields("platform_key", "name_key").
-			Unique().
-			Annotations(entsql.IndexWhere("deleted_at IS NULL")),
+			StorageKey("idx_social_accounts_platform_name_key_unique").
+			Unique(),
 	}
 }
 

@@ -117,9 +117,11 @@ describe('mock API redeem, promo, and affiliate contract', () => {
   it('serves the existing user and admin redeem-code endpoints with backend-compatible shapes', async () => {
     const baseUrl = await startMockApi()
     const userHeaders = { Authorization: 'Bearer dev-mock-user-token' }
+    const adminHeaders = { Authorization: 'Bearer dev-mock-admin-token' }
 
     const generated = await requestJson<MockRedeemCode[]>(`${baseUrl}/api/v1/admin/redeem-codes/generate`, {
       method: 'POST',
+      headers: adminHeaders,
       body: {
         count: 2,
         type: 'balance',
@@ -159,7 +161,9 @@ describe('mock API redeem, promo, and affiliate contract', () => {
     expect(history.code).toBe(0)
     expect(history.data.map((item) => item.id)).toContain(generated.data[0].id)
 
-    const stats = await requestJson<MockRedeemStats>(`${baseUrl}/api/v1/admin/redeem-codes/stats`)
+    const stats = await requestJson<MockRedeemStats>(`${baseUrl}/api/v1/admin/redeem-codes/stats`, {
+      headers: adminHeaders,
+    })
     expect(stats.code).toBe(0)
     expect(stats.data).toMatchObject({
       total_codes: 2,
@@ -175,12 +179,14 @@ describe('mock API redeem, promo, and affiliate contract', () => {
 
     const expired = await requestJson<MockRedeemCode>(`${baseUrl}/api/v1/admin/redeem-codes/${generated.data[1].id}/expire`, {
       method: 'POST',
+      headers: adminHeaders,
     })
     expect(expired.code).toBe(0)
     expect(expired.data.status).toBe('expired')
 
     const batchUpdate = await requestJson<{ updated: number; message: string }>(`${baseUrl}/api/v1/admin/redeem-codes/batch-update`, {
       method: 'POST',
+      headers: adminHeaders,
       body: {
         ids: [generated.data[1].id],
         fields: { notes: 'maintenance' },
@@ -188,10 +194,14 @@ describe('mock API redeem, promo, and affiliate contract', () => {
     })
     expect(batchUpdate.data.updated).toBe(1)
 
-    const detail = await requestJson<MockRedeemCode>(`${baseUrl}/api/v1/admin/redeem-codes/${generated.data[1].id}`)
+    const detail = await requestJson<MockRedeemCode>(`${baseUrl}/api/v1/admin/redeem-codes/${generated.data[1].id}`, {
+      headers: adminHeaders,
+    })
     expect(detail.data).toMatchObject({ id: generated.data[1].id, status: 'expired' })
 
-    const exported = await fetch(`${baseUrl}/api/v1/admin/redeem-codes/export`)
+    const exported = await fetch(`${baseUrl}/api/v1/admin/redeem-codes/export`, {
+      headers: adminHeaders,
+    })
     expect(exported.status).toBe(200)
     expect(exported.headers.get('content-type')).toContain('text/csv')
     expect(await exported.text()).toContain('id,code,type,value,status,used_by,used_by_email,used_at,expires_at,created_at')
@@ -199,6 +209,7 @@ describe('mock API redeem, promo, and affiliate contract', () => {
 
   it('serves the existing promo-code validation, CRUD, and usage endpoints', async () => {
     const baseUrl = await startMockApi()
+    const adminHeaders = { Authorization: 'Bearer dev-mock-admin-token' }
 
     const disabledValidation = await requestJson<{ valid: boolean; error_code: string }>(
       `${baseUrl}/api/v1/auth/validate-promo-code`,
@@ -212,6 +223,7 @@ describe('mock API redeem, promo, and affiliate contract', () => {
 
     const created = await requestJson<MockPromoCode>(`${baseUrl}/api/v1/admin/promo-codes`, {
       method: 'POST',
+      headers: adminHeaders,
       body: {
         code: 'welcome',
         bonus_amount: 5,
@@ -230,12 +242,15 @@ describe('mock API redeem, promo, and affiliate contract', () => {
       notes: 'launch',
     })
 
-    const list = await requestJson<MockPage<MockPromoCode>>(`${baseUrl}/api/v1/admin/promo-codes?search=wel&page=1&page_size=20`)
+    const list = await requestJson<MockPage<MockPromoCode>>(`${baseUrl}/api/v1/admin/promo-codes?search=wel&page=1&page_size=20`, {
+      headers: adminHeaders,
+    })
     expect(list.code).toBe(0)
     expect(list.data.items.map((item) => item.id)).toContain(created.data.id)
 
     const updated = await requestJson<MockPromoCode>(`${baseUrl}/api/v1/admin/promo-codes/${created.data.id}`, {
       method: 'PUT',
+      headers: adminHeaders,
       body: {
         expires_at: 0,
         status: 'disabled',
@@ -249,7 +264,9 @@ describe('mock API redeem, promo, and affiliate contract', () => {
       notes: '',
     })
 
-    const usages = await requestJson<MockPage<MockPromoUsage>>(`${baseUrl}/api/v1/admin/promo-codes/${created.data.id}/usages`)
+    const usages = await requestJson<MockPage<MockPromoUsage>>(`${baseUrl}/api/v1/admin/promo-codes/${created.data.id}/usages`, {
+      headers: adminHeaders,
+    })
     expect(usages.code).toBe(0)
     expect(usages.data).toMatchObject({
       items: [],
@@ -261,6 +278,7 @@ describe('mock API redeem, promo, and affiliate contract', () => {
 
     const deleted = await requestJson<{ message: string }>(`${baseUrl}/api/v1/admin/promo-codes/${created.data.id}`, {
       method: 'DELETE',
+      headers: adminHeaders,
     })
     expect(deleted.code).toBe(0)
     expect(deleted.data.message).toBeTruthy()
@@ -269,6 +287,7 @@ describe('mock API redeem, promo, and affiliate contract', () => {
   it('serves the existing user and admin affiliate endpoints', async () => {
     const baseUrl = await startMockApi()
     const userHeaders = { Authorization: 'Bearer dev-mock-user-token' }
+    const adminHeaders = { Authorization: 'Bearer dev-mock-admin-token' }
 
     const detail = await requestJson<MockAffiliateDetail>(`${baseUrl}/api/v1/user/aff`, {
       headers: userHeaders,
@@ -294,12 +313,15 @@ describe('mock API redeem, promo, and affiliate contract', () => {
       balance: expect.any(Number),
     })
 
-    const lookup = await requestJson<Array<{ id: number; email: string }>>(`${baseUrl}/api/v1/admin/affiliates/users/lookup?q=operator`)
+    const lookup = await requestJson<Array<{ id: number; email: string }>>(`${baseUrl}/api/v1/admin/affiliates/users/lookup?q=operator`, {
+      headers: adminHeaders,
+    })
     expect(lookup.code).toBe(0)
     expect(lookup.data.map((user) => user.id)).toContain(2)
 
     const updated = await requestJson<{ user_id: number }>(`${baseUrl}/api/v1/admin/affiliates/users/2`, {
       method: 'PUT',
+      headers: adminHeaders,
       body: {
         aff_code: 'vip2026',
         aff_rebate_rate_percent: 12.5,
@@ -307,7 +329,9 @@ describe('mock API redeem, promo, and affiliate contract', () => {
     })
     expect(updated.data.user_id).toBe(2)
 
-    const customUsers = await requestJson<MockPage<MockAffiliateEntry>>(`${baseUrl}/api/v1/admin/affiliates/users?search=vip&page=1&page_size=20`)
+    const customUsers = await requestJson<MockPage<MockAffiliateEntry>>(`${baseUrl}/api/v1/admin/affiliates/users?search=vip&page=1&page_size=20`, {
+      headers: adminHeaders,
+    })
     expect(customUsers.data.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         user_id: 2,
@@ -319,6 +343,7 @@ describe('mock API redeem, promo, and affiliate contract', () => {
 
     const overview = await requestJson<{ user_id: number; aff_code: string; rebate_rate_percent: number }>(
       `${baseUrl}/api/v1/admin/affiliates/users/2/overview`,
+      { headers: adminHeaders },
     )
     expect(overview.data).toMatchObject({
       user_id: 2,
@@ -327,7 +352,9 @@ describe('mock API redeem, promo, and affiliate contract', () => {
     })
 
     for (const path of ['invites', 'rebates', 'transfers']) {
-      const records = await requestJson<MockPage<Record<string, unknown>>>(`${baseUrl}/api/v1/admin/affiliates/${path}?page=1&page_size=20`)
+      const records = await requestJson<MockPage<Record<string, unknown>>>(`${baseUrl}/api/v1/admin/affiliates/${path}?page=1&page_size=20`, {
+        headers: adminHeaders,
+      })
       expect(records.code).toBe(0)
       expect(records.data).toMatchObject({
         items: expect.any(Array),
@@ -339,12 +366,14 @@ describe('mock API redeem, promo, and affiliate contract', () => {
 
     const batchRate = await requestJson<{ affected: number }>(`${baseUrl}/api/v1/admin/affiliates/users/batch-rate`, {
       method: 'POST',
+      headers: adminHeaders,
       body: { user_ids: [2], clear: true },
     })
     expect(batchRate.data.affected).toBe(1)
 
     const cleared = await requestJson<{ user_id: number }>(`${baseUrl}/api/v1/admin/affiliates/users/2`, {
       method: 'DELETE',
+      headers: adminHeaders,
     })
     expect(cleared.data.user_id).toBe(2)
   })

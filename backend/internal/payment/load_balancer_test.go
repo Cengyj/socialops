@@ -68,13 +68,13 @@ func TestInstanceSupportsType(t *testing.T) {
 			expected:       true,
 		},
 		{
-			name:           "legacy alipay direct supports canonical visible method",
+			name:           "stored alipay direct supports canonical visible method",
 			supportedTypes: "alipay_direct",
 			target:         "alipay",
 			expected:       true,
 		},
 		{
-			name:           "legacy wxpay direct supports canonical visible method",
+			name:           "stored wxpay direct supports canonical visible method",
 			supportedTypes: "wxpay_direct",
 			target:         "wxpay",
 			expected:       true,
@@ -98,7 +98,7 @@ func TestInstanceSupportsType(t *testing.T) {
 	}
 }
 
-func TestGetInstanceChannelLimitsFallsBackToLegacyDirectAliases(t *testing.T) {
+func TestGetInstanceChannelLimitsFallsBackToHistoricalDirectAliases(t *testing.T) {
 	t.Parallel()
 
 	inst := testInstance(1, TypeAlipay, makeLimitsJSON(TypeAlipayDirect, ChannelLimits{SingleMax: 66}))
@@ -474,7 +474,7 @@ func TestStartOfDay(t *testing.T) {
 	}
 }
 
-func TestDecryptConfig_PlaintextAndLegacyCompat(t *testing.T) {
+func TestDecryptConfig_PlaintextAndHistoricalCiphertext(t *testing.T) {
 	t.Parallel()
 
 	key := make([]byte, AES256KeySize)
@@ -488,7 +488,7 @@ func TestDecryptConfig_PlaintextAndLegacyCompat(t *testing.T) {
 
 	plaintextJSON := `{"appId":"app-123","secret":"sec-xyz"}`
 
-	legacyEncrypted, err := Encrypt(plaintextJSON, key)
+	historicalEncrypted, err := Encrypt(plaintextJSON, key)
 	if err != nil {
 		t.Fatalf("seed Encrypt: %v", err)
 	}
@@ -518,20 +518,20 @@ func TestDecryptConfig_PlaintextAndLegacyCompat(t *testing.T) {
 			want:   map[string]string{"appId": "app-123", "secret": "sec-xyz"},
 		},
 		{
-			name:   "legacy ciphertext with correct key decrypts",
-			stored: legacyEncrypted,
+			name:   "historical ciphertext with correct key decrypts",
+			stored: historicalEncrypted,
 			key:    key,
 			want:   map[string]string{"appId": "app-123", "secret": "sec-xyz"},
 		},
 		{
-			name:   "legacy ciphertext with no key treated as empty",
-			stored: legacyEncrypted,
+			name:   "historical ciphertext with no key treated as empty",
+			stored: historicalEncrypted,
 			key:    nil,
 			want:   nil,
 		},
 		{
-			name:   "legacy ciphertext with wrong key treated as empty",
-			stored: legacyEncrypted,
+			name:   "historical ciphertext with wrong key treated as empty",
+			stored: historicalEncrypted,
 			key:    wrongKey,
 			want:   nil,
 		},

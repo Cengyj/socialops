@@ -34,7 +34,7 @@ func (s *UserRepoSuite) TestCreate_CreatesEmailAuthIdentityForNormalEmail() {
 
 func (s *UserRepoSuite) TestCreate_SkipsEmailAuthIdentityForSyntheticLinuxDoEmail() {
 	user := &service.User{
-		Email:        "linuxdo-legacy-user@linuxdo-connect.invalid",
+		Email:        "linuxdo-synthetic-user@linuxdo-connect.invalid",
 		PasswordHash: "test-password-hash",
 		Role:         service.RoleUser,
 		Status:       service.StatusActive,

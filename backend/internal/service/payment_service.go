@@ -45,7 +45,8 @@ const (
 	topUsersLimit      = 10
 	amountToleranceCNY = 0.01
 
-	orderIDPrefix = "sub2_"
+	currentOrderIDPrefix    = "socialops_"
+	historicalOrderIDPrefix = "sub2_"
 )
 
 const paymentResumeSigningKeyEnv = "PAYMENT_RESUME_SIGNING_KEY"
@@ -53,11 +54,11 @@ const paymentResumeSigningKeyEnv = "PAYMENT_RESUME_SIGNING_KEY"
 // --- Types ---
 
 // generateOutTradeNo creates a unique external order ID for payment providers.
-// Format: sub2_20250409aB3kX9mQ (prefix + date + 8-char random)
+// Format: socialops_20250409aB3kX9mQ (prefix + date + 8-char random)
 func generateOutTradeNo() string {
 	date := time.Now().Format("20060102")
 	rnd := generateRandomString(8)
-	return orderIDPrefix + date + rnd
+	return currentOrderIDPrefix + date + rnd
 }
 
 func generateRandomString(n int) string {
@@ -279,38 +280,38 @@ func (s *PaymentService) paymentResume() *PaymentResumeService {
 	return psNewPaymentResumeService(s.configService)
 }
 
-func NewLegacyAwarePaymentResumeService(legacyKey []byte) *PaymentResumeService {
-	return newLegacyAwarePaymentResumeService(legacyKey)
+func NewHistoricalKeyAwarePaymentResumeService(historicalVerificationKey []byte) *PaymentResumeService {
+	return newHistoricalKeyAwarePaymentResumeService(historicalVerificationKey)
 }
 
 func psNewPaymentResumeService(configService *PaymentConfigService) *PaymentResumeService {
-	return newLegacyAwarePaymentResumeService(psResumeLegacyVerificationKey(configService))
+	return newHistoricalKeyAwarePaymentResumeService(psResumeHistoricalVerificationKey(configService))
 }
 
-func newLegacyAwarePaymentResumeService(legacyKey []byte) *PaymentResumeService {
-	signingKey, verifyFallbacks := resolvePaymentResumeSigningKeys(legacyKey)
+func newHistoricalKeyAwarePaymentResumeService(historicalVerificationKey []byte) *PaymentResumeService {
+	signingKey, verifyFallbacks := resolvePaymentResumeSigningKeys(historicalVerificationKey)
 	return NewPaymentResumeService(signingKey, verifyFallbacks...)
 }
 
-func psResumeLegacyVerificationKey(configService *PaymentConfigService) []byte {
+func psResumeHistoricalVerificationKey(configService *PaymentConfigService) []byte {
 	if configService == nil {
 		return nil
 	}
 	return configService.encryptionKey
 }
 
-func resolvePaymentResumeSigningKeys(legacyKey []byte) ([]byte, [][]byte) {
+func resolvePaymentResumeSigningKeys(historicalVerificationKey []byte) ([]byte, [][]byte) {
 	signingKey := parsePaymentResumeSigningKey(os.Getenv(paymentResumeSigningKeyEnv))
 	if len(signingKey) == 0 {
-		if len(legacyKey) == 0 {
+		if len(historicalVerificationKey) == 0 {
 			return nil, nil
 		}
-		return legacyKey, nil
+		return historicalVerificationKey, nil
 	}
-	if len(legacyKey) == 0 || bytes.Equal(legacyKey, signingKey) {
+	if len(historicalVerificationKey) == 0 || bytes.Equal(historicalVerificationKey, signingKey) {
 		return signingKey, nil
 	}
-	return signingKey, [][]byte{legacyKey}
+	return signingKey, [][]byte{historicalVerificationKey}
 }
 
 func parsePaymentResumeSigningKey(raw string) []byte {
@@ -337,12 +338,12 @@ func psSliceContains(sl []string, s string) bool {
 
 // Subscription validity period unit constants.
 const (
-	validityUnitWeek  = "week"
-	validityUnitWeeks = "weeks"
-	validityUnitMonth = "month"
+	validityUnitWeek   = "week"
+	validityUnitWeeks  = "weeks"
+	validityUnitMonth  = "month"
 	validityUnitMonths = "months"
-	validityUnitYear  = "year"
-	validityUnitYears = "years"
+	validityUnitYear   = "year"
+	validityUnitYears  = "years"
 )
 
 func psComputeValidityDays(days int, unit string) int {

@@ -531,21 +531,6 @@ const ChevronDoubleRightIcon = {
     )
 }
 
-const ShieldIcon = {
-  render: () =>
-    h(
-      'svg',
-      { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor', 'stroke-width': '1.5' },
-      [
-        h('path', {
-          'stroke-linecap': 'round',
-          'stroke-linejoin': 'round',
-          d: 'M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z'
-        })
-      ]
-    )
-}
-
 const ChevronDownIcon = {
   render: () =>
     h(
@@ -566,7 +551,6 @@ const ChevronDownIcon = {
 // yet. Admin-only flags (not in public settings) stay inline below.
 const flagPayment = makeSidebarFlag(FeatureFlags.payment)
 const flagAffiliate = makeSidebarFlag(FeatureFlags.affiliate)
-const flagRiskControl = makeSidebarFlag(FeatureFlags.riskControl)
 
 // Custom menu items filtered by visibility
 const customMenuItemsForUser = computed(() => {
@@ -636,6 +620,7 @@ function buildAdminNavItems(): NavItem[] {
         { path: '/task-settings', label: t('nav.taskSettings'), icon: CogIcon },
         { path: '/proxies', label: t('nav.proxies'), icon: ServerIcon },
         { path: '/admin/total-accounts', label: t('nav.totalAccounts'), icon: UsersIcon },
+        { path: '/admin/global-proxies', label: t('nav.globalProxies'), icon: ServerIcon },
       ],
     },
     {
@@ -650,7 +635,6 @@ function buildAdminNavItems(): NavItem[] {
       ],
     },
     { path: '/admin/announcements', label: t('nav.announcements'), icon: BellIcon },
-    { path: '/admin/risk-control', label: t('nav.riskControl'), icon: ShieldIcon, hideInSimpleMode: true, featureFlag: flagRiskControl },
     { path: '/admin/redeem', label: t('nav.redeemCodes'), icon: TicketIcon, hideInSimpleMode: true },
     { path: '/admin/promo-codes', label: t('nav.promoCodes'), icon: GiftIcon, hideInSimpleMode: true },
     {
@@ -681,7 +665,7 @@ function buildAdminNavItems(): NavItem[] {
 
   const visible = applyFeatureFlags(baseItems)
 
-  // 简单模式下，在系统设置前插入 API密钥
+  // 简单模式下只保留当前 SocialOps 管理入口和系统设置。
   if (authStore.isSimpleMode) {
     const filtered = visible.filter(item => !item.hideInSimpleMode)
     filtered.push({ path: '/admin/settings', label: t('nav.settings'), icon: CogIcon })

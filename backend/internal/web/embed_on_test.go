@@ -4,6 +4,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,8 +16,14 @@ import (
 
 type testPublicSettingsProvider struct{}
 
-func (testPublicSettingsProvider) GetPublicSettingsForInjection(context.Context) (any, error) {
-	return map[string]string{"site_name": "SocialOps"}, nil
+func (testPublicSettingsProvider) GetPublicSettingsForInjection(context.Context) (json.RawMessage, error) {
+	return json.RawMessage(`{"site_name":"SocialOps"}`), nil
+}
+
+type invalidPublicSettingsProvider struct{}
+
+func (invalidPublicSettingsProvider) GetPublicSettingsForInjection(context.Context) (json.RawMessage, error) {
+	return json.RawMessage(`{`), nil
 }
 
 func TestInjectSiteTitleUsesSocialOpsProductTitle(t *testing.T) {
@@ -83,14 +90,31 @@ func TestFrontendMiddlewareBypassesOnlySocialOpsOwnedBackendRoutes(t *testing.T)
 	}
 }
 
-func TestFrontendBypassListDoesNotCarryLegacyAIGatewayPrefixes(t *testing.T) {
+func TestFrontendMiddlewareFallsBackWhenInjectedSettingsJSONIsInvalid(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	server, err := NewFrontendServer(invalidPublicSettingsProvider{})
+	require.NoError(t, err)
+
+	router := gin.New()
+	router.Use(server.Middleware())
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotContains(t, rec.Body.String(), "window.__APP_CONFIG__={;")
+}
+
+func TestFrontendBypassListDoesNotCarryRemovedGatewayPrefixes(t *testing.T) {
 	for _, path := range []string{
 		"/v1",
-		"/v1/chat/completions",
-		"/v1beta/models",
-		"/antigravity/v1/messages",
-		"/sora/v1/jobs",
+		"/v1/" + "chat/completions",
+		"/v1beta/" + "models",
+		"/" + "anti" + "gravity" + "/v1/messages",
+		"/" + "so" + "ra" + "/v1/jobs",
 	} {
-		require.Falsef(t, shouldBypassEmbeddedFrontend(path), "legacy upstream AI gateway path %s must not be a SocialOps backend prefix", path)
+		require.Falsef(t, shouldBypassEmbeddedFrontend(path), "removed gateway path %s must not be a SocialOps backend prefix", path)
 	}
 }

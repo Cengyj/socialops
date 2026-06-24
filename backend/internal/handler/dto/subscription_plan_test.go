@@ -132,7 +132,7 @@ func TestUserSubscriptionFromServiceReturnsEffectivePlatform(t *testing.T) {
 		ID:           43,
 		UserID:       7,
 		GroupID:      22,
-		PlanName:     "Legacy X Starter",
+		PlanName:     "Existing X Starter",
 		PlanPlatform: "",
 		Group: &service.Group{
 			ID:       22,

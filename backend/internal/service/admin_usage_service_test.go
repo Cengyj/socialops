@@ -22,12 +22,18 @@ func TestAdminServiceGetUserUsageStatsCostsOnlyFinalSuccessfulCharges(t *testing
 
 	svc := &adminServiceImpl{entClient: client}
 
-	stats, err := svc.GetUserUsageStats(ctx, userID, "month")
+	stats, err := svc.GetUserUsageStats(ctx, userID)
 
 	require.NoError(t, err)
-	body, ok := stats.(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, "month", body["period"])
-	require.Equal(t, int64(3), body["total_requests"])
-	require.InDelta(t, 0.10, body["total_cost"], 1e-9)
+	require.Equal(t, int64(3), stats.TotalOperations)
+	require.InDelta(t, 0.10, stats.TotalCharged, 1e-9)
+}
+
+func TestAdminServiceGetUserUsageStatsReturnsEmptySocialOpsStatsWithoutDatabase(t *testing.T) {
+	t.Parallel()
+
+	stats, err := (&adminServiceImpl{}).GetUserUsageStats(context.Background(), 42)
+
+	require.NoError(t, err)
+	require.Equal(t, &AdminUserUsageStats{}, stats)
 }

@@ -35,9 +35,9 @@ func (s *PaymentService) HandlePaymentNotification(ctx context.Context, n *payme
 	// Look up order by out_trade_no (the external order ID we sent to the provider)
 	order, err := s.entClient.PaymentOrder.Query().Where(paymentorder.OutTradeNo(n.OrderID)).Only(ctx)
 	if err != nil {
-		// Fallback only for true legacy "sub2_N" DB-ID payloads when the
-		// current out_trade_no lookup genuinely did not find an order.
-		if oid, ok := parseLegacyPaymentOrderID(n.OrderID, err); ok {
+		// Fallback only for historical DB-ID order payloads when the current
+		// out_trade_no lookup genuinely did not find an order.
+		if oid, ok := parseHistoricalPaymentOrderID(n.OrderID, err); ok {
 			return s.confirmPayment(ctx, oid, n.TradeNo, n.Amount, pk, n.Metadata)
 		}
 		if dbent.IsNotFound(err) {
@@ -48,15 +48,15 @@ func (s *PaymentService) HandlePaymentNotification(ctx context.Context, n *payme
 	return s.confirmPayment(ctx, order.ID, n.TradeNo, n.Amount, pk, n.Metadata)
 }
 
-func parseLegacyPaymentOrderID(orderID string, lookupErr error) (int64, bool) {
+func parseHistoricalPaymentOrderID(orderID string, lookupErr error) (int64, bool) {
 	if !dbent.IsNotFound(lookupErr) {
 		return 0, false
 	}
 	orderID = strings.TrimSpace(orderID)
-	if !strings.HasPrefix(orderID, orderIDPrefix) {
+	if !strings.HasPrefix(orderID, historicalOrderIDPrefix) {
 		return 0, false
 	}
-	trimmed := strings.TrimPrefix(orderID, orderIDPrefix)
+	trimmed := strings.TrimPrefix(orderID, historicalOrderIDPrefix)
 	if trimmed == "" || trimmed == orderID {
 		return 0, false
 	}

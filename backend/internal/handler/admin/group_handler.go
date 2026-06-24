@@ -15,20 +15,14 @@ import (
 
 // GroupHandler manages SocialOps business/subscription groups. It keeps the
 // generic SaaS group model available for subscriptions, redeem codes, and
-// account/task access without reintroducing AI gateway routing semantics.
+// account/task access without reintroducing removed gateway routing semantics.
 type GroupHandler struct {
-	adminService         service.AdminService
-	dashboardService     *service.DashboardService
-	groupCapacityService *service.GroupCapacityService
-	groupRepo            service.GroupRepository
+	groupRepo service.GroupRepository
 }
 
-func NewGroupHandler(adminService service.AdminService, dashboardService *service.DashboardService, groupCapacityService *service.GroupCapacityService, groupRepo service.GroupRepository) *GroupHandler {
+func NewGroupHandler(groupRepo service.GroupRepository) *GroupHandler {
 	return &GroupHandler{
-		adminService:         adminService,
-		dashboardService:     dashboardService,
-		groupCapacityService: groupCapacityService,
-		groupRepo:            groupRepo,
+		groupRepo: groupRepo,
 	}
 }
 

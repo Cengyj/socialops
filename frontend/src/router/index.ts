@@ -436,6 +436,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/global-proxies',
+    name: 'AdminGlobalProxies',
+    component: () => import('@/views/admin/GlobalProxiesView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Global Proxy Pool',
+      titleKey: 'admin.globalProxies.title',
+      descriptionKey: 'admin.globalProxies.description'
+    }
+  },
+  {
     path: '/admin/announcements',
     name: 'AdminAnnouncements',
     component: () => import('@/views/admin/AnnouncementsView.vue'),
@@ -445,19 +457,6 @@ const routes: RouteRecordRaw[] = [
       title: 'Announcements',
       titleKey: 'admin.announcements.title',
       descriptionKey: 'admin.announcements.description'
-    }
-  },
-  {
-    path: '/admin/risk-control',
-    name: 'AdminRiskControl',
-    component: () => import('@/views/admin/RiskControlView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      title: 'Risk Control',
-      titleKey: 'admin.riskControl.title',
-      descriptionKey: 'admin.riskControl.description',
-      requiresFeatureFlag: 'riskControl'
     }
   },
   {
@@ -575,14 +574,6 @@ const routes: RouteRecordRaw[] = [
       titleKey: 'nav.paymentPlans'
     }
   },
-  {
-    path: '/admin/data-management',
-    redirect: { path: '/admin/settings', query: { tab: 'backup' } }
-  },
-  {
-    path: '/admin/backups',
-    redirect: { path: '/admin/settings', query: { tab: 'backup' } }
-  },
   // ==================== 404 Not Found ====================
   {
     path: '/:pathMatch(.*)*',
@@ -659,7 +650,6 @@ const SIMPLE_MODE_ADMIN_RESTRICTED_PATHS = [
   '/affiliate',
   '/admin/users',
   '/admin/subscriptions',
-  '/admin/risk-control',
   '/admin/redeem',
   '/admin/promo-codes',
   '/admin/affiliates',

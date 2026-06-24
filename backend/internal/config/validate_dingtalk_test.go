@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateDingTalkConfig_Disabled_Skip(t *testing.T) {
+func TestValidateDingTalkConfig_DisabledBypassesValidation(t *testing.T) {
 	require.NoError(t, ValidateDingTalkConfig(DingTalkConnectConfig{Enabled: false}))
 }
 

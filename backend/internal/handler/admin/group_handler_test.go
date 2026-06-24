@@ -106,7 +106,7 @@ func paginationResultForGroupHandlerTest(total int64, params pagination.Paginati
 func TestGroupHandlerListPassesSubscriptionTypeToRepository(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := &groupHandlerRepoStub{}
-	handler := NewGroupHandler(nil, nil, nil, repo)
+	handler := NewGroupHandler(repo)
 
 	rec := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(rec)

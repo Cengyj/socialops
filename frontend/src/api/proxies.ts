@@ -1,7 +1,8 @@
 import { apiClient } from './client'
+import { unwrapData } from './utils'
 import type { PaginatedResponse } from '@/types'
 
-export type ProxyType = 'residential' | 'static' | 'mobile' | 'datacenter'
+export type ProxyType = 'residential' | 'static' | 'dynamic' | 'mobile' | 'datacenter'
 
 export interface UserProxy {
   id: number
@@ -32,11 +33,6 @@ export interface ProxyCheckResult {
 }
 
 const BASE = '/proxies'
-
-const unwrapData = async <T>(request: Promise<{ data: T }>): Promise<T> => {
-  const { data } = await request
-  return data
-}
 
 const proxiesAPI = {
   list(params?: {

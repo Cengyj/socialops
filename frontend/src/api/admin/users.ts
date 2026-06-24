@@ -4,7 +4,7 @@
  */
 
 import { apiClient } from '../client'
-import type { AdminUser, UpdateUserRequest, PaginatedResponse, ApiKey } from '@/types'
+import type { AdminUser, UpdateUserRequest, PaginatedResponse } from '@/types'
 
 export interface AdminBindAuthIdentityChannelRequest {
   channel: string
@@ -186,37 +186,18 @@ export async function toggleStatus(id: number, status: 'active' | 'disabled'): P
   return update(id, { status })
 }
 
-/**
- * Get user's API keys
- * @param id - User ID
- * @returns List of user's API keys
- */
-export async function getUserApiKeys(id: number): Promise<PaginatedResponse<ApiKey>> {
-  const { data } = await apiClient.get<PaginatedResponse<ApiKey>>(`/admin/users/${id}/api-keys`)
-  return data
+export interface AdminUserUsageStats {
+  total_operations: number
+  total_charged: number
 }
 
 /**
- * Get user's usage statistics
+ * Get user's SocialOps task execution statistics.
  * @param id - User ID
- * @param period - Time period
- * @returns User usage statistics
+ * @returns User task execution statistics
  */
-export async function getUserUsageStats(
-  id: number,
-  period: string = 'month'
-): Promise<{
-  total_requests: number
-  total_cost: number
-  total_tokens: number
-}> {
-  const { data } = await apiClient.get<{
-    total_requests: number
-    total_cost: number
-    total_tokens: number
-  }>(`/admin/users/${id}/usage`, {
-    params: { period }
-  })
+export async function getUserUsageStats(id: number): Promise<AdminUserUsageStats> {
+  const { data } = await apiClient.get<AdminUserUsageStats>(`/admin/users/${id}/usage`)
   return data
 }
 
@@ -267,25 +248,6 @@ export async function getUserBalanceHistory(
   return data
 }
 
-/**
- * Replace user's exclusive group
- * @param userId - User ID
- * @param oldGroupId - Current group ID to replace
- * @param newGroupId - New group ID to replace with
- * @returns Number of migrated keys
- */
-export async function replaceGroup(
-  userId: number,
-  oldGroupId: number,
-  newGroupId: number
-): Promise<{ migrated_keys: number }> {
-  const { data } = await apiClient.post<{ migrated_keys: number }>(
-    `/admin/users/${userId}/replace-group`,
-    { old_group_id: oldGroupId, new_group_id: newGroupId }
-  )
-  return data
-}
-
 export async function bindUserAuthIdentity(
   userId: number,
   input: AdminBindAuthIdentityRequest
@@ -306,10 +268,8 @@ export const usersAPI = {
   updateBalance,
   updateConcurrency,
   toggleStatus,
-  getUserApiKeys,
   getUserUsageStats,
   getUserBalanceHistory,
-  replaceGroup,
   bindUserAuthIdentity
 }
 

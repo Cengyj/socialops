@@ -57,19 +57,6 @@ func (r *adminUserGroupContractUserRepo) Update(_ context.Context, user *User) e
 	return nil
 }
 
-type adminUserGroupContractAuthInvalidator struct {
-	userIDs []int64
-}
-
-func (s *adminUserGroupContractAuthInvalidator) InvalidateAuthCacheByKey(context.Context, string) {}
-
-func (s *adminUserGroupContractAuthInvalidator) InvalidateAuthCacheByUserID(_ context.Context, userID int64) {
-	s.userIDs = append(s.userIDs, userID)
-}
-
-func (s *adminUserGroupContractAuthInvalidator) InvalidateAuthCacheByGroupID(context.Context, int64) {
-}
-
 type adminUserGroupContractRateRepo struct {
 	UserGroupRateRepository
 	syncUserID int64
@@ -84,7 +71,7 @@ func (r *adminUserGroupContractRateRepo) SyncUserGroupRates(_ context.Context, u
 	return nil
 }
 
-func TestAdminServiceUpdateUserAllowedGroupsInvalidatesAuthCache(t *testing.T) {
+func TestAdminServiceUpdateUserAllowedGroupsPersistsSelection(t *testing.T) {
 	ctx := context.Background()
 	userRepo := &adminUserGroupContractUserRepo{
 		user: &User{
@@ -96,10 +83,8 @@ func TestAdminServiceUpdateUserAllowedGroupsInvalidatesAuthCache(t *testing.T) {
 			AllowedGroups: []int64{1},
 		},
 	}
-	invalidator := &adminUserGroupContractAuthInvalidator{}
 	svc := &adminServiceImpl{
-		userRepo:             userRepo,
-		authCacheInvalidator: invalidator,
+		userRepo: userRepo,
 	}
 	nextGroups := []int64{2, 3}
 
@@ -107,10 +92,11 @@ func TestAdminServiceUpdateUserAllowedGroupsInvalidatesAuthCache(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, []int64{2, 3}, updated.AllowedGroups)
-	require.Equal(t, []int64{42}, invalidator.userIDs)
+	require.Len(t, userRepo.updated, 1)
+	require.Equal(t, []int64{2, 3}, userRepo.updated[0].AllowedGroups)
 }
 
-func TestAdminServiceUpdateUserGroupRatesInvalidatesAuthCacheAfterSync(t *testing.T) {
+func TestAdminServiceUpdateUserGroupRatesSyncsAfterUserUpdate(t *testing.T) {
 	ctx := context.Background()
 	userRepo := &adminUserGroupContractUserRepo{
 		user: &User{
@@ -121,12 +107,10 @@ func TestAdminServiceUpdateUserGroupRatesInvalidatesAuthCacheAfterSync(t *testin
 			Concurrency: 2,
 		},
 	}
-	invalidator := &adminUserGroupContractAuthInvalidator{}
 	rateRepo := &adminUserGroupContractRateRepo{}
 	svc := &adminServiceImpl{
-		userRepo:             userRepo,
-		userGroupRateRepo:    rateRepo,
-		authCacheInvalidator: invalidator,
+		userRepo:          userRepo,
+		userGroupRateRepo: rateRepo,
 	}
 	rate := 1.25
 	rates := map[int64]*float64{9: &rate}
@@ -137,7 +121,6 @@ func TestAdminServiceUpdateUserGroupRatesInvalidatesAuthCacheAfterSync(t *testin
 	require.Equal(t, 1, rateRepo.syncCalls)
 	require.Equal(t, int64(42), rateRepo.syncUserID)
 	require.Same(t, &rate, rateRepo.syncRates[9])
-	require.Equal(t, []int64{42}, invalidator.userIDs)
 }
 
 func TestAdminServiceUpdateUserPasswordIncrementsTokenVersion(t *testing.T) {
@@ -152,10 +135,8 @@ func TestAdminServiceUpdateUserPasswordIncrementsTokenVersion(t *testing.T) {
 	}
 	require.NoError(t, user.SetPassword("old-password"))
 	userRepo := &adminUserGroupContractUserRepo{user: user}
-	invalidator := &adminUserGroupContractAuthInvalidator{}
 	svc := &adminServiceImpl{
-		userRepo:             userRepo,
-		authCacheInvalidator: invalidator,
+		userRepo: userRepo,
 	}
 
 	updated, err := svc.UpdateUser(ctx, 42, &UpdateUserInput{Password: "new-password"})
@@ -164,7 +145,6 @@ func TestAdminServiceUpdateUserPasswordIncrementsTokenVersion(t *testing.T) {
 	require.Equal(t, int64(8), updated.TokenVersion)
 	require.True(t, updated.CheckPassword("new-password"))
 	require.False(t, updated.CheckPassword("old-password"))
-	require.Equal(t, []int64{42}, invalidator.userIDs)
 }
 
 func TestAdminServiceCreateUserDefaultSubscriptionsPreservePlanID(t *testing.T) {

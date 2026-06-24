@@ -245,7 +245,7 @@ func (h *AuthHandler) LinuxDoOAuthCallback(c *gin.Context) {
 		redirectOAuthError(c, frontendCallback, "userinfo_failed", "failed to fetch user info", "")
 		return
 	}
-	compatEmail := strings.TrimSpace(email)
+	providerEmail := strings.TrimSpace(email)
 
 	// 安全考虑：不要把第三方返回的 email 直接映射到本地账号（可能与本地邮箱用户冲突导致账号被接管）。
 	// 统一使用基于 subject 的稳定合成邮箱来做账号绑定。
@@ -264,8 +264,8 @@ func (h *AuthHandler) LinuxDoOAuthCallback(c *gin.Context) {
 		"suggested_display_name": displayName,
 		"suggested_avatar_url":   avatarURL,
 	}
-	if compatEmail != "" && !strings.EqualFold(strings.TrimSpace(compatEmail), strings.TrimSpace(email)) {
-		upstreamClaims["compat_email"] = compatEmail
+	if providerEmail != "" && !strings.EqualFold(strings.TrimSpace(providerEmail), strings.TrimSpace(email)) {
+		upstreamClaims["compat_email"] = providerEmail
 	}
 	if intent == oauthIntentBindCurrentUser {
 		targetUserID, err := h.readOAuthBindUserIDFromCookie(c, linuxDoOAuthBindUserCookieName)
@@ -317,7 +317,7 @@ func (h *AuthHandler) LinuxDoOAuthCallback(c *gin.Context) {
 		return
 	}
 
-	compatEmailUser, err := h.findLinuxDoCompatEmailUser(c.Request.Context(), compatEmail)
+	providerEmailUser, err := h.findLinuxDoProviderEmailUser(c.Request.Context(), providerEmail)
 	if err != nil {
 		redirectOAuthError(c, frontendCallback, "session_error", infraerrors.Reason(err), infraerrors.Message(err))
 		return
@@ -330,8 +330,8 @@ func (h *AuthHandler) LinuxDoOAuthCallback(c *gin.Context) {
 		redirectTo,
 		browserSessionKey,
 		upstreamClaims,
-		compatEmail,
-		compatEmailUser,
+		providerEmail,
+		providerEmailUser,
 		h.isForceEmailOnThirdPartySignup(c.Request.Context()),
 	); err != nil {
 		redirectOAuthError(c, frontendCallback, "session_error", "failed to continue oauth login", "")
@@ -340,7 +340,7 @@ func (h *AuthHandler) LinuxDoOAuthCallback(c *gin.Context) {
 	redirectToFrontendCallback(c, frontendCallback)
 }
 
-func (h *AuthHandler) findLinuxDoCompatEmailUser(ctx context.Context, email string) (*dbent.User, error) {
+func (h *AuthHandler) findLinuxDoProviderEmailUser(ctx context.Context, email string) (*dbent.User, error) {
 	client := h.entClient()
 	if client == nil {
 		return nil, infraerrors.ServiceUnavailable("PENDING_AUTH_NOT_READY", "pending auth service is not ready")
@@ -360,7 +360,7 @@ func (h *AuthHandler) findLinuxDoCompatEmailUser(ctx context.Context, email stri
 		Order(dbent.Asc(dbuser.FieldID)).
 		All(ctx)
 	if err != nil {
-		return nil, infraerrors.InternalServer("COMPAT_EMAIL_LOOKUP_FAILED", "failed to look up compat email user").WithCause(err)
+		return nil, infraerrors.InternalServer("COMPAT_EMAIL_LOOKUP_FAILED", "failed to look up provider email user").WithCause(err)
 	}
 	switch len(userEntity) {
 	case 0:
@@ -380,8 +380,8 @@ func (h *AuthHandler) createLinuxDoOAuthChoicePendingSession(
 	redirectTo string,
 	browserSessionKey string,
 	upstreamClaims map[string]any,
-	compatEmail string,
-	compatEmailUser *dbent.User,
+	providerEmail string,
+	providerEmailUser *dbent.User,
 	forceEmailOnSignup bool,
 ) error {
 	suggestionEmail := strings.TrimSpace(suggestedEmail)
@@ -402,24 +402,24 @@ func (h *AuthHandler) createLinuxDoOAuthChoicePendingSession(
 		"force_email_on_signup":     forceEmailOnSignup,
 		"choice_reason":             "third_party_signup",
 	}
-	if strings.TrimSpace(compatEmail) != "" {
-		completionResponse["compat_email"] = strings.TrimSpace(compatEmail)
+	if strings.TrimSpace(providerEmail) != "" {
+		completionResponse["compat_email"] = strings.TrimSpace(providerEmail)
 	}
 	resolvedChoiceEmail := suggestionEmail
-	if compatEmailUser != nil {
-		completionResponse["email"] = strings.TrimSpace(compatEmailUser.Email)
-		completionResponse["existing_account_email"] = strings.TrimSpace(compatEmailUser.Email)
+	if providerEmailUser != nil {
+		completionResponse["email"] = strings.TrimSpace(providerEmailUser.Email)
+		completionResponse["existing_account_email"] = strings.TrimSpace(providerEmailUser.Email)
 		completionResponse["existing_account_bindable"] = true
 		completionResponse["choice_reason"] = "compat_email_match"
-		resolvedChoiceEmail = strings.TrimSpace(compatEmailUser.Email)
+		resolvedChoiceEmail = strings.TrimSpace(providerEmailUser.Email)
 	}
-	if forceEmailOnSignup && compatEmailUser == nil {
+	if forceEmailOnSignup && providerEmailUser == nil {
 		completionResponse["choice_reason"] = "force_email_on_signup"
 	}
 
 	var targetUserID *int64
-	if compatEmailUser != nil && compatEmailUser.ID > 0 {
-		targetUserID = &compatEmailUser.ID
+	if providerEmailUser != nil && providerEmailUser.ID > 0 {
+		targetUserID = &providerEmailUser.ID
 	}
 
 	return h.createOAuthPendingSession(c, oauthPendingSessionPayload{
@@ -482,7 +482,7 @@ func (h *AuthHandler) CompleteLinuxDoOAuthRegistration(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	if updatedSession, handled, err := h.legacyCompleteRegistrationSessionStatus(c, session); err != nil {
+	if updatedSession, handled, err := h.pendingOAuthRegistrationChoiceSessionStatus(c, session); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	} else if handled {

@@ -116,7 +116,7 @@ func TestUnknownOrderWebhookAcksWithSuccess(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	// 1) Sentinel recognition through wrapping.
-	wrapped := fmt.Errorf("%w: out_trade_no=sub2_missing_42", service.ErrOrderNotFound)
+	wrapped := fmt.Errorf("%w: out_trade_no=socialops_missing_42", service.ErrOrderNotFound)
 	require.True(t, errors.Is(wrapped, service.ErrOrderNotFound),
 		"handleNotify uses errors.Is on the wrapped service error; regression here "+
 			"would mean unknown-order webhooks go back to returning 500 and looping forever")
@@ -157,14 +157,14 @@ func TestExtractOutTradeNo(t *testing.T) {
 		{
 			name:        "easypay query payload",
 			providerKey: "easypay",
-			rawBody:     "out_trade_no=sub2_123&trade_status=TRADE_SUCCESS",
-			want:        "sub2_123",
+			rawBody:     "out_trade_no=socialops_123&trade_status=TRADE_SUCCESS",
+			want:        "socialops_123",
 		},
 		{
 			name:        "alipay query payload",
 			providerKey: "alipay",
-			rawBody:     "notify_time=2026-04-20+12%3A00%3A00&out_trade_no=sub2_456",
-			want:        "sub2_456",
+			rawBody:     "notify_time=2026-04-20+12%3A00%3A00&out_trade_no=socialops_456",
+			want:        "socialops_456",
 		},
 		{
 			name:        "unknown provider",
@@ -175,8 +175,8 @@ func TestExtractOutTradeNo(t *testing.T) {
 		{
 			name:        "airwallex payment intent payload",
 			providerKey: payment.TypeAirwallex,
-			rawBody:     `{"name":"payment_intent.succeeded","data":{"object":{"merchant_order_id":"sub2_awx_123"}}}`,
-			want:        "sub2_awx_123",
+			rawBody:     `{"name":"payment_intent.succeeded","data":{"object":{"merchant_order_id":"socialops_awx_123"}}}`,
+			want:        "socialops_awx_123",
 		},
 	}
 
@@ -197,7 +197,7 @@ func TestVerifyNotificationWithProvidersReturnsMatchedProvider(t *testing.T) {
 		webhookHandlerProviderStub{
 			key: payment.TypeWxpay,
 			notification: &payment.PaymentNotification{
-				OrderID: "sub2_42",
+				OrderID: "socialops_42",
 				TradeNo: "trade-42",
 				Status:  payment.NotificationStatusSuccess,
 			},
@@ -208,7 +208,7 @@ func TestVerifyNotificationWithProvidersReturnsMatchedProvider(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, payment.TypeWxpay, providerKey)
 	require.NotNil(t, notification)
-	require.Equal(t, "sub2_42", notification.OrderID)
+	require.Equal(t, "socialops_42", notification.OrderID)
 }
 
 func TestVerifyNotificationWithProvidersFailsWhenAllProvidersReject(t *testing.T) {

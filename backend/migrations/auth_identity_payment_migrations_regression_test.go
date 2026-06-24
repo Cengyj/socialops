@@ -180,6 +180,70 @@ func TestMigration153ProtectsSocialTaskUsageLedgerIdempotency(t *testing.T) {
 	require.NotContains(t, indexSQL, "ON usage_logs (request_id, api_key_id)")
 }
 
+func TestMigration168ProtectsOneActiveSocialTaskPerAccount(t *testing.T) {
+	content, err := FS.ReadFile("168_social_task_active_account_uniqueness.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "ROW_NUMBER() OVER")
+	require.Contains(t, sql, "PARTITION BY social_account_id")
+	require.Contains(t, sql, "WHERE status IN ('pending', 'running')")
+	require.Contains(t, sql, "SET status = 'failed'")
+	require.Contains(t, sql, "charged_amount = 0")
+	require.Contains(t, sql, "charge_status = 'not_charged'")
+	require.NotContains(t, sql, "CONCURRENTLY")
+
+	indexContent, err := FS.ReadFile("169_social_task_active_account_uniqueness_notx.sql")
+	require.NoError(t, err)
+
+	indexSQL := string(indexContent)
+	require.Contains(t, indexSQL, "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_social_task_logs_one_active_per_account")
+	require.Contains(t, indexSQL, "ON social_task_logs (social_account_id)")
+	require.Contains(t, indexSQL, "WHERE status IN ('pending', 'running')")
+}
+
+func TestSocialOpsCoreMigrationsConvergeOnCurrentDataModel(t *testing.T) {
+	settingsSQL := readMigrationSQL(t, "005_schema_parity.sql")
+	require.Contains(t, settingsSQL, "CREATE TABLE IF NOT EXISTS settings")
+	require.Contains(t, settingsSQL, "key         VARCHAR(100) NOT NULL UNIQUE")
+	require.Contains(t, settingsSQL, "value       TEXT NOT NULL")
+
+	fieldModelSQL := readMigrationSQL(t, "159_social_account_field_model.sql")
+	require.Contains(t, fieldModelSQL, "ADD COLUMN IF NOT EXISTS platform_user_id VARCHAR(100)")
+	require.Contains(t, fieldModelSQL, "ADD COLUMN IF NOT EXISTS execution_auth TEXT")
+	require.Contains(t, fieldModelSQL, "ADD COLUMN IF NOT EXISTS default_proxy_snapshot TEXT")
+
+	identitySQL := readMigrationSQL(t, "160_social_account_identity_model.sql")
+	require.Contains(t, identitySQL, "DROP COLUMN IF EXISTS account_id")
+	require.Contains(t, identitySQL, "DROP COLUMN IF EXISTS bound_ip")
+
+	dropSourceSQL := readMigrationSQL(t, "155_drop_social_account_source.sql")
+	require.Contains(t, dropSourceSQL, "DROP COLUMN IF EXISTS source")
+
+	deleteStateSQL := readMigrationSQL(t, "167_drop_social_account_workbench_deleted_at.sql")
+	require.Contains(t, deleteStateSQL, "DROP COLUMN IF EXISTS user_workbench_deleted_at")
+	require.Contains(t, deleteStateSQL, "DROP COLUMN IF EXISTS deleted_at")
+	require.Regexp(t, `(?is)CREATE UNIQUE INDEX IF NOT EXISTS idx_social_accounts_platform_name_key_unique\s+ON social_accounts\(platform_key,\s*name_key\);`, deleteStateSQL)
+	require.NotRegexp(t, `(?is)CREATE UNIQUE INDEX IF NOT EXISTS idx_social_accounts_platform_name_key_unique\s+ON social_accounts\(platform_key,\s*name_key\)\s+WHERE deleted_at IS NULL`, deleteStateSQL)
+
+	payloadSQL := readMigrationSQL(t, "163_social_task_payload_snapshot.sql")
+	require.Contains(t, payloadSQL, "ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}'::jsonb")
+	require.Contains(t, payloadSQL, "ADD COLUMN IF NOT EXISTS template_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb")
+
+	activeTaskIndexSQL := readMigrationSQL(t, "169_social_task_active_account_uniqueness_notx.sql")
+	require.Contains(t, activeTaskIndexSQL, "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_social_task_logs_one_active_per_account")
+	require.Contains(t, activeTaskIndexSQL, "ON social_task_logs (social_account_id)")
+	require.Contains(t, activeTaskIndexSQL, "WHERE status IN ('pending', 'running')")
+}
+
+func readMigrationSQL(t *testing.T, name string) string {
+	t.Helper()
+
+	content, err := FS.ReadFile(name)
+	require.NoError(t, err)
+	return string(content)
+}
+
 func TestMigration157WidensPaymentOrderMonetaryPrecision(t *testing.T) {
 	content, err := FS.ReadFile("157_widen_payment_order_amount_precision.sql")
 	require.NoError(t, err)

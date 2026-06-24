@@ -55,21 +55,17 @@ describe('admin payment maintenance routes', () => {
     }
   })
 
-  it('redirects legacy backup links into the settings backup tab', async () => {
+  it('does not keep the removed standalone admin backup route', async () => {
     const { default: router } = await import('@/router')
     const route = router.getRoutes().find((record) => record.path === '/admin/backups')
 
-    expect(route?.path).toBe('/admin/backups')
-    expect(route?.redirect).toEqual({ path: '/admin/settings', query: { tab: 'backup' } })
-    expect(route?.name).toBeUndefined()
+    expect(route).toBeUndefined()
   })
 
-  it('redirects legacy data management links into the settings backup tab', async () => {
+  it('does not keep the deprecated data management admin route', async () => {
     const { default: router } = await import('@/router')
     const route = router.getRoutes().find((record) => record.path === '/admin/data-management')
 
-    expect(route?.path).toBe('/admin/data-management')
-    expect(route?.redirect).toEqual({ path: '/admin/settings', query: { tab: 'backup' } })
-    expect(route?.name).toBeUndefined()
+    expect(route).toBeUndefined()
   })
 })

@@ -347,9 +347,9 @@ func (h *AuthHandler) OIDCOAuthCallback(c *gin.Context) {
 	}
 
 	identityKey := oidcIdentityKey(issuer, subject)
-	compatEmail := strings.TrimSpace(userInfoClaims.Email)
-	if compatEmail == "" && idClaims != nil {
-		compatEmail = strings.TrimSpace(idClaims.Email)
+	providerEmail := strings.TrimSpace(userInfoClaims.Email)
+	if providerEmail == "" && idClaims != nil {
+		providerEmail = strings.TrimSpace(idClaims.Email)
 	}
 	email := oidcSyntheticEmailFromIdentityKey(identityKey)
 	username := firstNonEmpty(
@@ -388,8 +388,8 @@ func (h *AuthHandler) OIDCOAuthCallback(c *gin.Context) {
 		}(), username),
 		"suggested_avatar_url": userInfoClaims.AvatarURL,
 	}
-	if compatEmail != "" && !strings.EqualFold(strings.TrimSpace(compatEmail), strings.TrimSpace(email)) {
-		upstreamClaims["compat_email"] = compatEmail
+	if providerEmail != "" && !strings.EqualFold(strings.TrimSpace(providerEmail), strings.TrimSpace(email)) {
+		upstreamClaims["compat_email"] = providerEmail
 	}
 	if intent == oauthIntentBindCurrentUser {
 		targetUserID, err := h.readOAuthBindUserIDFromCookie(c, oidcOAuthBindUserCookieName)
@@ -441,7 +441,7 @@ func (h *AuthHandler) OIDCOAuthCallback(c *gin.Context) {
 		return
 	}
 
-	compatEmailUser, err := h.findOIDCCompatEmailUser(c.Request.Context(), compatEmail)
+	providerEmailUser, err := h.findOIDCProviderEmailUser(c.Request.Context(), providerEmail)
 	if err != nil {
 		redirectOAuthError(c, frontendCallback, "session_error", infraerrors.Reason(err), infraerrors.Message(err))
 		return
@@ -456,15 +456,15 @@ func (h *AuthHandler) OIDCOAuthCallback(c *gin.Context) {
 
 	// 快捷路径：当上游返回已验证邮箱、部署不要求额外确认且本地没有同邮箱账号时，
 	// 直接信任上游身份完成注册/登录，避免展示 choice 页。
-	if compatEmailUser == nil &&
-		strings.TrimSpace(compatEmail) != "" &&
+	if providerEmailUser == nil &&
+		strings.TrimSpace(providerEmail) != "" &&
 		emailVerified != nil && *emailVerified {
 		if handled := h.tryOIDCVerifiedEmailFastPath(
 			c,
 			frontendCallback,
 			redirectTo,
 			identityRef,
-			compatEmail,
+			providerEmail,
 			username,
 			upstreamClaims,
 		); handled {
@@ -481,8 +481,8 @@ func (h *AuthHandler) OIDCOAuthCallback(c *gin.Context) {
 			redirectTo,
 			browserSessionKey,
 			upstreamClaims,
-			compatEmail,
-			compatEmailUser,
+			providerEmail,
+			providerEmailUser,
 			true,
 		); err != nil {
 			redirectOAuthError(c, frontendCallback, "session_error", "failed to continue oauth login", "")
@@ -500,8 +500,8 @@ func (h *AuthHandler) OIDCOAuthCallback(c *gin.Context) {
 		redirectTo,
 		browserSessionKey,
 		upstreamClaims,
-		compatEmail,
-		compatEmailUser,
+		providerEmail,
+		providerEmailUser,
 		h.isForceEmailOnThirdPartySignup(c.Request.Context()),
 	); err != nil {
 		redirectOAuthError(c, frontendCallback, "session_error", "failed to continue oauth login", "")
@@ -510,7 +510,7 @@ func (h *AuthHandler) OIDCOAuthCallback(c *gin.Context) {
 	redirectToFrontendCallback(c, frontendCallback)
 }
 
-func (h *AuthHandler) findOIDCCompatEmailUser(ctx context.Context, email string) (*dbent.User, error) {
+func (h *AuthHandler) findOIDCProviderEmailUser(ctx context.Context, email string) (*dbent.User, error) {
 	client := h.entClient()
 	if client == nil {
 		return nil, infraerrors.ServiceUnavailable("PENDING_AUTH_NOT_READY", "pending auth service is not ready")
@@ -530,7 +530,7 @@ func (h *AuthHandler) findOIDCCompatEmailUser(ctx context.Context, email string)
 		if errors.Is(err, service.ErrUserNotFound) {
 			return nil, nil
 		}
-		return nil, infraerrors.InternalServer("COMPAT_EMAIL_LOOKUP_FAILED", "failed to look up compat email user").WithCause(err)
+		return nil, infraerrors.InternalServer("COMPAT_EMAIL_LOOKUP_FAILED", "failed to look up provider email user").WithCause(err)
 	}
 	return userEntity, nil
 }
@@ -543,8 +543,8 @@ func (h *AuthHandler) createOIDCOAuthChoicePendingSession(
 	redirectTo string,
 	browserSessionKey string,
 	upstreamClaims map[string]any,
-	compatEmail string,
-	compatEmailUser *dbent.User,
+	providerEmail string,
+	providerEmailUser *dbent.User,
 	forceEmailOnSignup bool,
 ) error {
 	suggestionEmail := strings.TrimSpace(suggestedEmail)
@@ -565,26 +565,26 @@ func (h *AuthHandler) createOIDCOAuthChoicePendingSession(
 		"force_email_on_signup":     forceEmailOnSignup,
 		"choice_reason":             "third_party_signup",
 	}
-	if strings.TrimSpace(compatEmail) != "" {
-		completionResponse["compat_email"] = strings.TrimSpace(compatEmail)
+	if strings.TrimSpace(providerEmail) != "" {
+		completionResponse["compat_email"] = strings.TrimSpace(providerEmail)
 	}
-	if compatEmailUser != nil {
-		completionResponse["email"] = strings.TrimSpace(compatEmailUser.Email)
-		completionResponse["existing_account_email"] = strings.TrimSpace(compatEmailUser.Email)
+	if providerEmailUser != nil {
+		completionResponse["email"] = strings.TrimSpace(providerEmailUser.Email)
+		completionResponse["existing_account_email"] = strings.TrimSpace(providerEmailUser.Email)
 		completionResponse["existing_account_bindable"] = true
 		completionResponse["choice_reason"] = "compat_email_match"
 	}
-	if forceEmailOnSignup && compatEmailUser == nil {
+	if forceEmailOnSignup && providerEmailUser == nil {
 		completionResponse["choice_reason"] = "force_email_on_signup"
 	}
 
 	resolvedChoiceEmail := suggestionEmail
-	if compatEmailUser != nil {
-		resolvedChoiceEmail = strings.TrimSpace(compatEmailUser.Email)
+	if providerEmailUser != nil {
+		resolvedChoiceEmail = strings.TrimSpace(providerEmailUser.Email)
 	}
 	var targetUserID *int64
-	if compatEmailUser != nil && compatEmailUser.ID > 0 {
-		targetUserID = &compatEmailUser.ID
+	if providerEmailUser != nil && providerEmailUser.ID > 0 {
+		targetUserID = &providerEmailUser.ID
 	}
 
 	return h.createOAuthPendingSession(c, oauthPendingSessionPayload{
@@ -647,7 +647,7 @@ func (h *AuthHandler) CompleteOIDCOAuthRegistration(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	if updatedSession, handled, err := h.legacyCompleteRegistrationSessionStatus(c, session); err != nil {
+	if updatedSession, handled, err := h.pendingOAuthRegistrationChoiceSessionStatus(c, session); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	} else if handled {
@@ -1216,7 +1216,7 @@ func (h *AuthHandler) tryOIDCVerifiedEmailFastPath(
 	frontendCallback string,
 	redirectTo string,
 	identity service.PendingAuthIdentityKey,
-	compatEmail string,
+	providerEmail string,
 	username string,
 	upstreamClaims map[string]any,
 ) bool {
@@ -1238,7 +1238,7 @@ func (h *AuthHandler) tryOIDCVerifiedEmailFastPath(
 		return true
 	}
 
-	verifiedEmail := strings.TrimSpace(strings.ToLower(compatEmail))
+	verifiedEmail := strings.TrimSpace(strings.ToLower(providerEmail))
 	upstreamMetadata := make(map[string]any, len(upstreamClaims)+1)
 	for k, v := range upstreamClaims {
 		upstreamMetadata[k] = v

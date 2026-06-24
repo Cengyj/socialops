@@ -107,24 +107,6 @@ func (s *userRepoStub) List(context.Context, pagination.PaginationParams) ([]Use
 	return nil, nil, nil
 }
 
-type authCacheInvalidatorStub struct {
-	userIDs  []int64
-	groupIDs []int64
-	keys     []string
-}
-
-func (s *authCacheInvalidatorStub) InvalidateAuthCacheByKey(_ context.Context, key string) {
-	s.keys = append(s.keys, key)
-}
-
-func (s *authCacheInvalidatorStub) InvalidateAuthCacheByUserID(_ context.Context, userID int64) {
-	s.userIDs = append(s.userIDs, userID)
-}
-
-func (s *authCacheInvalidatorStub) InvalidateAuthCacheByGroupID(_ context.Context, groupID int64) {
-	s.groupIDs = append(s.groupIDs, groupID)
-}
-
 type ensureEmailCall struct {
 	userID int64
 	email  string

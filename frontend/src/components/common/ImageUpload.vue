@@ -54,13 +54,18 @@
     </div>
 
     <!-- Controls -->
-    <div class="flex-1 space-y-2">
+    <div class="min-w-0 flex-1 space-y-2">
       <div class="flex items-center gap-2">
-        <label class="btn btn-secondary btn-sm cursor-pointer">
+        <label
+          class="btn btn-secondary btn-sm"
+          :class="disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'"
+          :aria-disabled="disabled ? 'true' : undefined"
+        >
           <input
             type="file"
             :accept="acceptTypes"
             class="hidden"
+            :disabled="disabled"
             @change="handleUpload"
           />
           <Icon name="upload" size="sm" class="mr-1.5" :stroke-width="2" />
@@ -70,13 +75,14 @@
           v-if="hasPreviewValue"
           type="button"
           class="btn btn-secondary btn-sm text-red-600 hover:text-red-700 dark:text-red-400"
+          :disabled="disabled"
           @click="$emit('update:modelValue', '')"
         >
           <Icon name="trash" size="sm" class="mr-1.5" :stroke-width="2" />
           {{ removeLabel }}
         </button>
       </div>
-      <p v-if="hint" class="text-xs text-gray-500 dark:text-gray-400">{{ hint }}</p>
+      <p v-if="hint" class="min-w-0 break-words text-xs text-gray-500 dark:text-gray-400" :title="hint">{{ hint }}</p>
       <p v-if="error" class="text-xs text-red-500">{{ error }}</p>
     </div>
   </div>
@@ -99,6 +105,7 @@ const props = withDefaults(defineProps<{
   previewSrc?: string
   previewContentType?: string
   hasValue?: boolean
+  disabled?: boolean
 }>(), {
   mode: 'image',
   size: 'md',
@@ -109,6 +116,7 @@ const props = withDefaults(defineProps<{
   previewSrc: '',
   previewContentType: '',
   hasValue: undefined,
+  disabled: false,
 })
 
 const emit = defineEmits<{
@@ -120,7 +128,6 @@ const error = ref('')
 
 const acceptTypes = computed(() => {
   if (props.mode === 'svg') return '.svg'
-  if (props.mode === 'media') return 'image/*,video/mp4'
   return 'image/*'
 })
 const resolvedPreviewValue = computed(() => String(props.previewSrc || props.modelValue || '').trim())
@@ -149,6 +156,11 @@ function handleUpload(event: Event) {
   const file = input.files?.[0]
   error.value = ''
 
+  if (props.disabled) {
+    input.value = ''
+    return
+  }
+
   if (!file) return
 
   if (props.maxSize && file.size > props.maxSize) {
@@ -169,11 +181,8 @@ function handleUpload(event: Event) {
     reader.readAsText(file)
   } else {
     const imageFile = file.type.startsWith('image/')
-    const mediaFileAllowed = props.mode === 'media'
-      ? (imageFile || file.type === 'video/mp4')
-      : imageFile
 
-    if (!mediaFileAllowed) {
+    if (!imageFile) {
       error.value = t(props.mode === 'media' ? 'common.imageUpload.invalidMediaType' : 'common.imageUpload.invalidImageType')
       input.value = ''
       return

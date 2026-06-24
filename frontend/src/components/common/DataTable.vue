@@ -46,7 +46,7 @@
             <span class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-dark-400">
               {{ column.label }}
             </span>
-            <div class="text-right text-sm text-gray-900 dark:text-gray-100">
+            <div class="min-w-0 flex-1 text-right text-sm text-gray-900 dark:text-gray-100">
               <slot :name="`cell-${column.key}`" :row="row" :value="row[column.key]" :expanded="actionsExpanded">
                 {{ column.formatter ? column.formatter(row[column.key], row) : row[column.key] }}
               </slot>

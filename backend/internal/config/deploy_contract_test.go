@@ -52,19 +52,6 @@ func TestDockerComposePassesDocumentedRuntimeEnv(t *testing.T) {
 		"SERVER_H2C_MAX_UPLOAD_BUFFER_PER_STREAM",
 		"JWT_ACCESS_TOKEN_EXPIRE_MINUTES",
 		"TOTP_ENCRYPTION_KEY",
-		"DASHBOARD_AGGREGATION_ENABLED",
-		"DASHBOARD_AGGREGATION_INTERVAL_SECONDS",
-		"DASHBOARD_AGGREGATION_LOOKBACK_SECONDS",
-		"DASHBOARD_AGGREGATION_BACKFILL_ENABLED",
-		"DASHBOARD_AGGREGATION_BACKFILL_MAX_DAYS",
-		"DASHBOARD_AGGREGATION_RECOMPUTE_DAYS",
-		"DASHBOARD_AGGREGATION_RETENTION_USAGE_LOGS_DAYS",
-		"DASHBOARD_AGGREGATION_RETENTION_HOURLY_DAYS",
-		"DASHBOARD_AGGREGATION_RETENTION_DAILY_DAYS",
-		"SECURITY_URL_ALLOWLIST_ENABLED",
-		"SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP",
-		"SECURITY_URL_ALLOWLIST_ALLOW_PRIVATE_HOSTS",
-		"SECURITY_URL_ALLOWLIST_UPSTREAM_HOSTS",
 		"UPDATE_PROXY_URL",
 	}
 
@@ -86,6 +73,93 @@ func TestDockerComposePassesDocumentedRuntimeEnv(t *testing.T) {
 				t.Errorf("%s does not pass documented runtime env %s to socialops", composeFile, key)
 			}
 		}
+	}
+}
+
+func TestDeployDocsDoNotExposeRemovedDashboardAggregationConfig(t *testing.T) {
+	removed := []string{
+		"DASHBOARD_AGGREGATION_ENABLED",
+		"DASHBOARD_AGGREGATION_INTERVAL_SECONDS",
+		"DASHBOARD_AGGREGATION_LOOKBACK_SECONDS",
+		"DASHBOARD_AGGREGATION_BACKFILL_ENABLED",
+		"DASHBOARD_AGGREGATION_BACKFILL_MAX_DAYS",
+		"DASHBOARD_AGGREGATION_RECOMPUTE_DAYS",
+		"DASHBOARD_AGGREGATION_RETENTION_USAGE_LOGS_DAYS",
+		"DASHBOARD_AGGREGATION_RETENTION_HOURLY_DAYS",
+		"DASHBOARD_AGGREGATION_RETENTION_DAILY_DAYS",
+		"Dashboard Aggregation",
+		"dashboard_aggregation",
+	}
+	for _, pathParts := range [][]string{
+		{"deploy", ".env.example"},
+		{"deploy", "docker-compose.yml"},
+		{"deploy", "docker-compose.local.yml"},
+		{"deploy", "docker-compose.standalone.yml"},
+		{"deploy", "config.example.yaml"},
+	} {
+		content := readRepoFileForDeployContractTest(t, pathParts...)
+		name := filepath.Join(pathParts...)
+		for _, marker := range removed {
+			if strings.Contains(content, marker) {
+				t.Fatalf("%s still documents removed dashboard aggregation config %q", name, marker)
+			}
+		}
+	}
+}
+
+func TestDeployDocsDoNotExposeUnusedURLAllowlistConfig(t *testing.T) {
+	removedEnv := []string{
+		"SECURITY_URL_ALLOWLIST_ENABLED",
+		"SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP",
+		"SECURITY_URL_ALLOWLIST_ALLOW_PRIVATE_HOSTS",
+		"SECURITY_URL_ALLOWLIST_UPSTREAM_HOSTS",
+	}
+	for _, pathParts := range [][]string{
+		{"deploy", ".env.example"},
+		{"deploy", "docker-compose.yml"},
+		{"deploy", "docker-compose.local.yml"},
+		{"deploy", "docker-compose.standalone.yml"},
+		{"deploy", "config.example.yaml"},
+	} {
+		content := readRepoFileForDeployContractTest(t, pathParts...)
+		name := filepath.Join(pathParts...)
+		if strings.Contains(content, "url_allowlist") {
+			t.Fatalf("%s still documents removed security.url_allowlist config", name)
+		}
+		for _, key := range removedEnv {
+			if strings.Contains(content, key) {
+				t.Fatalf("%s still documents removed runtime env %s", name, key)
+			}
+		}
+	}
+}
+
+func TestDeployDocsDoNotExposeRemovedUserAPIKeyCacheConfig(t *testing.T) {
+	removed := removedUserAPIKeyAuthCacheMarkersForDeployContractTest()
+	for _, pathParts := range [][]string{
+		{"deploy", ".env.example"},
+		{"deploy", "docker-compose.yml"},
+		{"deploy", "docker-compose.local.yml"},
+		{"deploy", "docker-compose.standalone.yml"},
+		{"deploy", "config.example.yaml"},
+	} {
+		content := readRepoFileForDeployContractTest(t, pathParts...)
+		name := filepath.Join(pathParts...)
+		for _, marker := range removed {
+			if strings.Contains(content, marker) {
+				t.Fatalf("%s still documents removed user API Key auth cache config %q", name, marker)
+			}
+		}
+	}
+}
+
+func removedUserAPIKeyAuthCacheMarkersForDeployContractTest() []string {
+	envParts := []string{"api", "key", "auth", "cache"}
+	return []string{
+		strings.Join(envParts, "_"),
+		strings.ToUpper(strings.Join(envParts, "_")),
+		strings.Join([]string{"API", "Key", "Auth", "Cache"}, " "),
+		strings.Join([]string{"API", "Key", "认证缓存"}, " "),
 	}
 }
 
@@ -165,12 +239,95 @@ func TestReleaseMetadataUsesCurrentProductPositioning(t *testing.T) {
 		content := readRepoFileForDeployContractTest(t, pathParts...)
 		name := filepath.Join(pathParts...)
 
-		for _, legacy := range []string{
+		for _, removedPositioning := range []string{
 			"AI API Gateway",
 			"AI 订阅配额",
 		} {
-			if strings.Contains(content, legacy) {
-				t.Fatalf("%s still contains legacy product positioning %q", name, legacy)
+			if strings.Contains(content, removedPositioning) {
+				t.Fatalf("%s still contains removed product positioning %q", name, removedPositioning)
+			}
+		}
+	}
+}
+
+func TestRootReadmesDocumentCurrentTwitterExecutorBoundary(t *testing.T) {
+	checks := []struct {
+		pathParts []string
+		required  string
+		stale     []string
+	}{
+		{
+			pathParts: []string{"README.md"},
+			required:  "Twitter/X execution currently uses the existing submit, validate, queue, executor, log, and billing flow",
+			stale: []string{
+				"real social executors are attached later",
+				"future backend execution workers",
+				"does not implement account purchase flow first, real social-platform executors",
+			},
+		},
+		{
+			pathParts: []string{"README_CN.md"},
+			required:  "当前 Twitter/X 执行链路已经接入提交、校验、排队、执行器、日志和计费流程",
+			stale: []string{
+				"真实执行器后续接入",
+				"当前阶段不实现真实社交平台执行器",
+			},
+		},
+		{
+			pathParts: []string{"README_JA.md"},
+			required:  "現在の Twitter/X 実行フローは",
+			stale: []string{
+				"実行ワーカーは後続で接続します",
+				"実際のソーシャルプラットフォーム実行器",
+			},
+		},
+	}
+
+	for _, check := range checks {
+		content := readRepoFileForDeployContractTest(t, check.pathParts...)
+		name := filepath.Join(check.pathParts...)
+		if !strings.Contains(content, check.required) {
+			t.Fatalf("%s must document the current Twitter/X executor boundary", name)
+		}
+		for _, stale := range check.stale {
+			if strings.Contains(content, stale) {
+				t.Fatalf("%s still documents stale executor boundary %q", name, stale)
+			}
+		}
+	}
+}
+
+func TestRepositoryRootDoesNotShipDefaultNpmScaffold(t *testing.T) {
+	rootPackage := filepath.Join(repoRootForDeployContractTest(t), "package.json")
+	content, err := os.ReadFile(rootPackage)
+	if os.IsNotExist(err) {
+		return
+	}
+	if err != nil {
+		t.Fatalf("read root package.json: %v", err)
+	}
+	for _, stale := range []string{
+		`"name": "socialops-main"`,
+		`"test": "echo \"Error: no test specified\" && exit 1"`,
+		`"license": "ISC"`,
+	} {
+		if strings.Contains(string(content), stale) {
+			t.Fatalf("root package.json still contains default npm scaffold %q; use frontend/package.json for the Vue app", stale)
+		}
+	}
+}
+
+func TestLocalDeployRuntimeArtifactsStayIgnored(t *testing.T) {
+	patterns := []string{
+		"deploy/dev-*.log",
+		"deploy/dev-data/",
+		"deploy/dev-postgres_data/",
+	}
+	for _, ignoreFile := range []string{".gitignore", ".ignore"} {
+		content := readRepoFileForDeployContractTest(t, ignoreFile)
+		for _, pattern := range patterns {
+			if !strings.Contains(content, pattern) {
+				t.Fatalf("%s must keep local deploy runtime artifact pattern %q", ignoreFile, pattern)
 			}
 		}
 	}
@@ -183,13 +340,13 @@ func TestRootMakefileDoesNotExposeTargetsForMissingModules(t *testing.T) {
 	}
 
 	content := readRepoFileForDeployContractTest(t, "Makefile")
-	for _, legacy := range []string{
+	for _, removedTarget := range []string{
 		"build-datamanagementd",
 		"test-datamanagementd",
 		"cd datamanagement",
 	} {
-		if strings.Contains(content, legacy) {
-			t.Fatalf("root Makefile exposes %q even though datamanagement module is absent", legacy)
+		if strings.Contains(content, removedTarget) {
+			t.Fatalf("root Makefile exposes %q even though datamanagement module is absent", removedTarget)
 		}
 	}
 }
@@ -272,7 +429,7 @@ func TestDeployMakefileTargetsBackendModuleFromDeployDirectory(t *testing.T) {
 	}
 }
 
-func TestRootDockerfileDoesNotCopyMissingLegacyResources(t *testing.T) {
+func TestRootDockerfileDoesNotCopyMissingRemovedResources(t *testing.T) {
 	root := repoRootForDeployContractTest(t)
 	if _, err := os.Stat(filepath.Join(root, "backend", "resources")); err == nil {
 		return
@@ -280,7 +437,7 @@ func TestRootDockerfileDoesNotCopyMissingLegacyResources(t *testing.T) {
 
 	content := readRepoFileForDeployContractTest(t, "Dockerfile")
 	if strings.Contains(content, "/app/backend/resources") || strings.Contains(content, "/app/resources") {
-		t.Fatal("root Dockerfile copies backend/resources even though SocialOps no longer ships that legacy resource directory")
+		t.Fatal("root Dockerfile copies backend/resources even though SocialOps no longer ships that removed resource directory")
 	}
 }
 
@@ -316,9 +473,9 @@ func TestDockerfilesUseCurrentBuildAndRuntimeContract(t *testing.T) {
 				t.Errorf("%s must include current Docker build/runtime contract %q", name, current)
 			}
 		}
-		for _, legacy := range forbidden {
-			if strings.Contains(content, legacy) {
-				t.Errorf("%s still contains stale Docker build/runtime contract %q", name, legacy)
+		for _, staleContract := range forbidden {
+			if strings.Contains(content, staleContract) {
+				t.Errorf("%s still contains stale Docker build/runtime contract %q", name, staleContract)
 			}
 		}
 	}
@@ -360,7 +517,7 @@ func TestDeployEnvExampleDoesNotDocumentUnsupportedRuntimeEnv(t *testing.T) {
 		"上游返回 529",
 	} {
 		if strings.Contains(content, unsupported) {
-			t.Fatalf("deploy/.env.example documents unsupported legacy runtime env or wording %q", unsupported)
+			t.Fatalf("deploy/.env.example documents unsupported stale runtime env or wording %q", unsupported)
 		}
 	}
 }
@@ -368,9 +525,9 @@ func TestDeployEnvExampleDoesNotDocumentUnsupportedRuntimeEnv(t *testing.T) {
 func TestDockerHubDocsUseCurrentConfigEnv(t *testing.T) {
 	docs := readRepoFileForDeployContractTest(t, "deploy", "DOCKER.md")
 
-	for _, legacy := range []string{"DATABASE_URL", "REDIS_URL", "GIN_MODE"} {
-		if strings.Contains(docs, legacy) {
-			t.Fatalf("deploy/DOCKER.md still documents unsupported %s configuration", legacy)
+	for _, unsupportedEnv := range []string{"DATABASE_URL", "REDIS_URL", "GIN_MODE"} {
+		if strings.Contains(docs, unsupportedEnv) {
+			t.Fatalf("deploy/DOCKER.md still documents unsupported %s configuration", unsupportedEnv)
 		}
 	}
 
@@ -479,13 +636,13 @@ func TestDeployComposeCommentsUseSocialOpsRuntimeTerms(t *testing.T) {
 		"docker-compose.dev.yml",
 	} {
 		content := readRepoFileForDeployContractTest(t, "deploy", deployFile)
-		for _, legacy := range []string{
+		for _, staleWording := range []string{
 			"upstream/pricing/CRS",
 			"pricing data",
 			"定价数据",
 		} {
-			if strings.Contains(content, legacy) {
-				t.Fatalf("deploy/%s still contains legacy deployment wording %q", deployFile, legacy)
+			if strings.Contains(content, staleWording) {
+				t.Fatalf("deploy/%s still contains stale deployment wording %q", deployFile, staleWording)
 			}
 		}
 	}
@@ -500,7 +657,7 @@ func TestSystemdDeployUsesCurrentServerModeEnv(t *testing.T) {
 		name := filepath.Join(pathParts...)
 
 		if strings.Contains(content, "Environment=GIN_MODE") {
-			t.Fatalf("%s still writes legacy GIN_MODE instead of SERVER_MODE", name)
+			t.Fatalf("%s still writes stale GIN_MODE instead of SERVER_MODE", name)
 		}
 		if !strings.Contains(content, "Environment=SERVER_MODE=release") {
 			t.Fatalf("%s must set current SERVER_MODE for release deployments", name)

@@ -163,12 +163,12 @@ func (s *BackupService) Start() {
 	defer cancel()
 	schedule, err := s.GetSchedule(ctx)
 	if err != nil {
-		logger.LegacyPrintf("service.backup", "[Backup] 加载定时备份配置失败: %v", err)
+		logger.ComponentPrintf("service.backup", "[Backup] 加载定时备份配置失败: %v", err)
 		return
 	}
 	if schedule.Enabled && schedule.CronExpr != "" {
 		if err := s.applyCronSchedule(schedule); err != nil {
-			logger.LegacyPrintf("service.backup", "[Backup] 应用定时备份配置失败: %v", err)
+			logger.ComponentPrintf("service.backup", "[Backup] 应用定时备份配置失败: %v", err)
 		}
 	}
 }
@@ -189,13 +189,13 @@ func (s *BackupService) recoverStaleRecords() {
 			records[i].Progress = ""
 			records[i].FinishedAt = time.Now().Format(time.RFC3339)
 			_ = s.saveRecord(ctx, &records[i])
-			logger.LegacyPrintf("service.backup", "[Backup] recovered stale running record: %s", records[i].ID)
+			logger.ComponentPrintf("service.backup", "[Backup] recovered stale running record: %s", records[i].ID)
 		}
 		if records[i].RestoreStatus == "running" {
 			records[i].RestoreStatus = "failed"
 			records[i].RestoreError = "interrupted by server restart"
 			_ = s.saveRecord(ctx, &records[i])
-			logger.LegacyPrintf("service.backup", "[Backup] recovered stale restoring record: %s", records[i].ID)
+			logger.ComponentPrintf("service.backup", "[Backup] recovered stale restoring record: %s", records[i].ID)
 		}
 	}
 }
@@ -218,18 +218,18 @@ func (s *BackupService) Stop() {
 	}()
 	select {
 	case <-done:
-		logger.LegacyPrintf("service.backup", "[Backup] all active operations finished")
+		logger.ComponentPrintf("service.backup", "[Backup] all active operations finished")
 	case <-time.After(5 * time.Minute):
-		logger.LegacyPrintf("service.backup", "[Backup] shutdown timeout after 5min, cancelling active operations")
+		logger.ComponentPrintf("service.backup", "[Backup] shutdown timeout after 5min, cancelling active operations")
 		if s.bgCancel != nil {
 			s.bgCancel() // 取消所有后台操作
 		}
 		// 给 goroutine 时间响应取消并完成清理
 		select {
 		case <-done:
-			logger.LegacyPrintf("service.backup", "[Backup] active operations cancelled and cleaned up")
+			logger.ComponentPrintf("service.backup", "[Backup] active operations cancelled and cleaned up")
 		case <-time.After(10 * time.Second):
-			logger.LegacyPrintf("service.backup", "[Backup] goroutine cleanup timed out")
+			logger.ComponentPrintf("service.backup", "[Backup] goroutine cleanup timed out")
 		}
 	}
 }
@@ -370,7 +370,7 @@ func (s *BackupService) applyCronSchedule(cfg *BackupScheduleConfig) error {
 		return infraerrors.BadRequest("INVALID_CRON", fmt.Sprintf("failed to schedule: %v", err))
 	}
 	s.cronEntryID = entryID
-	logger.LegacyPrintf("service.backup", "[Backup] 定时备份已启用: %s", cfg.CronExpr)
+	logger.ComponentPrintf("service.backup", "[Backup] 定时备份已启用: %s", cfg.CronExpr)
 	return nil
 }
 
@@ -380,7 +380,7 @@ func (s *BackupService) removeCronSchedule() {
 	if s.cronSched != nil && s.cronEntryID != 0 {
 		s.cronSched.Remove(s.cronEntryID)
 		s.cronEntryID = 0
-		logger.LegacyPrintf("service.backup", "[Backup] 定时备份已停用")
+		logger.ComponentPrintf("service.backup", "[Backup] 定时备份已停用")
 	}
 }
 
@@ -398,24 +398,24 @@ func (s *BackupService) runScheduledBackup() {
 		expireDays = schedule.RetainDays
 	}
 
-	logger.LegacyPrintf("service.backup", "[Backup] 开始执行定时备份, 过期天数: %d", expireDays)
+	logger.ComponentPrintf("service.backup", "[Backup] 开始执行定时备份, 过期天数: %d", expireDays)
 	record, err := s.CreateBackup(ctx, "scheduled", expireDays)
 	if err != nil {
 		if errors.Is(err, ErrBackupInProgress) {
-			logger.LegacyPrintf("service.backup", "[Backup] 定时备份跳过: 已有备份正在进行中")
+			logger.ComponentPrintf("service.backup", "[Backup] 定时备份跳过: 已有备份正在进行中")
 		} else {
-			logger.LegacyPrintf("service.backup", "[Backup] 定时备份失败: %v", err)
+			logger.ComponentPrintf("service.backup", "[Backup] 定时备份失败: %v", err)
 		}
 		return
 	}
-	logger.LegacyPrintf("service.backup", "[Backup] 定时备份完成: id=%s size=%d", record.ID, record.SizeBytes)
+	logger.ComponentPrintf("service.backup", "[Backup] 定时备份完成: id=%s size=%d", record.ID, record.SizeBytes)
 
 	// 清理过期备份（复用已加载的 schedule）
 	if schedule == nil {
 		return
 	}
 	if err := s.cleanupOldBackups(ctx, schedule); err != nil {
-		logger.LegacyPrintf("service.backup", "[Backup] 清理过期备份失败: %v", err)
+		logger.ComponentPrintf("service.backup", "[Backup] 清理过期备份失败: %v", err)
 	}
 }
 
@@ -533,7 +533,7 @@ func (s *BackupService) CreateBackup(ctx context.Context, triggeredBy string, ex
 	record.Status = "completed"
 	record.FinishedAt = time.Now().Format(time.RFC3339)
 	if err := s.saveRecord(ctx, record); err != nil {
-		logger.LegacyPrintf("service.backup", "[Backup] 保存备份记录失败: %v", err)
+		logger.ComponentPrintf("service.backup", "[Backup] 保存备份记录失败: %v", err)
 	}
 
 	return record, nil
@@ -617,7 +617,7 @@ func (s *BackupService) StartBackup(ctx context.Context, triggeredBy string, exp
 		}()
 		defer func() {
 			if r := recover(); r != nil {
-				logger.LegacyPrintf("service.backup", "[Backup] panic recovered: %v", r)
+				logger.ComponentPrintf("service.backup", "[Backup] panic recovered: %v", r)
 				record.Status = "failed"
 				record.ErrorMsg = fmt.Sprintf("internal panic: %v", r)
 				record.Progress = ""
@@ -703,7 +703,7 @@ func (s *BackupService) executeBackup(record *BackupRecord, objectStore BackupOb
 	record.Progress = ""
 	record.FinishedAt = time.Now().Format(time.RFC3339)
 	if err := s.saveRecord(context.Background(), record); err != nil {
-		logger.LegacyPrintf("service.backup", "[Backup] 保存备份记录失败: %v", err)
+		logger.ComponentPrintf("service.backup", "[Backup] 保存备份记录失败: %v", err)
 	}
 }
 
@@ -818,7 +818,7 @@ func (s *BackupService) StartRestore(ctx context.Context, backupID string) (*Bac
 		}()
 		defer func() {
 			if r := recover(); r != nil {
-				logger.LegacyPrintf("service.backup", "[Backup] restore panic recovered: %v", r)
+				logger.ComponentPrintf("service.backup", "[Backup] restore panic recovered: %v", r)
 				record.RestoreStatus = "failed"
 				record.RestoreError = fmt.Sprintf("internal panic: %v", r)
 				_ = s.saveRecord(context.Background(), record)
@@ -863,7 +863,7 @@ func (s *BackupService) executeRestore(record *BackupRecord, objectStore BackupO
 	record.RestoreStatus = "completed"
 	record.RestoredAt = time.Now().Format(time.RFC3339)
 	if err := s.saveRecord(context.Background(), record); err != nil {
-		logger.LegacyPrintf("service.backup", "[Backup] 保存恢复记录失败: %v", err)
+		logger.ComponentPrintf("service.backup", "[Backup] 保存恢复记录失败: %v", err)
 	}
 }
 
@@ -972,7 +972,7 @@ func (s *BackupService) loadS3Config(ctx context.Context) (*BackupS3Config, erro
 		decrypted, err := s.encryptor.Decrypt(cfg.SecretAccessKey)
 		if err != nil {
 			// 兼容未加密的旧数据：如果解密失败，保持原值
-			logger.LegacyPrintf("service.backup", "[Backup] S3 SecretAccessKey 解密失败（可能是旧的未加密数据）: %v", err)
+			logger.ComponentPrintf("service.backup", "[Backup] S3 SecretAccessKey 解密失败（可能是旧的未加密数据）: %v", err)
 		} else {
 			cfg.SecretAccessKey = decrypted
 		}
@@ -1118,7 +1118,7 @@ func (s *BackupService) cleanupOldBackups(ctx context.Context, schedule *BackupS
 	}
 
 	if len(toDelete) > 0 {
-		logger.LegacyPrintf("service.backup", "[Backup] 自动清理了 %d 个过期备份", len(toDelete))
+		logger.ComponentPrintf("service.backup", "[Backup] 自动清理了 %d 个过期备份", len(toDelete))
 		return s.saveRecordsLocked(ctx, toKeep)
 	}
 	return nil

@@ -15,15 +15,23 @@ This directory contains the Vue Router configuration for the SocialOps frontend 
 
 | Path        | Component    | Description            |
 | ----------- | ------------ | ---------------------- |
+| `/home`     | HomeView     | Public home page       |
 | `/login`    | LoginView    | User login page        |
 | `/register` | RegisterView | User registration page |
+| `/email-verify` | EmailVerifyView | Email verification page |
+| `/forgot-password` | ForgotPasswordView | Password reset request |
+| `/reset-password` | ResetPasswordView | Password reset page |
+| `/legal/:documentId` | LegalDocumentView | Public legal document |
 
 ### User Routes (Authentication Required)
 
 | Path                  | Component             | Description                         |
 | --------------------- | --------------------- | ----------------------------------- |
-| `/`                   | -                     | Redirects to `/dashboard`           |
+| `/`                   | -                     | Redirects to `/home`                |
 | `/dashboard`          | DashboardView         | User dashboard with stats           |
+| `/accounts`           | AccountWorkbenchRoute | Unified account workbench           |
+| `/task-settings`      | TaskSettingsView      | Execution parameter templates       |
+| `/proxies`            | ProxiesView           | Proxy management                    |
 | `/usage`              | UsageView             | Usage records and statistics        |
 | `/subscriptions`      | SubscriptionsView     | Subscription status and allocation  |
 | `/purchase`           | PaymentView           | Subscription purchase               |
@@ -31,6 +39,11 @@ This directory contains the Vue Router configuration for the SocialOps frontend 
 | `/redeem`             | RedeemView            | Redeem code interface               |
 | `/affiliate`          | AffiliateView         | Affiliate rebate dashboard          |
 | `/profile`            | ProfileView           | User profile settings               |
+| `/payment/qrcode`     | PaymentQRCodeView     | Payment QR code                     |
+| `/payment/result`     | PaymentResultView     | Payment result callback             |
+| `/payment/stripe`     | StripePaymentView     | Stripe payment redirect             |
+| `/payment/airwallex`  | AirwallexPaymentView  | Airwallex payment redirect          |
+| `/custom/:id`         | CustomPageView        | Configured custom content page      |
 
 ### Admin Routes (Admin Role Required)
 
@@ -40,16 +53,14 @@ This directory contains the Vue Router configuration for the SocialOps frontend 
 | `/admin/dashboard`      | AdminDashboardView          | Admin dashboard                 |
 | `/admin/users`          | AdminUsersView              | User management                 |
 | `/admin/subscriptions`  | AdminSubscriptionsView      | Subscription management         |
-| `/accounts`             | AccountWorkbenchRoute       | Unified account workbench       |
 | `/admin/accounts`       | -                           | Redirects to `/accounts`        |
 | `/admin/total-accounts` | AdminTotalAccountsView      | Total social account pool       |
-| `/proxies`              | ProxiesView                 | User proxy management           |
-| `/task-settings`        | TaskSettingsView            | Execution parameter templates   |
 | `/admin/announcements`  | AdminAnnouncementsView      | Announcement management         |
-| `/admin/risk-control`   | AdminRiskControlView        | Risk control center             |
 | `/admin/redeem`         | AdminRedeemView             | Redeem code management          |
 | `/admin/promo-codes`    | AdminPromoCodesView         | Promo code management           |
 | `/admin/settings`       | AdminSettingsView           | System settings                 |
+| `/admin/affiliates/*`   | AdminAffiliate*View         | Affiliate records management    |
+| `/admin/orders/*`       | AdminOrders*View            | Payment orders and plans        |
 
 ### Special Routes
 
@@ -75,6 +86,9 @@ The router implements a comprehensive navigation guard that:
    - Non-admin users are redirected to `/dashboard`
 5. **Preserves Intended Destination**:
    - Saves original URL in query parameter for post-login redirect
+6. **Checks Product Mode Flags**:
+   - Payment and affiliate routes are gated by their existing feature flags
+   - Backend mode and simple mode restrict routes according to the current product configuration
 
 ### Flow Diagram
 
@@ -83,8 +97,8 @@ User navigates to route
         ↓
 Set page title from meta
         ↓
-Is route public? ──Yes──→ Already authenticated? ──Yes──→ Redirect to /dashboard
-        ↓ No                                        ↓ No
+Is route public? ──Yes──→ Login/Register and already authenticated? ──Yes──→ Redirect to dashboard
+        ↓ No                                                      ↓ No
         ↓                                      Allow access
         ↓
 Is user authenticated? ──No──→ Redirect to /login with redirect query
@@ -104,7 +118,11 @@ Each route can define the following meta fields:
 interface RouteMeta {
   requiresAuth?: boolean // Default: true (requires authentication)
   requiresAdmin?: boolean // Default: false (admin access only)
+  requiresFeatureFlag?: 'affiliate' // Existing feature flag gate
+  requiresPayment?: boolean // Existing payment-system gate
   title?: string // Page title
+  titleKey?: string // i18n key for document title
+  descriptionKey?: string // i18n key for page description
   breadcrumbs?: Array<{
     // Breadcrumb navigation
     label: string
@@ -174,7 +192,7 @@ router.push('/admin/users')
   <router-link to="/dashboard">Dashboard</router-link>
 
   <!-- Named route -->
-  <router-link :to="{ name: 'Keys' }">API Keys</router-link>
+  <router-link :to="{ name: 'AccountWorkbench' }">Account Workbench</router-link>
 
   <!-- With query parameters -->
   <router-link :to="{ path: '/usage', query: { page: 1 } }"> Usage </router-link>
@@ -225,13 +243,12 @@ To test navigation guards and route access:
 
 ## Development Tips
 
-### Adding New Routes
+### Maintaining Existing Routes
 
-1. Add route definition in `routes` array
-2. Create corresponding view component
-3. Set appropriate meta fields (`requiresAuth`, `requiresAdmin`)
-4. Use lazy loading with `() => import()`
-5. Update this README with route documentation
+1. Keep route definitions in `routes` aligned with existing SocialOps product scope
+2. Set appropriate meta fields (`requiresAuth`, `requiresAdmin`, feature/payment flags)
+3. Use lazy loading with `() => import()` for maintained view components
+4. Update this README when an existing route is renamed, redirected, or removed
 
 ### Debugging Navigation
 
@@ -274,13 +291,8 @@ router.currentRoute.value
 
 1. **Lazy Loading**: All routes use dynamic imports
 2. **Code Splitting**: Vite automatically splits route chunks
-3. **Prefetching**: Consider adding route prefetch for common paths
-4. **Route Caching**: Vue Router caches component instances
+3. **Prefetching**: `afterEach` initializes `useRoutePrefetch(router)` and prefetches maintained routes during browser idle time
 
-## Future Enhancements
+## Scope Notes
 
-- [ ] Add breadcrumb navigation system
-- [ ] Implement route-based permissions beyond admin/user
-- [ ] Add route transition animations
-- [ ] Implement route prefetching for anticipated navigation
-- [ ] Add navigation analytics tracking
+Route changes should maintain the current SocialOps account-pool, task execution, billing, user, and admin workflows. Do not add new pages, modules, or business concepts from this router guide alone.

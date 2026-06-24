@@ -10,7 +10,6 @@ type AdminHandlers struct {
 	User             *admin.UserHandler
 	Group            *admin.GroupHandler
 	Announcement     *admin.AnnouncementHandler
-	DataManagement   *admin.DataManagementHandler
 	Backup           *admin.BackupHandler
 	Redeem           *admin.RedeemHandler
 	Promo            *admin.PromoHandler
@@ -18,18 +17,17 @@ type AdminHandlers struct {
 	System           *admin.SystemHandler
 	Subscription     *admin.SubscriptionHandler
 	UserAttribute    *admin.UserAttributeHandler
-	APIKey           *admin.AdminAPIKeyHandler
 	Payment          *admin.PaymentHandler
 	Affiliate        *admin.AffiliateHandler
 	AccountWorkbench *admin.AccountWorkbenchAdminHandler
 	TotalAccounts    *admin.TotalAccountsHandler
+	GlobalProxies     *admin.GlobalProxyHandler
 }
 
 // Handlers contains all HTTP handlers
 type Handlers struct {
 	Auth             *AuthHandler
 	User             *UserHandler
-	APIKey           *APIKeyHandler
 	Usage            *UsageHandler
 	Redeem           *RedeemHandler
 	Subscription     *SubscriptionHandler
@@ -42,7 +40,6 @@ type Handlers struct {
 	AccountWorkbench *AccountWorkbenchHandler
 	Proxy            *ProxyHandler
 	TaskSettings     *TaskSettingsHandler
-	Plan             *PlanHandler
 }
 
 // BuildInfo contains build-time information

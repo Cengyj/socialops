@@ -37,9 +37,6 @@ func (userStoreUnavailableRepoStub) MarkSucceeded(context.Context, int64, int, s
 func (userStoreUnavailableRepoStub) MarkFailedRetryable(context.Context, int64, string, time.Time, time.Time) error {
 	return errors.New("store unavailable")
 }
-func (userStoreUnavailableRepoStub) DeleteExpired(context.Context, time.Time, int) (int64, error) {
-	return 0, errors.New("store unavailable")
-}
 
 type userMemoryIdempotencyRepoStub struct {
 	mu     sync.Mutex
@@ -174,10 +171,6 @@ func (r *userMemoryIdempotencyRepoStub) MarkFailedRetryable(_ context.Context, i
 		return nil
 	}
 	return nil
-}
-
-func (r *userMemoryIdempotencyRepoStub) DeleteExpired(_ context.Context, _ time.Time, _ int) (int64, error) {
-	return 0, nil
 }
 
 func withUserSubject(userID int64) gin.HandlerFunc {

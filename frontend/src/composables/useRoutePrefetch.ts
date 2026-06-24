@@ -167,36 +167,10 @@ export function useRoutePrefetch(router?: Router) {
     prefetchedRoutes.value.clear()
   }
 
-  /**
-   * 判断是否为管理员路由
-   */
-  const isAdminRoute = (path: string): boolean => {
-    return path.startsWith('/admin')
-  }
-
-  /**
-   * 获取预加载配置（兼容旧 API）
-   */
-  const getPrefetchConfig = (route: RouteLocationNormalized): ComponentImportFn[] => {
-    const paths = getPrefetchPaths(route)
-    const importFns: ComponentImportFn[] = []
-    for (const path of paths) {
-      const importFn = getComponentImporter(path)
-      if (importFn) importFns.push(importFn)
-    }
-    return importFns
-  }
-
   return {
     prefetchedRoutes: readonly(prefetchedRoutes),
     triggerPrefetch,
     cancelPendingPrefetch,
-    resetPrefetchState,
-    _getPrefetchConfig: getPrefetchConfig,
-    _isAdminRoute: isAdminRoute
+    resetPrefetchState
   }
 }
-
-// 兼容旧测试的导出
-export const _adminPrefetchMap = PREFETCH_ADJACENCY
-export const _userPrefetchMap = PREFETCH_ADJACENCY

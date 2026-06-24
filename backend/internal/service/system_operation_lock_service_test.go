@@ -201,10 +201,6 @@ func (s *systemLockRepoStub) MarkFailedRetryable(context.Context, int64, string,
 	return s.markFailErr
 }
 
-func (s *systemLockRepoStub) DeleteExpired(context.Context, time.Time, int) (int64, error) {
-	return 0, nil
-}
-
 func TestSystemOperationLockService_InputAndStoreErrorBranches(t *testing.T) {
 	var nilSvc *SystemOperationLockService
 	_, err := nilSvc.Acquire(context.Background(), "x")

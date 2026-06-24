@@ -324,7 +324,7 @@ func ensurePendingOAuthCompleteRegistrationSession(session *dbent.PendingAuthSes
 	return nil
 }
 
-func buildLegacyCompleteRegistrationPendingResponse(
+func buildPendingOAuthRegistrationChoiceResponse(
 	session *dbent.PendingAuthSession,
 	forceEmailOnSignup bool,
 	emailVerificationRequired bool,
@@ -357,7 +357,7 @@ func buildLegacyCompleteRegistrationPendingResponse(
 	return completionResponse
 }
 
-func (h *AuthHandler) legacyCompleteRegistrationSessionStatus(
+func (h *AuthHandler) pendingOAuthRegistrationChoiceSessionStatus(
 	c *gin.Context,
 	session *dbent.PendingAuthSession,
 ) (*dbent.PendingAuthSession, bool, error) {
@@ -388,7 +388,7 @@ func (h *AuthHandler) legacyCompleteRegistrationSessionStatus(
 		strings.TrimSpace(session.Intent),
 		strings.TrimSpace(session.ResolvedEmail),
 		nil,
-		buildLegacyCompleteRegistrationPendingResponse(session, forceEmailOnSignup, emailVerificationRequired),
+		buildPendingOAuthRegistrationChoiceResponse(session, forceEmailOnSignup, emailVerificationRequired),
 	)
 	if err != nil {
 		return nil, false, infraerrors.InternalServer("PENDING_AUTH_SESSION_UPDATE_FAILED", "failed to update pending oauth session").WithCause(err)
@@ -843,9 +843,9 @@ func ensurePendingWeChatOAuthIdentityForUser(ctx context.Context, tx *dbent.Tx, 
 		return nil, err
 	}
 
-	var legacyOpenIDIdentity *dbent.AuthIdentity
+	var storedOpenIDIdentity *dbent.AuthIdentity
 	if channelSubject != "" && channelSubject != providerSubject {
-		legacyOpenIDRecords, err := client.AuthIdentity.Query().
+		storedOpenIDRecords, err := client.AuthIdentity.Query().
 			Where(
 				authidentity.ProviderTypeEQ(providerType),
 				authidentity.ProviderKeyIn(providerKeys...),
@@ -855,7 +855,7 @@ func ensurePendingWeChatOAuthIdentityForUser(ctx context.Context, tx *dbent.Tx, 
 		if err != nil {
 			return nil, err
 		}
-		legacyOpenIDIdentity, _, err = chooseWeChatIdentityForUser(ctx, client, legacyOpenIDRecords, userID, providerKey)
+		storedOpenIDIdentity, _, err = chooseWeChatIdentityForUser(ctx, client, storedOpenIDRecords, userID, providerKey)
 		if err != nil {
 			return nil, err
 		}
@@ -878,11 +878,11 @@ func ensurePendingWeChatOAuthIdentityForUser(ctx context.Context, tx *dbent.Tx, 
 		if err != nil {
 			return nil, err
 		}
-	case legacyOpenIDIdentity != nil:
-		update := client.AuthIdentity.UpdateOneID(legacyOpenIDIdentity.ID).
+	case storedOpenIDIdentity != nil:
+		update := client.AuthIdentity.UpdateOneID(storedOpenIDIdentity.ID).
 			SetProviderKey(providerKey).
 			SetProviderSubject(providerSubject).
-			SetMetadata(mergeOAuthMetadata(legacyOpenIDIdentity.Metadata, metadata))
+			SetMetadata(mergeOAuthMetadata(storedOpenIDIdentity.Metadata, metadata))
 		if issuer := oauthIdentityIssuer(session); issuer != nil {
 			update = update.SetIssuer(strings.TrimSpace(*issuer))
 		}

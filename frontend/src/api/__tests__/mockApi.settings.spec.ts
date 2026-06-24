@@ -5,7 +5,7 @@ import { createServer } from 'node:net'
 import { resolve } from 'node:path'
 
 interface MockEnvelope<T> {
-  code: number
+  code: number | string
   message: string
   data: T
 }
@@ -20,6 +20,24 @@ interface MockPublicSettings {
   smtp_password?: string
   turnstile_secret_key?: string
   linuxdo_connect_client_secret?: string
+}
+
+interface MockEmailTemplateEvent {
+  value: string
+  label: string
+  category: string
+  optional?: boolean
+  placeholders?: string[]
+}
+
+interface MockEmailTemplateList {
+  events: MockEmailTemplateEvent[]
+  locales: string[]
+  placeholders: string[]
+}
+
+function removedGatewaySettingKey(parts: string[]): string {
+  return parts.join('_')
 }
 
 let mockServer: ChildProcessWithoutNullStreams | null = null
@@ -37,9 +55,11 @@ afterEach(async () => {
 describe('mock API settings contract', () => {
   it('keeps admin-updated public settings in sync without exposing system secrets', async () => {
     const baseUrl = await startMockApi()
+    const adminHeaders = { Authorization: 'Bearer dev-mock-admin-token' }
 
     const updated = await requestJson<Record<string, unknown>>(`${baseUrl}/api/v1/admin/settings`, {
       method: 'PUT',
+      headers: adminHeaders,
       body: {
         site_name: 'Mock Operations Console',
         payment_enabled: false,
@@ -59,6 +79,8 @@ describe('mock API settings contract', () => {
     expect(updated.data).not.toHaveProperty('smtp_password')
     expect(updated.data).not.toHaveProperty('turnstile_secret_key')
     expect(updated.data).not.toHaveProperty('linuxdo_connect_client_secret')
+    expect(updated.data).not.toHaveProperty(removedGatewaySettingKey(['api', 'key', 'acl', 'trust', 'forwarded', 'ip']))
+    expect(updated.data).not.toHaveProperty('risk_control_enabled')
 
     const publicSettings = await requestJson<MockPublicSettings>(`${baseUrl}/api/v1/settings/public`)
     expect(publicSettings.code).toBe(0)
@@ -75,6 +97,61 @@ describe('mock API settings contract', () => {
     expect(publicSettings.data).not.toHaveProperty('smtp_password')
     expect(publicSettings.data).not.toHaveProperty('turnstile_secret_key')
     expect(publicSettings.data).not.toHaveProperty('linuxdo_connect_client_secret')
+    expect(publicSettings.data).not.toHaveProperty(removedGatewaySettingKey(['api', 'key', 'acl', 'trust', 'forwarded', 'ip']))
+    expect(publicSettings.data).not.toHaveProperty('risk_control_enabled')
+  })
+
+  it('exposes only current notification email template events in the mock API', async () => {
+    const baseUrl = await startMockApi()
+    const adminHeaders = { Authorization: 'Bearer dev-mock-admin-token' }
+
+    const response = await requestJson<MockEmailTemplateList>(
+      `${baseUrl}/api/v1/admin/settings/email-templates`,
+      { headers: adminHeaders },
+    )
+
+    expect(response.code).toBe(0)
+    expect(response.data.events.map((event) => event.value)).toEqual([
+      'auth.verify_code',
+      'auth.password_reset',
+      'notification_email.verify_code',
+      'subscription.purchase_success',
+      'subscription.expiry_reminder',
+      'balance.low',
+      'balance.recharge_success',
+    ])
+    expect(response.data.events.find((event) => event.value === 'balance.low')).toMatchObject({
+      category: 'billing',
+      optional: true,
+      placeholders: expect.arrayContaining(['current_balance', 'balance', 'threshold']),
+    })
+    expect(response.data.placeholders).toEqual(
+      expect.arrayContaining([
+        'verification_code',
+        'expires_in_minutes',
+        'reset_url',
+        'subscription_group',
+        'plan_name',
+        'expires_at',
+        'current_balance',
+        'recharge_amount',
+      ])
+    )
+    expect(response.data.events.map((event) => event.value)).not.toEqual(
+      expect.arrayContaining([
+        'account.quota_alert',
+        'content_moderation.violation_notice',
+        'content_moderation.account_disabled',
+        'ops.alert',
+        'ops.scheduled_report',
+      ])
+    )
+
+    const unsupported = await requestJson<Record<string, unknown>>(
+      `${baseUrl}/api/v1/admin/settings/email-templates/ops.alert/en-US`,
+      { headers: adminHeaders },
+    )
+    expect(unsupported.code).toBe('EMAIL_TEMPLATE_EVENT_UNSUPPORTED')
   })
 })
 
@@ -110,11 +187,14 @@ async function startMockApi(): Promise<string> {
 
 async function requestJson<T>(
   url: string,
-  options: { method?: string; body?: Record<string, unknown> } = {}
+  options: { method?: string; headers?: Record<string, string>; body?: Record<string, unknown> } = {}
 ): Promise<MockEnvelope<T>> {
   const response = await fetch(url, {
     method: options.method ?? 'GET',
-    headers: options.body ? { 'Content-Type': 'application/json' } : undefined,
+    headers: {
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.headers ?? {}),
+    },
     body: options.body ? JSON.stringify(options.body) : undefined,
   })
   return response.json() as Promise<MockEnvelope<T>>

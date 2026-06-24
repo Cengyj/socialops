@@ -118,6 +118,29 @@ touch migrations/018_your_new_change.sql
 - **Runner**: `internal/repository/migrations_runner.go`
 - **Auto-run**: Migrations run automatically on service startup
 
+## Integration Verification
+
+Repository integration tests use Docker/testcontainers by default. In environments
+where Docker is unavailable but a disposable PostgreSQL instance exists, provide a
+test-only DSN:
+
+```powershell
+$env:SOCIALOPS_INTEGRATION_POSTGRES_DSN = "postgres://postgres:postgres@127.0.0.1:5432/socialops_test?sslmode=disable&TimeZone=UTC"
+go test -tags=integration ./internal/repository -run TestSocialOpsCoreMigrations -count=1 -v
+```
+
+The full repository integration suite also needs Redis. It can use Docker, or an
+external Redis instance:
+
+```powershell
+$env:SOCIALOPS_INTEGRATION_REDIS_ADDR = "127.0.0.1:6379"
+$env:SOCIALOPS_INTEGRATION_REDIS_DB = "0"
+go test -tags=integration ./internal/repository -count=1
+```
+
+Use only dedicated, disposable databases for these tests. The integration suite
+applies migrations and writes test records.
+
 ## Best Practices
 
 1. **Keep migrations small and focused**

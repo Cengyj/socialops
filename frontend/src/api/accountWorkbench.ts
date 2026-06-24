@@ -5,9 +5,13 @@
  */
 
 import { apiClient } from './client'
+import { unwrapData } from './utils'
 import type { PaginatedResponse } from '@/types'
-import type { SocialTaskPayload, SocialTaskTemplateSnapshot } from '@/types/socialTask'
+import type { ExecutableSocialTaskAction, SocialTaskPayload, SocialTaskTemplateSnapshot } from '@/types/socialTask'
 export type {
+  DirectSocialTaskAction,
+  ExecutableSocialTaskAction,
+  ParameterSocialTaskAction,
   SocialPostPayload,
   SocialProfileUpdateParams,
   SocialTaskMediaRef,
@@ -47,12 +51,13 @@ export interface UserSocialAccount {
 
 export interface SocialAccount extends UserSocialAccount {
   assigned_user_id?: number | null
+  assigned_user_email?: string | null
 }
 
 export interface SocialTaskLog {
   id: number
   social_account_id: number
-  action: string
+  action: ExecutableSocialTaskAction
   platform?: string | null
   account_name?: string | null
   status: string
@@ -128,13 +133,13 @@ export interface SocialAccountBatchItemResult {
 
 export interface SubmitTaskRequest {
   account_ids: number[]
-  template_id: string
+  action: ExecutableSocialTaskAction
   client_request_id?: string
 }
 
 export interface AdminSubmitTaskRequest {
   account_ids: number[]
-  action: string
+  action: ExecutableSocialTaskAction
   target?: string
   content?: string
   client_request_id?: string
@@ -144,6 +149,16 @@ export interface SubmitTaskResponse {
   submitted: number
   enqueued: number
   failed_closed?: number
+  logs: SocialTaskLog[]
+}
+
+export interface ListTaskLogsParams {
+  account_ids?: number[]
+  statuses?: string[]
+  limit?: number
+}
+
+export interface ListTaskLogsResponse {
   logs: SocialTaskLog[]
 }
 
@@ -196,6 +211,7 @@ export interface UpdateMySocialAccountRequest {
   backup_code?: string
   email_client_id?: string
   email_token?: string
+  registration_ip?: string
   auth_cookie?: string
   execution_auth?: string
   remark?: string
@@ -205,6 +221,19 @@ export interface SocialAccountStats {
   total: number
   stored: number
   available: number
+}
+
+export interface MyAccountListParams {
+  page?: number
+  page_size?: number
+  search?: string
+  platform?: string
+  account_status?: string
+  task_status?: string
+}
+
+export type MyAccountExportParams = Omit<MyAccountListParams, 'page' | 'page_size'> & {
+  account_ids?: number[]
 }
 
 export interface SocialAccountBatchResult {
@@ -235,13 +264,8 @@ export interface AdminSubmitTaskResponse {
 const USER_BASE = '/accounts'
 const ADMIN_BASE = '/admin/accounts'
 
-const unwrapData = async <T>(request: Promise<{ data: T }>): Promise<T> => {
-  const { data } = await request
-  return data
-}
-
 const accountWorkbenchAPI = {
-  listMyAccounts(params?: { page?: number; page_size?: number }): Promise<PaginatedResponse<UserSocialAccount>> {
+  listMyAccounts(params?: MyAccountListParams): Promise<PaginatedResponse<UserSocialAccount>> {
     return unwrapData(apiClient.get<PaginatedResponse<UserSocialAccount>>(USER_BASE, { params }))
   },
 
@@ -261,12 +285,27 @@ const accountWorkbenchAPI = {
     return unwrapData(apiClient.post<BatchDeleteSocialAccountResponse>(`${USER_BASE}/batch-delete`, { ids }))
   },
 
-  exportMyAccounts(): Promise<Blob> {
-    return unwrapData(apiClient.get<Blob>(`${USER_BASE}/export`, { responseType: 'blob' }))
+  exportMyAccounts(params?: MyAccountExportParams): Promise<Blob> {
+    const { account_ids: accountIds, ...rest } = params ?? {}
+    const exportParams = params
+      ? { ...rest, ...(accountIds?.length ? { account_ids: accountIds.join(',') } : {}) }
+      : undefined
+    const config = exportParams ? { params: exportParams, responseType: 'blob' as const } : { responseType: 'blob' as const }
+    return unwrapData(apiClient.get<Blob>(`${USER_BASE}/export`, config))
   },
 
   submitTask(data: SubmitTaskRequest): Promise<SubmitTaskResponse> {
     return unwrapData(apiClient.post<SubmitTaskResponse>(`${USER_BASE}/tasks`, data))
+  },
+
+  listTaskLogs(params?: ListTaskLogsParams): Promise<ListTaskLogsResponse> {
+    return unwrapData(apiClient.get<ListTaskLogsResponse>(`${USER_BASE}/tasks`, {
+      params: {
+        ...params,
+        account_ids: params?.account_ids?.join(','),
+        statuses: params?.statuses?.join(','),
+      },
+    }))
   },
 
   setDefaultProxy(accountId: number, proxyId?: number | null): Promise<UserSocialAccount> {
@@ -308,6 +347,10 @@ export const accountWorkbenchAdminAPI = {
 
   batchDelete(ids: number[]): Promise<SocialAccountBatchResult> {
     return unwrapData(apiClient.post<SocialAccountBatchResult>(`${ADMIN_BASE}/batch-delete`, { ids }))
+  },
+
+  storeWorkbenchAccounts(ids: number[]): Promise<SocialAccountBatchResult> {
+    return unwrapData(apiClient.post<SocialAccountBatchResult>(`${ADMIN_BASE}/store-workbench`, { account_ids: ids }))
   },
 
   getStats(): Promise<SocialAccountStats> {

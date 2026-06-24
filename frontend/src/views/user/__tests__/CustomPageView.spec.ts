@@ -72,7 +72,6 @@ function publicSettings() {
     doc_url: '',
     home_content: '',
     payment_enabled: false,
-    risk_control_enabled: false,
     purchase_subscription_enabled: false,
     purchase_subscription_url: '',
     table_default_page_size: 20,

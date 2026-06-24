@@ -116,29 +116,13 @@ services:
       - TZ=${TZ:-Asia/Shanghai}
 
       # =======================================================================
-      # Dashboard Aggregation
+      # Twitter/X Login Dependencies (credential acquisition)
       # =======================================================================
-      - DASHBOARD_AGGREGATION_ENABLED=${DASHBOARD_AGGREGATION_ENABLED:-true}
-      - DASHBOARD_AGGREGATION_INTERVAL_SECONDS=${DASHBOARD_AGGREGATION_INTERVAL_SECONDS:-60}
-      - DASHBOARD_AGGREGATION_LOOKBACK_SECONDS=${DASHBOARD_AGGREGATION_LOOKBACK_SECONDS:-120}
-      - DASHBOARD_AGGREGATION_BACKFILL_ENABLED=${DASHBOARD_AGGREGATION_BACKFILL_ENABLED:-false}
-      - DASHBOARD_AGGREGATION_BACKFILL_MAX_DAYS=${DASHBOARD_AGGREGATION_BACKFILL_MAX_DAYS:-31}
-      - DASHBOARD_AGGREGATION_RECOMPUTE_DAYS=${DASHBOARD_AGGREGATION_RECOMPUTE_DAYS:-2}
-      - DASHBOARD_AGGREGATION_RETENTION_USAGE_LOGS_DAYS=${DASHBOARD_AGGREGATION_RETENTION_USAGE_LOGS_DAYS:-90}
-      - DASHBOARD_AGGREGATION_RETENTION_HOURLY_DAYS=${DASHBOARD_AGGREGATION_RETENTION_HOURLY_DAYS:-180}
-      - DASHBOARD_AGGREGATION_RETENTION_DAILY_DAYS=${DASHBOARD_AGGREGATION_RETENTION_DAILY_DAYS:-730}
-
-      # =======================================================================
-      # Security Configuration (URL Allowlist)
-      # =======================================================================
-      # Enable URL allowlist validation (false to skip allowlist checks)
-      - SECURITY_URL_ALLOWLIST_ENABLED=${SECURITY_URL_ALLOWLIST_ENABLED:-false}
-      # Allow insecure HTTP URLs when allowlist is disabled (default: false, requires https)
-      - SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP=${SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP:-false}
-      # Allow private IP addresses for configured external integrations (for internal deployments)
-      - SECURITY_URL_ALLOWLIST_ALLOW_PRIVATE_HOSTS=${SECURITY_URL_ALLOWLIST_ALLOW_PRIVATE_HOSTS:-false}
-      # Configured external integration hosts allowlist (comma-separated, only used when enabled=true)
-      - SECURITY_URL_ALLOWLIST_UPSTREAM_HOSTS=${SECURITY_URL_ALLOWLIST_UPSTREAM_HOSTS:-}
+      # Required for the account workbench "login" action. Leave URLs empty to
+      # fail closed without charging.
+      - TWITTER_LOGIN_DEVICE_PARAMS_URL=${TWITTER_LOGIN_DEVICE_PARAMS_URL:-}
+      - TWITTER_LOGIN_DEVICE_PARAMS_COLLECTION=${TWITTER_LOGIN_DEVICE_PARAMS_COLLECTION:-twitter_parameter}
+      - TWITTER_LOGIN_EMAIL_CODE_URL=${TWITTER_LOGIN_EMAIL_CODE_URL:-}
 
       # =======================================================================
       # Update Configuration (在线更新配置)

@@ -42,7 +42,7 @@ func (SocialIP) Fields() []ent.Field {
 		field.String("ip_type").
 			MaxLen(30).
 			Default("residential").
-			Comment("类型：residential / static / mobile / datacenter"),
+			Comment("类型：residential / static / mobile / datacenter / dynamic"),
 		field.String("endpoint").
 			MaxLen(500).
 			Optional().

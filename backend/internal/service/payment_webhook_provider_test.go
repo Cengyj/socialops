@@ -78,13 +78,13 @@ func encryptValidWebhookWxpayConfig(t *testing.T, suffix string) string {
 	})
 }
 
-func TestGetOrderProviderInstanceResolvesUniqueLegacyProviderKey(t *testing.T) {
+func TestGetOrderProviderInstanceResolvesUniqueHistoricalProviderKey(t *testing.T) {
 	ctx := context.Background()
 	client := newPaymentConfigServiceTestClient(t)
 	inst, err := client.PaymentProviderInstance.Create().
 		SetProviderKey(payment.TypeStripe).
 		SetName("stripe-a").
-		SetConfig(encryptWebhookProviderConfig(t, map[string]string{"secretKey": "sk_test_legacy_provider_key"})).
+		SetConfig(encryptWebhookProviderConfig(t, map[string]string{"secretKey": "sk_test_historical_provider_key"})).
 		SetSupportedTypes("stripe").
 		SetEnabled(true).
 		Save(ctx)
@@ -107,7 +107,7 @@ func TestGetOrderProviderInstanceResolvesUniqueLegacyProviderKey(t *testing.T) {
 	require.Equal(t, inst.ID, got.ID)
 }
 
-func TestGetOrderProviderInstanceResolvesUniqueLegacyPaymentType(t *testing.T) {
+func TestGetOrderProviderInstanceResolvesUniqueHistoricalPaymentType(t *testing.T) {
 	ctx := context.Background()
 	client := newPaymentConfigServiceTestClient(t)
 	inst, err := client.PaymentProviderInstance.Create().
@@ -134,7 +134,7 @@ func TestGetOrderProviderInstanceResolvesUniqueLegacyPaymentType(t *testing.T) {
 	require.Equal(t, inst.ID, got.ID)
 }
 
-func TestGetOrderProviderInstanceLeavesAmbiguousLegacyOrderUnresolved(t *testing.T) {
+func TestGetOrderProviderInstanceLeavesAmbiguousHistoricalOrderUnresolved(t *testing.T) {
 	ctx := context.Background()
 	client := newPaymentConfigServiceTestClient(t)
 	_, err := client.PaymentProviderInstance.Create().
@@ -168,12 +168,12 @@ func TestGetOrderProviderInstanceLeavesAmbiguousLegacyOrderUnresolved(t *testing
 	require.Nil(t, got)
 }
 
-func TestGetOrderProviderInstanceLeavesLegacyProviderKeyUnresolvedWhenHistoricalInstancesConflict(t *testing.T) {
+func TestGetOrderProviderInstanceLeavesHistoricalProviderKeyUnresolvedWhenHistoricalInstancesConflict(t *testing.T) {
 	ctx := context.Background()
 	client := newPaymentConfigServiceTestClient(t)
 	_, err := client.PaymentProviderInstance.Create().
 		SetProviderKey(payment.TypeStripe).
-		SetName("stripe-disabled-legacy").
+		SetName("stripe-disabled-historical").
 		SetConfig("{}").
 		SetSupportedTypes("stripe").
 		SetEnabled(false).
@@ -265,13 +265,13 @@ func TestGetOrderProviderInstanceUsesProviderSnapshotWhenPinnedColumnMissing(t *
 	require.Equal(t, inst.ID, got.ID)
 }
 
-func TestGetOrderProviderInstanceRejectsMissingSnapshotInstanceWithoutLegacyFallback(t *testing.T) {
+func TestGetOrderProviderInstanceRejectsMissingSnapshotInstanceWithoutHistoricalFallback(t *testing.T) {
 	ctx := context.Background()
 	client := newPaymentConfigServiceTestClient(t)
 	_, err := client.PaymentProviderInstance.Create().
 		SetProviderKey(payment.TypeStripe).
-		SetName("stripe-legacy-fallback").
-		SetConfig(encryptWebhookProviderConfig(t, map[string]string{"secretKey": "sk_legacy"})).
+		SetName("stripe-historical-fallback").
+		SetConfig(encryptWebhookProviderConfig(t, map[string]string{"secretKey": "sk_historical"})).
 		SetSupportedTypes("stripe").
 		SetEnabled(true).
 		Save(ctx)
@@ -413,7 +413,7 @@ func TestGetWebhookProviderRejectsRegistryFallbackForPinnedOrder(t *testing.T) {
 		SetPayAmount(88).
 		SetFeeRate(0).
 		SetRechargeCode("TEST-RECHARGE").
-		SetOutTradeNo("sub2_test_pinned_order").
+		SetOutTradeNo("socialops_test_pinned_order").
 		SetPaymentType(payment.TypeWxpay).
 		SetPaymentTradeNo("").
 		SetOrderType(payment.OrderTypeBalance).
@@ -437,7 +437,7 @@ func TestGetWebhookProviderRejectsRegistryFallbackForPinnedOrder(t *testing.T) {
 		providersLoaded: true,
 	}
 
-	_, err = svc.GetWebhookProviders(ctx, payment.TypeWxpay, "sub2_test_pinned_order")
+	_, err = svc.GetWebhookProviders(ctx, payment.TypeWxpay, "socialops_test_pinned_order")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "provider instance")
 }
@@ -479,7 +479,7 @@ func TestGetWebhookProviderUsesProviderSnapshotBeforeWxpayFallback(t *testing.T)
 		SetPayAmount(66).
 		SetFeeRate(0).
 		SetRechargeCode("SNAPSHOT-WEBHOOK").
-		SetOutTradeNo("sub2_test_snapshot_webhook_order").
+		SetOutTradeNo("socialops_test_snapshot_webhook_order").
 		SetPaymentType(payment.TypeWxpay).
 		SetPaymentTradeNo("").
 		SetOrderType(payment.OrderTypeBalance).
@@ -503,7 +503,7 @@ func TestGetWebhookProviderUsesProviderSnapshotBeforeWxpayFallback(t *testing.T)
 		providersLoaded: true,
 	}
 
-	providers, err := svc.GetWebhookProviders(ctx, payment.TypeWxpay, "sub2_test_snapshot_webhook_order")
+	providers, err := svc.GetWebhookProviders(ctx, payment.TypeWxpay, "socialops_test_snapshot_webhook_order")
 	require.NoError(t, err)
 	require.Len(t, providers, 1)
 	require.Equal(t, payment.TypeWxpay, providers[0].ProviderKey())

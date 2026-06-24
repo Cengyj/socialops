@@ -11,7 +11,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync/atomic"
 
 	"github.com/spf13/viper"
 )
@@ -50,12 +49,8 @@ type Config struct {
 	GitHubOAuth             EmailOAuthProviderConfig      `mapstructure:"github_oauth"`
 	GoogleOAuth             EmailOAuthProviderConfig      `mapstructure:"google_oauth"`
 	Default                 DefaultConfig                 `mapstructure:"default"`
-	APIKeyAuth              APIKeyAuthCacheConfig         `mapstructure:"api_key_auth_cache"`
 	SubscriptionCache       SubscriptionCacheConfig       `mapstructure:"subscription_cache"`
 	SubscriptionMaintenance SubscriptionMaintenanceConfig `mapstructure:"subscription_maintenance"`
-	Dashboard               DashboardCacheConfig          `mapstructure:"dashboard_cache"`
-	DashboardAgg            DashboardAggregationConfig    `mapstructure:"dashboard_aggregation"`
-	UsageCleanup            UsageCleanupConfig            `mapstructure:"usage_cleanup"`
 	Concurrency             ConcurrencyConfig             `mapstructure:"concurrency"`
 	RunMode                 string                        `mapstructure:"run_mode" yaml:"run_mode"`
 	Timezone                string                        `mapstructure:"timezone"` // e.g. "Asia/Shanghai", "UTC"
@@ -131,10 +126,6 @@ type IdempotencyConfig struct {
 	FailedRetryBackoffSeconds int `mapstructure:"failed_retry_backoff_seconds"`
 	// MaxStoredResponseLen 持久化响应体最大长度（字节）。
 	MaxStoredResponseLen int `mapstructure:"max_stored_response_len"`
-	// CleanupIntervalSeconds 过期记录清理周期（秒）。
-	CleanupIntervalSeconds int `mapstructure:"cleanup_interval_seconds"`
-	// CleanupBatchSize 每次清理的最大记录数。
-	CleanupBatchSize int `mapstructure:"cleanup_batch_size"`
 }
 
 type LinuxDoConnectConfig struct {
@@ -343,7 +334,7 @@ func normalizeWeChatConnectScopes(raw, mode string) string {
 	}
 }
 
-func shouldApplyLegacyWeChatEnv(configKey, envKey string) bool {
+func shouldApplyHistoricalWeChatOAuthEnv(configKey, envKey string) bool {
 	if viper.InConfig(configKey) {
 		return false
 	}
@@ -359,78 +350,78 @@ func hasExplicitConfigOrEnv(configKey, envKey string) bool {
 	return ok
 }
 
-func applyLegacyWeChatConnectEnvCompatibility(cfg *WeChatConnectConfig) {
+func applyHistoricalWeChatOAuthEnvFallbacks(cfg *WeChatConnectConfig) {
 	if cfg == nil {
 		return
 	}
 
-	legacyOpenAppID := ""
-	if shouldApplyLegacyWeChatEnv("wechat_connect.open_app_id", "WECHAT_CONNECT_OPEN_APP_ID") &&
-		shouldApplyLegacyWeChatEnv("wechat_connect.app_id", "WECHAT_CONNECT_APP_ID") {
-		legacyOpenAppID = strings.TrimSpace(os.Getenv("WECHAT_OAUTH_OPEN_APP_ID"))
-		if legacyOpenAppID != "" {
-			cfg.OpenAppID = legacyOpenAppID
+	historicalOpenAppID := ""
+	if shouldApplyHistoricalWeChatOAuthEnv("wechat_connect.open_app_id", "WECHAT_CONNECT_OPEN_APP_ID") &&
+		shouldApplyHistoricalWeChatOAuthEnv("wechat_connect.app_id", "WECHAT_CONNECT_APP_ID") {
+		historicalOpenAppID = strings.TrimSpace(os.Getenv("WECHAT_OAUTH_OPEN_APP_ID"))
+		if historicalOpenAppID != "" {
+			cfg.OpenAppID = historicalOpenAppID
 		}
 	}
 
-	legacyOpenAppSecret := ""
-	if shouldApplyLegacyWeChatEnv("wechat_connect.open_app_secret", "WECHAT_CONNECT_OPEN_APP_SECRET") &&
-		shouldApplyLegacyWeChatEnv("wechat_connect.app_secret", "WECHAT_CONNECT_APP_SECRET") {
-		legacyOpenAppSecret = strings.TrimSpace(os.Getenv("WECHAT_OAUTH_OPEN_APP_SECRET"))
-		if legacyOpenAppSecret != "" {
-			cfg.OpenAppSecret = legacyOpenAppSecret
+	historicalOpenAppSecret := ""
+	if shouldApplyHistoricalWeChatOAuthEnv("wechat_connect.open_app_secret", "WECHAT_CONNECT_OPEN_APP_SECRET") &&
+		shouldApplyHistoricalWeChatOAuthEnv("wechat_connect.app_secret", "WECHAT_CONNECT_APP_SECRET") {
+		historicalOpenAppSecret = strings.TrimSpace(os.Getenv("WECHAT_OAUTH_OPEN_APP_SECRET"))
+		if historicalOpenAppSecret != "" {
+			cfg.OpenAppSecret = historicalOpenAppSecret
 		}
 	}
 
-	legacyMPAppID := ""
-	if shouldApplyLegacyWeChatEnv("wechat_connect.mp_app_id", "WECHAT_CONNECT_MP_APP_ID") &&
-		shouldApplyLegacyWeChatEnv("wechat_connect.app_id", "WECHAT_CONNECT_APP_ID") {
-		legacyMPAppID = strings.TrimSpace(os.Getenv("WECHAT_OAUTH_MP_APP_ID"))
-		if legacyMPAppID != "" {
-			cfg.MPAppID = legacyMPAppID
+	historicalMPAppID := ""
+	if shouldApplyHistoricalWeChatOAuthEnv("wechat_connect.mp_app_id", "WECHAT_CONNECT_MP_APP_ID") &&
+		shouldApplyHistoricalWeChatOAuthEnv("wechat_connect.app_id", "WECHAT_CONNECT_APP_ID") {
+		historicalMPAppID = strings.TrimSpace(os.Getenv("WECHAT_OAUTH_MP_APP_ID"))
+		if historicalMPAppID != "" {
+			cfg.MPAppID = historicalMPAppID
 		}
 	}
 
-	legacyMPAppSecret := ""
-	if shouldApplyLegacyWeChatEnv("wechat_connect.mp_app_secret", "WECHAT_CONNECT_MP_APP_SECRET") &&
-		shouldApplyLegacyWeChatEnv("wechat_connect.app_secret", "WECHAT_CONNECT_APP_SECRET") {
-		legacyMPAppSecret = strings.TrimSpace(os.Getenv("WECHAT_OAUTH_MP_APP_SECRET"))
-		if legacyMPAppSecret != "" {
-			cfg.MPAppSecret = legacyMPAppSecret
+	historicalMPAppSecret := ""
+	if shouldApplyHistoricalWeChatOAuthEnv("wechat_connect.mp_app_secret", "WECHAT_CONNECT_MP_APP_SECRET") &&
+		shouldApplyHistoricalWeChatOAuthEnv("wechat_connect.app_secret", "WECHAT_CONNECT_APP_SECRET") {
+		historicalMPAppSecret = strings.TrimSpace(os.Getenv("WECHAT_OAUTH_MP_APP_SECRET"))
+		if historicalMPAppSecret != "" {
+			cfg.MPAppSecret = historicalMPAppSecret
 		}
 	}
 
-	if shouldApplyLegacyWeChatEnv("wechat_connect.frontend_redirect_url", "WECHAT_CONNECT_FRONTEND_REDIRECT_URL") {
-		if legacyFrontend := strings.TrimSpace(os.Getenv("WECHAT_OAUTH_FRONTEND_REDIRECT_URL")); legacyFrontend != "" {
-			cfg.FrontendRedirectURL = legacyFrontend
+	if shouldApplyHistoricalWeChatOAuthEnv("wechat_connect.frontend_redirect_url", "WECHAT_CONNECT_FRONTEND_REDIRECT_URL") {
+		if historicalFrontend := strings.TrimSpace(os.Getenv("WECHAT_OAUTH_FRONTEND_REDIRECT_URL")); historicalFrontend != "" {
+			cfg.FrontendRedirectURL = historicalFrontend
 		}
 	}
 
-	hasLegacyOpen := legacyOpenAppID != "" && legacyOpenAppSecret != ""
-	hasLegacyMP := legacyMPAppID != "" && legacyMPAppSecret != ""
+	hasHistoricalOpen := historicalOpenAppID != "" && historicalOpenAppSecret != ""
+	hasHistoricalMP := historicalMPAppID != "" && historicalMPAppSecret != ""
 
-	if shouldApplyLegacyWeChatEnv("wechat_connect.enabled", "WECHAT_CONNECT_ENABLED") && (hasLegacyOpen || hasLegacyMP) {
+	if shouldApplyHistoricalWeChatOAuthEnv("wechat_connect.enabled", "WECHAT_CONNECT_ENABLED") && (hasHistoricalOpen || hasHistoricalMP) {
 		cfg.Enabled = true
 	}
-	if shouldApplyLegacyWeChatEnv("wechat_connect.open_enabled", "WECHAT_CONNECT_OPEN_ENABLED") && hasLegacyOpen {
+	if shouldApplyHistoricalWeChatOAuthEnv("wechat_connect.open_enabled", "WECHAT_CONNECT_OPEN_ENABLED") && hasHistoricalOpen {
 		cfg.OpenEnabled = true
 	}
-	if shouldApplyLegacyWeChatEnv("wechat_connect.mp_enabled", "WECHAT_CONNECT_MP_ENABLED") && hasLegacyMP {
+	if shouldApplyHistoricalWeChatOAuthEnv("wechat_connect.mp_enabled", "WECHAT_CONNECT_MP_ENABLED") && hasHistoricalMP {
 		cfg.MPEnabled = true
 	}
-	if shouldApplyLegacyWeChatEnv("wechat_connect.mode", "WECHAT_CONNECT_MODE") {
+	if shouldApplyHistoricalWeChatOAuthEnv("wechat_connect.mode", "WECHAT_CONNECT_MODE") {
 		switch {
-		case hasLegacyMP && !hasLegacyOpen:
+		case hasHistoricalMP && !hasHistoricalOpen:
 			cfg.Mode = "mp"
-		case hasLegacyOpen:
+		case hasHistoricalOpen:
 			cfg.Mode = "open"
 		}
 	}
-	if shouldApplyLegacyWeChatEnv("wechat_connect.scopes", "WECHAT_CONNECT_SCOPES") {
+	if shouldApplyHistoricalWeChatOAuthEnv("wechat_connect.scopes", "WECHAT_CONNECT_SCOPES") {
 		switch {
-		case hasLegacyMP && !hasLegacyOpen:
+		case hasHistoricalMP && !hasHistoricalOpen:
 			cfg.Scopes = defaultWeChatConnectScopesForMode("mp")
-		case hasLegacyOpen:
+		case hasHistoricalOpen:
 			cfg.Scopes = defaultWeChatConnectScopesForMode("open")
 		}
 	}
@@ -507,44 +498,10 @@ type CORSConfig struct {
 }
 
 type SecurityConfig struct {
-	URLAllowlist                     URLAllowlistConfig   `mapstructure:"url_allowlist"`
-	ResponseHeaders                  ResponseHeaderConfig `mapstructure:"response_headers"`
-	CSP                              CSPConfig            `mapstructure:"csp"`
-	ProxyFallback                    ProxyFallbackConfig  `mapstructure:"proxy_fallback"`
-	ProxyProbe                       ProxyProbeConfig     `mapstructure:"proxy_probe"`
-	TrustForwardedIPForAPIKeyACL     bool                 `mapstructure:"trust_forwarded_ip_for_api_key_acl"`
-	trustForwardedIPForAPIKeyACLLive *atomic.Bool         `mapstructure:"-"`
-}
-
-func (c *Config) TrustForwardedIPForAPIKeyACL() bool {
-	if c == nil {
-		return false
-	}
-	live := c.Security.trustForwardedIPForAPIKeyACLLive
-	if live == nil {
-		return c.Security.TrustForwardedIPForAPIKeyACL
-	}
-	return live.Load()
-}
-
-func (c *Config) SetTrustForwardedIPForAPIKeyACL(enabled bool) {
-	if c == nil {
-		return
-	}
-	c.Security.TrustForwardedIPForAPIKeyACL = enabled
-	if c.Security.trustForwardedIPForAPIKeyACLLive == nil {
-		c.Security.trustForwardedIPForAPIKeyACLLive = &atomic.Bool{}
-	}
-	c.Security.trustForwardedIPForAPIKeyACLLive.Store(enabled)
-}
-
-type URLAllowlistConfig struct {
-	Enabled           bool     `mapstructure:"enabled"`
-	UpstreamHosts     []string `mapstructure:"upstream_hosts"`
-	CRSHosts          []string `mapstructure:"crs_hosts"`
-	AllowPrivateHosts bool     `mapstructure:"allow_private_hosts"`
-	// 关闭 URL 白名单校验时，是否允许 http URL（默认只允许 https）
-	AllowInsecureHTTP bool `mapstructure:"allow_insecure_http"`
+	ResponseHeaders ResponseHeaderConfig `mapstructure:"response_headers"`
+	CSP             CSPConfig            `mapstructure:"csp"`
+	ProxyFallback   ProxyFallbackConfig  `mapstructure:"proxy_fallback"`
+	ProxyProbe      ProxyProbeConfig     `mapstructure:"proxy_probe"`
 }
 
 type ResponseHeaderConfig struct {
@@ -705,18 +662,7 @@ type DefaultConfig struct {
 	AdminPassword   string  `mapstructure:"admin_password"`
 	UserConcurrency int     `mapstructure:"user_concurrency"`
 	UserBalance     float64 `mapstructure:"user_balance"`
-	APIKeyPrefix    string  `mapstructure:"api_key_prefix"`
 	RateMultiplier  float64 `mapstructure:"rate_multiplier"`
-}
-
-// APIKeyAuthCacheConfig API Key 认证缓存配置
-type APIKeyAuthCacheConfig struct {
-	L1Size             int  `mapstructure:"l1_size"`
-	L1TTLSeconds       int  `mapstructure:"l1_ttl_seconds"`
-	L2TTLSeconds       int  `mapstructure:"l2_ttl_seconds"`
-	NegativeTTLSeconds int  `mapstructure:"negative_ttl_seconds"`
-	JitterPercent      int  `mapstructure:"jitter_percent"`
-	Singleflight       bool `mapstructure:"singleflight"`
 }
 
 // SubscriptionCacheConfig 订阅认证 L1 缓存配置
@@ -731,60 +677,6 @@ type SubscriptionCacheConfig struct {
 type SubscriptionMaintenanceConfig struct {
 	WorkerCount int `mapstructure:"worker_count"`
 	QueueSize   int `mapstructure:"queue_size"`
-}
-
-// DashboardCacheConfig 仪表盘统计缓存配置
-type DashboardCacheConfig struct {
-	// Enabled: 是否启用仪表盘缓存
-	Enabled bool `mapstructure:"enabled"`
-	// KeyPrefix: Redis key 前缀，用于多环境隔离
-	KeyPrefix string `mapstructure:"key_prefix"`
-	// StatsFreshTTLSeconds: 缓存命中认为“新鲜”的时间窗口（秒）
-	StatsFreshTTLSeconds int `mapstructure:"stats_fresh_ttl_seconds"`
-	// StatsTTLSeconds: Redis 缓存总 TTL（秒）
-	StatsTTLSeconds int `mapstructure:"stats_ttl_seconds"`
-	// StatsRefreshTimeoutSeconds: 异步刷新超时（秒）
-	StatsRefreshTimeoutSeconds int `mapstructure:"stats_refresh_timeout_seconds"`
-}
-
-// DashboardAggregationConfig 仪表盘预聚合配置
-type DashboardAggregationConfig struct {
-	// Enabled: 是否启用预聚合作业
-	Enabled bool `mapstructure:"enabled"`
-	// IntervalSeconds: 聚合刷新间隔（秒）
-	IntervalSeconds int `mapstructure:"interval_seconds"`
-	// LookbackSeconds: 回看窗口（秒）
-	LookbackSeconds int `mapstructure:"lookback_seconds"`
-	// BackfillEnabled: 是否允许全量回填
-	BackfillEnabled bool `mapstructure:"backfill_enabled"`
-	// BackfillMaxDays: 回填最大跨度（天）
-	BackfillMaxDays int `mapstructure:"backfill_max_days"`
-	// Retention: 各表保留窗口（天）
-	Retention DashboardAggregationRetentionConfig `mapstructure:"retention"`
-	// RecomputeDays: 启动时重算最近 N 天
-	RecomputeDays int `mapstructure:"recompute_days"`
-}
-
-// DashboardAggregationRetentionConfig 预聚合保留窗口
-type DashboardAggregationRetentionConfig struct {
-	UsageLogsDays         int `mapstructure:"usage_logs_days"`
-	UsageBillingDedupDays int `mapstructure:"usage_billing_dedup_days"`
-	HourlyDays            int `mapstructure:"hourly_days"`
-	DailyDays             int `mapstructure:"daily_days"`
-}
-
-// UsageCleanupConfig 使用记录清理任务配置
-type UsageCleanupConfig struct {
-	// Enabled: 是否启用清理任务执行器
-	Enabled bool `mapstructure:"enabled"`
-	// MaxRangeDays: 单次任务允许的最大时间跨度（天）
-	MaxRangeDays int `mapstructure:"max_range_days"`
-	// BatchSize: 单批删除数量
-	BatchSize int `mapstructure:"batch_size"`
-	// WorkerIntervalSeconds: 后台任务轮询间隔（秒）
-	WorkerIntervalSeconds int `mapstructure:"worker_interval_seconds"`
-	// TaskTimeoutSeconds: 单次任务最大执行时长（秒）
-	TaskTimeoutSeconds int `mapstructure:"task_timeout_seconds"`
 }
 
 func NormalizeRunMode(value string) string {
@@ -865,7 +757,7 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	cfg.LinuxDo.UserInfoEmailPath = strings.TrimSpace(cfg.LinuxDo.UserInfoEmailPath)
 	cfg.LinuxDo.UserInfoIDPath = strings.TrimSpace(cfg.LinuxDo.UserInfoIDPath)
 	cfg.LinuxDo.UserInfoUsernamePath = strings.TrimSpace(cfg.LinuxDo.UserInfoUsernamePath)
-	applyLegacyWeChatConnectEnvCompatibility(&cfg.WeChat)
+	applyHistoricalWeChatOAuthEnvFallbacks(&cfg.WeChat)
 	normalizeWeChatConnectConfig(&cfg.WeChat)
 	cfg.OIDC.ProviderName = strings.TrimSpace(cfg.OIDC.ProviderName)
 	cfg.OIDC.ClientID = strings.TrimSpace(cfg.OIDC.ClientID)
@@ -886,12 +778,10 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	cfg.OIDC.UserInfoUsernamePath = strings.TrimSpace(cfg.OIDC.UserInfoUsernamePath)
 	cfg.OIDC.UsePKCEExplicit = hasExplicitConfigOrEnv("oidc_connect.use_pkce", "OIDC_CONNECT_USE_PKCE")
 	cfg.OIDC.ValidateIDTokenExplicit = hasExplicitConfigOrEnv("oidc_connect.validate_id_token", "OIDC_CONNECT_VALIDATE_ID_TOKEN")
-	cfg.Dashboard.KeyPrefix = strings.TrimSpace(cfg.Dashboard.KeyPrefix)
 	cfg.CORS.AllowedOrigins = normalizeStringSlice(cfg.CORS.AllowedOrigins)
 	cfg.Security.ResponseHeaders.AdditionalAllowed = normalizeStringSlice(cfg.Security.ResponseHeaders.AdditionalAllowed)
 	cfg.Security.ResponseHeaders.ForceRemove = normalizeStringSlice(cfg.Security.ResponseHeaders.ForceRemove)
 	cfg.Security.CSP.Policy = strings.TrimSpace(cfg.Security.CSP.Policy)
-	cfg.SetTrustForwardedIPForAPIKeyACL(cfg.Security.TrustForwardedIPForAPIKeyACL)
 	cfg.Log.Level = strings.ToLower(strings.TrimSpace(cfg.Log.Level))
 	cfg.Log.Format = strings.ToLower(strings.TrimSpace(cfg.Log.Format))
 	cfg.Log.ServiceName = strings.TrimSpace(cfg.Log.ServiceName)
@@ -927,9 +817,6 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 		cfg.JWT.Secret = ""
 	}
 
-	if !cfg.Security.URLAllowlist.Enabled {
-		slog.Warn("security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).")
-	}
 	if !cfg.Security.ResponseHeaders.Enabled {
 		slog.Warn("security.response_headers.enabled=false; configurable header filtering disabled (default allowlist only).")
 	}
@@ -991,18 +878,12 @@ func setDefaults() {
 	viper.SetDefault("cors.allow_credentials", true)
 
 	// Security
-	viper.SetDefault("security.url_allowlist.enabled", false)
-	viper.SetDefault("security.url_allowlist.upstream_hosts", []string{})
-	viper.SetDefault("security.url_allowlist.crs_hosts", []string{})
-	viper.SetDefault("security.url_allowlist.allow_private_hosts", true)
-	viper.SetDefault("security.url_allowlist.allow_insecure_http", true)
 	viper.SetDefault("security.response_headers.enabled", true)
 	viper.SetDefault("security.response_headers.additional_allowed", []string{})
 	viper.SetDefault("security.response_headers.force_remove", []string{})
 	viper.SetDefault("security.csp.enabled", true)
 	viper.SetDefault("security.csp.policy", DefaultCSPPolicy)
 	viper.SetDefault("security.proxy_probe.insecure_skip_verify", false)
-	viper.SetDefault("security.trust_forwarded_ip_for_api_key_acl", false)
 
 	// Security - disable direct fallback on proxy error
 	viper.SetDefault("security.proxy_fallback.allow_direct_on_error", false)
@@ -1128,50 +1009,15 @@ func setDefaults() {
 	viper.SetDefault("default.admin_password", "")
 	viper.SetDefault("default.user_concurrency", 5)
 	viper.SetDefault("default.user_balance", 0)
-	viper.SetDefault("default.api_key_prefix", "sk-")
 	viper.SetDefault("default.rate_multiplier", 1.0)
 
 	// Timezone (default to Asia/Shanghai for Chinese users)
 	viper.SetDefault("timezone", "Asia/Shanghai")
 
-	// API Key auth cache
-	viper.SetDefault("api_key_auth_cache.l1_size", 65535)
-	viper.SetDefault("api_key_auth_cache.l1_ttl_seconds", 15)
-	viper.SetDefault("api_key_auth_cache.l2_ttl_seconds", 300)
-	viper.SetDefault("api_key_auth_cache.negative_ttl_seconds", 30)
-	viper.SetDefault("api_key_auth_cache.jitter_percent", 10)
-	viper.SetDefault("api_key_auth_cache.singleflight", true)
-
 	// Subscription auth L1 cache
 	viper.SetDefault("subscription_cache.l1_size", 16384)
 	viper.SetDefault("subscription_cache.l1_ttl_seconds", 10)
 	viper.SetDefault("subscription_cache.jitter_percent", 10)
-
-	// Dashboard cache
-	viper.SetDefault("dashboard_cache.enabled", true)
-	viper.SetDefault("dashboard_cache.key_prefix", "socialops:")
-	viper.SetDefault("dashboard_cache.stats_fresh_ttl_seconds", 15)
-	viper.SetDefault("dashboard_cache.stats_ttl_seconds", 30)
-	viper.SetDefault("dashboard_cache.stats_refresh_timeout_seconds", 30)
-
-	// Dashboard aggregation
-	viper.SetDefault("dashboard_aggregation.enabled", true)
-	viper.SetDefault("dashboard_aggregation.interval_seconds", 60)
-	viper.SetDefault("dashboard_aggregation.lookback_seconds", 120)
-	viper.SetDefault("dashboard_aggregation.backfill_enabled", false)
-	viper.SetDefault("dashboard_aggregation.backfill_max_days", 31)
-	viper.SetDefault("dashboard_aggregation.retention.usage_logs_days", 90)
-	viper.SetDefault("dashboard_aggregation.retention.usage_billing_dedup_days", 365)
-	viper.SetDefault("dashboard_aggregation.retention.hourly_days", 180)
-	viper.SetDefault("dashboard_aggregation.retention.daily_days", 730)
-	viper.SetDefault("dashboard_aggregation.recompute_days", 2)
-
-	// Usage cleanup task
-	viper.SetDefault("usage_cleanup.enabled", true)
-	viper.SetDefault("usage_cleanup.max_range_days", 31)
-	viper.SetDefault("usage_cleanup.batch_size", 5000)
-	viper.SetDefault("usage_cleanup.worker_interval_seconds", 10)
-	viper.SetDefault("usage_cleanup.task_timeout_seconds", 1800)
 
 	// Idempotency
 	viper.SetDefault("idempotency.observe_only", true)
@@ -1180,8 +1026,6 @@ func setDefaults() {
 	viper.SetDefault("idempotency.processing_timeout_seconds", 30)
 	viper.SetDefault("idempotency.failed_retry_backoff_seconds", 5)
 	viper.SetDefault("idempotency.max_stored_response_len", 64*1024)
-	viper.SetDefault("idempotency.cleanup_interval_seconds", 60)
-	viper.SetDefault("idempotency.cleanup_batch_size", 500)
 	viper.SetDefault("concurrency.ping_interval", 10)
 
 	// Twitter/X login (credential acquisition) external services.
@@ -1521,119 +1365,6 @@ func (c *Config) Validate() error {
 	if c.Redis.MinIdleConns > c.Redis.PoolSize {
 		return fmt.Errorf("redis.min_idle_conns cannot exceed redis.pool_size")
 	}
-	if c.Dashboard.Enabled {
-		if c.Dashboard.StatsFreshTTLSeconds <= 0 {
-			return fmt.Errorf("dashboard_cache.stats_fresh_ttl_seconds must be positive")
-		}
-		if c.Dashboard.StatsTTLSeconds <= 0 {
-			return fmt.Errorf("dashboard_cache.stats_ttl_seconds must be positive")
-		}
-		if c.Dashboard.StatsRefreshTimeoutSeconds <= 0 {
-			return fmt.Errorf("dashboard_cache.stats_refresh_timeout_seconds must be positive")
-		}
-		if c.Dashboard.StatsFreshTTLSeconds > c.Dashboard.StatsTTLSeconds {
-			return fmt.Errorf("dashboard_cache.stats_fresh_ttl_seconds must be <= dashboard_cache.stats_ttl_seconds")
-		}
-	} else {
-		if c.Dashboard.StatsFreshTTLSeconds < 0 {
-			return fmt.Errorf("dashboard_cache.stats_fresh_ttl_seconds must be non-negative")
-		}
-		if c.Dashboard.StatsTTLSeconds < 0 {
-			return fmt.Errorf("dashboard_cache.stats_ttl_seconds must be non-negative")
-		}
-		if c.Dashboard.StatsRefreshTimeoutSeconds < 0 {
-			return fmt.Errorf("dashboard_cache.stats_refresh_timeout_seconds must be non-negative")
-		}
-	}
-	if c.DashboardAgg.Enabled {
-		if c.DashboardAgg.IntervalSeconds <= 0 {
-			return fmt.Errorf("dashboard_aggregation.interval_seconds must be positive")
-		}
-		if c.DashboardAgg.LookbackSeconds < 0 {
-			return fmt.Errorf("dashboard_aggregation.lookback_seconds must be non-negative")
-		}
-		if c.DashboardAgg.BackfillMaxDays < 0 {
-			return fmt.Errorf("dashboard_aggregation.backfill_max_days must be non-negative")
-		}
-		if c.DashboardAgg.BackfillEnabled && c.DashboardAgg.BackfillMaxDays == 0 {
-			return fmt.Errorf("dashboard_aggregation.backfill_max_days must be positive")
-		}
-		if c.DashboardAgg.Retention.UsageLogsDays <= 0 {
-			return fmt.Errorf("dashboard_aggregation.retention.usage_logs_days must be positive")
-		}
-		if c.DashboardAgg.Retention.UsageBillingDedupDays <= 0 {
-			return fmt.Errorf("dashboard_aggregation.retention.usage_billing_dedup_days must be positive")
-		}
-		if c.DashboardAgg.Retention.UsageBillingDedupDays < c.DashboardAgg.Retention.UsageLogsDays {
-			return fmt.Errorf("dashboard_aggregation.retention.usage_billing_dedup_days must be greater than or equal to usage_logs_days")
-		}
-		if c.DashboardAgg.Retention.HourlyDays <= 0 {
-			return fmt.Errorf("dashboard_aggregation.retention.hourly_days must be positive")
-		}
-		if c.DashboardAgg.Retention.DailyDays <= 0 {
-			return fmt.Errorf("dashboard_aggregation.retention.daily_days must be positive")
-		}
-		if c.DashboardAgg.RecomputeDays < 0 {
-			return fmt.Errorf("dashboard_aggregation.recompute_days must be non-negative")
-		}
-	} else {
-		if c.DashboardAgg.IntervalSeconds < 0 {
-			return fmt.Errorf("dashboard_aggregation.interval_seconds must be non-negative")
-		}
-		if c.DashboardAgg.LookbackSeconds < 0 {
-			return fmt.Errorf("dashboard_aggregation.lookback_seconds must be non-negative")
-		}
-		if c.DashboardAgg.BackfillMaxDays < 0 {
-			return fmt.Errorf("dashboard_aggregation.backfill_max_days must be non-negative")
-		}
-		if c.DashboardAgg.Retention.UsageLogsDays < 0 {
-			return fmt.Errorf("dashboard_aggregation.retention.usage_logs_days must be non-negative")
-		}
-		if c.DashboardAgg.Retention.UsageBillingDedupDays < 0 {
-			return fmt.Errorf("dashboard_aggregation.retention.usage_billing_dedup_days must be non-negative")
-		}
-		if c.DashboardAgg.Retention.UsageBillingDedupDays > 0 &&
-			c.DashboardAgg.Retention.UsageLogsDays > 0 &&
-			c.DashboardAgg.Retention.UsageBillingDedupDays < c.DashboardAgg.Retention.UsageLogsDays {
-			return fmt.Errorf("dashboard_aggregation.retention.usage_billing_dedup_days must be greater than or equal to usage_logs_days")
-		}
-		if c.DashboardAgg.Retention.HourlyDays < 0 {
-			return fmt.Errorf("dashboard_aggregation.retention.hourly_days must be non-negative")
-		}
-		if c.DashboardAgg.Retention.DailyDays < 0 {
-			return fmt.Errorf("dashboard_aggregation.retention.daily_days must be non-negative")
-		}
-		if c.DashboardAgg.RecomputeDays < 0 {
-			return fmt.Errorf("dashboard_aggregation.recompute_days must be non-negative")
-		}
-	}
-	if c.UsageCleanup.Enabled {
-		if c.UsageCleanup.MaxRangeDays <= 0 {
-			return fmt.Errorf("usage_cleanup.max_range_days must be positive")
-		}
-		if c.UsageCleanup.BatchSize <= 0 {
-			return fmt.Errorf("usage_cleanup.batch_size must be positive")
-		}
-		if c.UsageCleanup.WorkerIntervalSeconds <= 0 {
-			return fmt.Errorf("usage_cleanup.worker_interval_seconds must be positive")
-		}
-		if c.UsageCleanup.TaskTimeoutSeconds <= 0 {
-			return fmt.Errorf("usage_cleanup.task_timeout_seconds must be positive")
-		}
-	} else {
-		if c.UsageCleanup.MaxRangeDays < 0 {
-			return fmt.Errorf("usage_cleanup.max_range_days must be non-negative")
-		}
-		if c.UsageCleanup.BatchSize < 0 {
-			return fmt.Errorf("usage_cleanup.batch_size must be non-negative")
-		}
-		if c.UsageCleanup.WorkerIntervalSeconds < 0 {
-			return fmt.Errorf("usage_cleanup.worker_interval_seconds must be non-negative")
-		}
-		if c.UsageCleanup.TaskTimeoutSeconds < 0 {
-			return fmt.Errorf("usage_cleanup.task_timeout_seconds must be non-negative")
-		}
-	}
 	if c.Idempotency.DefaultTTLSeconds <= 0 {
 		return fmt.Errorf("idempotency.default_ttl_seconds must be positive")
 	}
@@ -1648,12 +1379,6 @@ func (c *Config) Validate() error {
 	}
 	if c.Idempotency.MaxStoredResponseLen <= 0 {
 		return fmt.Errorf("idempotency.max_stored_response_len must be positive")
-	}
-	if c.Idempotency.CleanupIntervalSeconds <= 0 {
-		return fmt.Errorf("idempotency.cleanup_interval_seconds must be positive")
-	}
-	if c.Idempotency.CleanupBatchSize <= 0 {
-		return fmt.Errorf("idempotency.cleanup_batch_size must be positive")
 	}
 	if c.Concurrency.PingInterval < 5 || c.Concurrency.PingInterval > 30 {
 		return fmt.Errorf("concurrency.ping_interval must be between 5-30 seconds")

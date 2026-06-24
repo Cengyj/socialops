@@ -100,6 +100,7 @@ describe('mock API payment contract', () => {
   it('serves backend-compatible user and admin payment order shapes', async () => {
     const baseUrl = await startMockApi()
     const userHeaders = { Authorization: 'Bearer dev-mock-user-token' }
+    const adminHeaders = { Authorization: 'Bearer dev-mock-admin-token' }
 
     const userConfig = await requestJson<MockPaymentConfig>(`${baseUrl}/api/v1/payment/config`, {
       headers: userHeaders,
@@ -126,7 +127,17 @@ describe('mock API payment contract', () => {
     })
     expect(userConfig.data).not.toHaveProperty('payment_enabled')
 
-    const adminConfig = await requestJson<MockPaymentConfig>(`${baseUrl}/api/v1/admin/payment/config`)
+    const removedChannels = await fetch(`${baseUrl}/api/v1/payment/channels`, {
+      headers: userHeaders,
+    })
+    expect(removedChannels.status).toBe(404)
+    await expect(removedChannels.json()).resolves.toMatchObject({
+      code: 'MOCK_NOT_FOUND',
+    })
+
+    const adminConfig = await requestJson<MockPaymentConfig>(`${baseUrl}/api/v1/admin/payment/config`, {
+      headers: adminHeaders,
+    })
     expect(adminConfig.code).toBe(0)
     expect(adminConfig.data).toMatchObject({
       enabled: true,
@@ -170,7 +181,9 @@ describe('mock API payment contract', () => {
     expect(userOrder.data).not.toHaveProperty('user_email')
     expect(userOrder.data).not.toHaveProperty('payment_trade_no')
 
-    const dashboard = await requestJson<MockPaymentDashboard>(`${baseUrl}/api/v1/admin/payment/dashboard?days=30`)
+    const dashboard = await requestJson<MockPaymentDashboard>(`${baseUrl}/api/v1/admin/payment/dashboard?days=30`, {
+      headers: adminHeaders,
+    })
     expect(dashboard.code).toBe(0)
     expect(dashboard.data).toMatchObject({
       today_amount: expect.any(Number),
@@ -185,7 +198,9 @@ describe('mock API payment contract', () => {
     })
     expect(dashboard.data).not.toHaveProperty('items')
 
-    const adminOrders = await requestJson<MockPage<MockPaymentOrder>>(`${baseUrl}/api/v1/admin/payment/orders?page=1&page_size=20`)
+    const adminOrders = await requestJson<MockPage<MockPaymentOrder>>(`${baseUrl}/api/v1/admin/payment/orders?page=1&page_size=20`, {
+      headers: adminHeaders,
+    })
     expect(adminOrders.code).toBe(0)
     expect(adminOrders.data.total).toBe(1)
     expect(adminOrders.data.items[0]).toMatchObject({
@@ -196,7 +211,9 @@ describe('mock API payment contract', () => {
       payment_trade_no: expect.any(String),
     })
 
-    const detail = await requestJson<MockAdminOrderDetail>(`${baseUrl}/api/v1/admin/payment/orders/${created.data.order_id}`)
+    const detail = await requestJson<MockAdminOrderDetail>(`${baseUrl}/api/v1/admin/payment/orders/${created.data.order_id}`, {
+      headers: adminHeaders,
+    })
     expect(detail.code).toBe(0)
     expect(detail.data.order).toMatchObject({
       id: created.data.order_id,
@@ -212,6 +229,7 @@ describe('mock API payment contract', () => {
 
     const cancelled = await requestJson<{ message: string }>(`${baseUrl}/api/v1/admin/payment/orders/${created.data.order_id}/cancel`, {
       method: 'POST',
+      headers: adminHeaders,
     })
     expect(cancelled.code).toBe(0)
     expect(cancelled.data.message).toBeTruthy()

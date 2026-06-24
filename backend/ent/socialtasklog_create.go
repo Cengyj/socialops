@@ -334,6 +334,14 @@ func (_c *SocialTaskLogCreate) defaults() {
 		v := socialtasklog.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.Payload(); !ok {
+		v := socialtasklog.DefaultPayload()
+		_c.mutation.SetPayload(v)
+	}
+	if _, ok := _c.mutation.TemplateSnapshot(); !ok {
+		v := socialtasklog.DefaultTemplateSnapshot()
+		_c.mutation.SetTemplateSnapshot(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := socialtasklog.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -373,6 +381,12 @@ func (_c *SocialTaskLogCreate) check() error {
 		if err := socialtasklog.ActionValidator(v); err != nil {
 			return &ValidationError{Name: "action", err: fmt.Errorf(`ent: validator failed for field "SocialTaskLog.action": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.Payload(); !ok {
+		return &ValidationError{Name: "payload", err: errors.New(`ent: missing required field "SocialTaskLog.payload"`)}
+	}
+	if _, ok := _c.mutation.TemplateSnapshot(); !ok {
+		return &ValidationError{Name: "template_snapshot", err: errors.New(`ent: missing required field "SocialTaskLog.template_snapshot"`)}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "SocialTaskLog.status"`)}
@@ -698,12 +712,6 @@ func (u *SocialTaskLogUpsert) UpdatePayload() *SocialTaskLogUpsert {
 	return u
 }
 
-// ClearPayload clears the value of the "payload" field.
-func (u *SocialTaskLogUpsert) ClearPayload() *SocialTaskLogUpsert {
-	u.SetNull(socialtasklog.FieldPayload)
-	return u
-}
-
 // SetTemplateSnapshot sets the "template_snapshot" field.
 func (u *SocialTaskLogUpsert) SetTemplateSnapshot(v domain.SocialTaskTemplateSnapshot) *SocialTaskLogUpsert {
 	u.Set(socialtasklog.FieldTemplateSnapshot, v)
@@ -713,12 +721,6 @@ func (u *SocialTaskLogUpsert) SetTemplateSnapshot(v domain.SocialTaskTemplateSna
 // UpdateTemplateSnapshot sets the "template_snapshot" field to the value that was provided on create.
 func (u *SocialTaskLogUpsert) UpdateTemplateSnapshot() *SocialTaskLogUpsert {
 	u.SetExcluded(socialtasklog.FieldTemplateSnapshot)
-	return u
-}
-
-// ClearTemplateSnapshot clears the value of the "template_snapshot" field.
-func (u *SocialTaskLogUpsert) ClearTemplateSnapshot() *SocialTaskLogUpsert {
-	u.SetNull(socialtasklog.FieldTemplateSnapshot)
 	return u
 }
 
@@ -1071,13 +1073,6 @@ func (u *SocialTaskLogUpsertOne) UpdatePayload() *SocialTaskLogUpsertOne {
 	})
 }
 
-// ClearPayload clears the value of the "payload" field.
-func (u *SocialTaskLogUpsertOne) ClearPayload() *SocialTaskLogUpsertOne {
-	return u.Update(func(s *SocialTaskLogUpsert) {
-		s.ClearPayload()
-	})
-}
-
 // SetTemplateSnapshot sets the "template_snapshot" field.
 func (u *SocialTaskLogUpsertOne) SetTemplateSnapshot(v domain.SocialTaskTemplateSnapshot) *SocialTaskLogUpsertOne {
 	return u.Update(func(s *SocialTaskLogUpsert) {
@@ -1089,13 +1084,6 @@ func (u *SocialTaskLogUpsertOne) SetTemplateSnapshot(v domain.SocialTaskTemplate
 func (u *SocialTaskLogUpsertOne) UpdateTemplateSnapshot() *SocialTaskLogUpsertOne {
 	return u.Update(func(s *SocialTaskLogUpsert) {
 		s.UpdateTemplateSnapshot()
-	})
-}
-
-// ClearTemplateSnapshot clears the value of the "template_snapshot" field.
-func (u *SocialTaskLogUpsertOne) ClearTemplateSnapshot() *SocialTaskLogUpsertOne {
-	return u.Update(func(s *SocialTaskLogUpsert) {
-		s.ClearTemplateSnapshot()
 	})
 }
 
@@ -1646,13 +1634,6 @@ func (u *SocialTaskLogUpsertBulk) UpdatePayload() *SocialTaskLogUpsertBulk {
 	})
 }
 
-// ClearPayload clears the value of the "payload" field.
-func (u *SocialTaskLogUpsertBulk) ClearPayload() *SocialTaskLogUpsertBulk {
-	return u.Update(func(s *SocialTaskLogUpsert) {
-		s.ClearPayload()
-	})
-}
-
 // SetTemplateSnapshot sets the "template_snapshot" field.
 func (u *SocialTaskLogUpsertBulk) SetTemplateSnapshot(v domain.SocialTaskTemplateSnapshot) *SocialTaskLogUpsertBulk {
 	return u.Update(func(s *SocialTaskLogUpsert) {
@@ -1664,13 +1645,6 @@ func (u *SocialTaskLogUpsertBulk) SetTemplateSnapshot(v domain.SocialTaskTemplat
 func (u *SocialTaskLogUpsertBulk) UpdateTemplateSnapshot() *SocialTaskLogUpsertBulk {
 	return u.Update(func(s *SocialTaskLogUpsert) {
 		s.UpdateTemplateSnapshot()
-	})
-}
-
-// ClearTemplateSnapshot clears the value of the "template_snapshot" field.
-func (u *SocialTaskLogUpsertBulk) ClearTemplateSnapshot() *SocialTaskLogUpsertBulk {
-	return u.Update(func(s *SocialTaskLogUpsert) {
-		s.ClearTemplateSnapshot()
 	})
 }
 

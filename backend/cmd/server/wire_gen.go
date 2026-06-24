@@ -63,25 +63,22 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	emailQueueService := service.ProvideEmailQueueService(emailService)
 	promoCodeRepository := repository.NewPromoCodeRepository(client)
 	billingCacheService := service.ProvideBillingCacheService()
-	apiKeyRepository := repository.NewAPIKeyRepository(client, db)
 	userSubscriptionRepository := repository.NewUserSubscriptionRepository(client)
 	userGroupRateRepository := repository.NewUserGroupRateRepository(db)
-	apiKeyCache := repository.NewAPIKeyCache(redisClient)
-	apiKeyService := service.ProvideAPIKeyService(apiKeyRepository, userRepository, groupRepository, userSubscriptionRepository, userGroupRateRepository, apiKeyCache, configConfig, billingCacheService)
-	apiKeyAuthCacheInvalidator := service.ProvideAPIKeyAuthCacheInvalidator(apiKeyService)
-	promoService := service.NewPromoService(promoCodeRepository, userRepository, billingCacheService, client, apiKeyAuthCacheInvalidator)
+	promoService := service.NewPromoService(promoCodeRepository, userRepository, billingCacheService, client)
 	subscriptionService := service.ProvideSubscriptionService(groupRepository, userSubscriptionRepository, billingCacheService, client, configConfig)
 	affiliateRepository := repository.NewAffiliateRepository(client, db)
-	affiliateService := service.NewAffiliateService(affiliateRepository, settingService, apiKeyAuthCacheInvalidator, billingCacheService)
+	affiliateService := service.NewAffiliateService(affiliateRepository, settingService, billingCacheService)
 	authService := service.NewAuthService(client, userRepository, redeemCodeRepository, refreshTokenCache, configConfig, settingService, emailService, turnstileService, emailQueueService, promoService, subscriptionService, affiliateService)
 	billingCache := repository.NewBillingCache(redisClient)
-	userService := service.NewUserService(userRepository, settingRepository, apiKeyAuthCacheInvalidator, billingCache)
+	userService := service.NewUserService(userRepository, settingRepository, billingCache)
 	redeemCache := repository.NewRedeemCache(redisClient)
-	redeemService := service.NewRedeemService(redeemCodeRepository, userRepository, subscriptionService, redeemCache, billingCacheService, client, apiKeyAuthCacheInvalidator, affiliateService)
+	redeemService := service.NewRedeemService(redeemCodeRepository, userRepository, subscriptionService, redeemCache, billingCacheService, client, affiliateService)
 	secretEncryptor, err := repository.NewAESEncryptor(configConfig)
 	if err != nil {
 		return nil, err
 	}
+	executionAuthEncryptor := repository.NewTwitterExecutionAuthEncryptor()
 	totpCache := repository.NewTotpCache(redisClient)
 	totpService := service.NewTotpService(userRepository, secretEncryptor, totpCache, settingService, emailService, emailQueueService)
 	userAttributeDefinitionRepository := repository.NewUserAttributeDefinitionRepository(client)
@@ -89,27 +86,22 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	userAttributeService := service.NewUserAttributeService(userAttributeDefinitionRepository, userAttributeValueRepository)
 	authHandler := handler.NewAuthHandler(configConfig, authService, userService, settingService, promoService, redeemService, totpService, userAttributeService)
 	userHandler := handler.NewUserHandler(userService, authService, emailService, emailCache, affiliateService)
-	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyService)
 	usageLogRepository := repository.NewUsageLogRepository(client, db)
-	usageService := service.ProvideUsageService(usageLogRepository, apiKeyAuthCacheInvalidator, client)
-	usageHandler := handler.NewUsageHandler(usageService, apiKeyService)
+	usageService := service.ProvideUsageService(usageLogRepository, client)
+	usageHandler := handler.NewUsageHandler(usageService)
 	redeemHandler := handler.NewRedeemHandler(redeemService)
 	subscriptionHandler := handler.NewSubscriptionHandler(subscriptionService)
 	announcementRepository := repository.NewAnnouncementRepository(client)
 	announcementReadRepository := repository.NewAnnouncementReadRepository(client)
 	announcementService := service.NewAnnouncementService(announcementRepository, announcementReadRepository, userRepository, userSubscriptionRepository)
 	announcementHandler := handler.NewAnnouncementHandler(announcementService)
-	dashboardStatsCache := service.ProvideDashboardStatsCache()
-	dashboardService := service.ProvideDashboardService(usageLogRepository, dashboardStatsCache, configConfig)
-	dashboardHandler := admin.NewDashboardHandler(dashboardService, settingService)
-	adminService := service.ProvideAdminService(userRepository, groupRepository, apiKeyRepository, redeemCodeRepository, userGroupRateRepository, billingCacheService, apiKeyAuthCacheInvalidator, client, settingService, subscriptionService, userSubscriptionRepository)
+	dashboardService := service.ProvideDashboardService(usageLogRepository)
+	dashboardHandler := admin.NewDashboardHandler(dashboardService)
+	adminService := service.ProvideAdminService(userRepository, groupRepository, redeemCodeRepository, userGroupRateRepository, billingCacheService, client, settingService, subscriptionService)
 	concurrencyService := service.ProvideConcurrencyService()
 	adminUserHandler := admin.NewUserHandler(adminService, concurrencyService)
-	groupCapacityService := service.ProvideGroupCapacityService()
-	groupHandler := admin.NewGroupHandler(adminService, dashboardService, groupCapacityService, groupRepository)
+	groupHandler := admin.NewGroupHandler(groupRepository)
 	adminAnnouncementHandler := admin.NewAnnouncementHandler(announcementService)
-	dataManagementService := service.NewDataManagementService()
-	dataManagementHandler := admin.NewDataManagementHandler(dataManagementService)
 	backupObjectStoreFactory := repository.NewS3BackupStoreFactory()
 	dbDumper := repository.NewPgDumper(configConfig)
 	backupService := service.ProvideBackupService(settingRepository, configConfig, secretEncryptor, backupObjectStoreFactory, dbDumper)
@@ -130,38 +122,35 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	systemHandler := handler.ProvideSystemHandler(updateService, systemOperationLockService)
 	adminSubscriptionHandler := admin.NewSubscriptionHandler(subscriptionService)
 	userAttributeHandler := admin.NewUserAttributeHandler(userAttributeService)
-	adminAPIKeyHandler := admin.NewAdminAPIKeyHandler(adminService)
 	paymentHandler := admin.NewPaymentHandler(paymentService, paymentConfigService)
 	affiliateHandler := admin.NewAffiliateHandler(affiliateService, adminService)
-	socialAccountService := service.ProvideSocialAccountService(client)
+	socialAccountService := service.ProvideSocialAccountService(client, executionAuthEncryptor)
 	socialIPService := service.NewSocialIPService(client)
+	globalProxyService := service.NewGlobalProxyService(client)
 	socialBillingService := service.NewSocialBillingService(userRepository, userSubscriptionRepository, groupRepository, billingCacheService)
-	socialTaskExecutor := service.ProvideSocialTaskExecutor(client, socialBillingService, configConfig)
+	socialTaskExecutor := service.ProvideSocialTaskExecutor(client, socialBillingService, configConfig, executionAuthEncryptor)
 	accountWorkbenchAdminHandler := handler.ProvideAccountWorkbenchAdminHandler(socialAccountService, socialIPService, socialBillingService, socialTaskExecutor)
 	totalAccountsHandler := admin.NewTotalAccountsHandler(socialAccountService)
+	globalProxyHandler := admin.NewGlobalProxyHandler(globalProxyService)
 	socialIPChecker := service.NewSocialIPChecker(client)
-	adminHandlers := handler.ProvideAdminHandlers(dashboardHandler, adminUserHandler, groupHandler, adminAnnouncementHandler, dataManagementHandler, backupHandler, adminRedeemHandler, promoHandler, settingHandler, systemHandler, adminSubscriptionHandler, userAttributeHandler, adminAPIKeyHandler, paymentHandler, affiliateHandler, accountWorkbenchAdminHandler, totalAccountsHandler)
+	adminHandlers := handler.ProvideAdminHandlers(dashboardHandler, adminUserHandler, groupHandler, adminAnnouncementHandler, backupHandler, adminRedeemHandler, promoHandler, settingHandler, systemHandler, adminSubscriptionHandler, userAttributeHandler, paymentHandler, affiliateHandler, accountWorkbenchAdminHandler, totalAccountsHandler, globalProxyHandler)
 	handlerSettingHandler := handler.ProvideSettingHandler(settingService, buildInfo, notificationEmailService)
 	totpHandler := handler.NewTotpHandler(totpService)
 	handlerPaymentHandler := handler.ProvidePaymentHandler(paymentService, paymentConfigService)
 	paymentWebhookHandler := handler.NewPaymentWebhookHandler(paymentService, registry)
 	taskSettingsService := service.NewTaskSettingsService(client)
-	accountWorkbenchHandler := handler.NewAccountWorkbenchHandler(socialAccountService, socialIPService, socialBillingService, socialTaskExecutor, taskSettingsService)
+	accountWorkbenchHandler := handler.NewAccountWorkbenchHandlerWithGlobalProxies(socialAccountService, socialIPService, globalProxyService, socialBillingService, socialTaskExecutor, taskSettingsService)
 	proxyHandler := handler.NewProxyHandler(socialIPService, socialIPChecker)
 	taskSettingsHandler := handler.NewTaskSettingsHandler(taskSettingsService)
-	planService := service.NewPlanService(client)
-	planHandler := handler.NewPlanHandler(planService, paymentConfigService)
-	handlers := handler.ProvideHandlers(authHandler, userHandler, apiKeyHandler, usageHandler, redeemHandler, subscriptionHandler, announcementHandler, adminHandlers, handlerSettingHandler, totpHandler, handlerPaymentHandler, paymentWebhookHandler, accountWorkbenchHandler, proxyHandler, taskSettingsHandler, planHandler)
+	handlers := handler.ProvideHandlers(authHandler, userHandler, usageHandler, redeemHandler, subscriptionHandler, announcementHandler, adminHandlers, handlerSettingHandler, totpHandler, handlerPaymentHandler, paymentWebhookHandler, accountWorkbenchHandler, proxyHandler, taskSettingsHandler)
 	jwtAuthMiddleware := middleware.NewJWTAuthMiddleware(authService, userService)
 	adminAuthMiddleware := middleware.NewAdminAuthMiddleware(authService, userService, settingService)
 	engine := server.ProvideRouter(configConfig, handlers, jwtAuthMiddleware, adminAuthMiddleware, settingService, redisClient)
 	httpServer := server.ProvideHTTPServer(configConfig, engine)
 	paymentOrderExpiryService := service.ProvidePaymentOrderExpiryService(paymentService)
 	subscriptionExpiryService := service.ProvideSubscriptionExpiryService(userSubscriptionRepository, settingRepository, notificationEmailService)
-	usageCleanupRepository := repository.NewUsageCleanupRepository(client, db)
-	usageCleanupService := service.ProvideUsageCleanupService(usageCleanupRepository, configConfig)
-	idempotencyCleanupService := service.ProvideIdempotencyCleanupService(idempotencyRepository, configConfig)
-	v := provideCleanup(client, redisClient, emailQueueService, billingCacheService, subscriptionService, backupService, paymentOrderExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, socialTaskExecutor)
+	idempotencyCoordinator := service.ProvideIdempotencyCoordinator(idempotencyRepository, configConfig)
+	v := provideCleanup(client, redisClient, emailQueueService, billingCacheService, subscriptionService, backupService, paymentOrderExpiryService, subscriptionExpiryService, idempotencyCoordinator, socialTaskExecutor)
 	application := &Application{
 		Server:  httpServer,
 		Cleanup: v,
@@ -192,8 +181,7 @@ func provideCleanup(
 	backupSvc *service.BackupService,
 	paymentOrderExpiry *service.PaymentOrderExpiryService,
 	subscriptionExpiry *service.SubscriptionExpiryService,
-	usageCleanup *service.UsageCleanupService,
-	idempotencyCleanup *service.IdempotencyCleanupService,
+	_ *service.IdempotencyCoordinator,
 	socialTaskExecutor *service.SocialTaskExecutor,
 ) func() {
 	return func() {
@@ -209,18 +197,6 @@ func provideCleanup(
 			{"SocialTaskExecutor", func() error {
 				if socialTaskExecutor != nil {
 					socialTaskExecutor.Stop()
-				}
-				return nil
-			}},
-			{"UsageCleanupService", func() error {
-				if usageCleanup != nil {
-					usageCleanup.Stop()
-				}
-				return nil
-			}},
-			{"IdempotencyCleanupService", func() error {
-				if idempotencyCleanup != nil {
-					idempotencyCleanup.Stop()
 				}
 				return nil
 			}},

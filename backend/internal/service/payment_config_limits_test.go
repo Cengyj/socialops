@@ -460,7 +460,7 @@ func TestGetAvailableMethodLimitsUsesConfiguredVisibleMethodSource(t *testing.T)
 	}
 }
 
-func TestGetAvailableMethodLimitsPreservesLegacyCrossProviderBehaviorWhenVisibleMethodSourceMissing(t *testing.T) {
+func TestGetAvailableMethodLimitsPreservesEmptySourceCrossProviderBehaviorWhenVisibleMethodSourceMissing(t *testing.T) {
 	ctx := context.Background()
 	client := newPaymentConfigServiceTestClient(t)
 

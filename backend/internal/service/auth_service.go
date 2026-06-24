@@ -155,18 +155,18 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 			return "", nil, ErrInvitationCodeRequired
 		}
 		if s.redeemRepo == nil {
-			logger.LegacyPrintf("service.auth", "%s", "[Auth] Invitation code is enabled but redeem repository is not configured")
+			logger.ComponentPrintf("service.auth", "%s", "[Auth] Invitation code is enabled but redeem repository is not configured")
 			return "", nil, ErrServiceUnavailable
 		}
 		// 验证邀请码
 		redeemCode, err := s.redeemRepo.GetByCode(ctx, invitationCode)
 		if err != nil {
-			logger.LegacyPrintf("service.auth", "[Auth] Invalid invitation code: %s, error: %v", invitationCode, err)
+			logger.ComponentPrintf("service.auth", "[Auth] Invalid invitation code: %s, error: %v", invitationCode, err)
 			return "", nil, ErrInvitationCodeInvalid
 		}
 		// 检查类型和状态
 		if redeemCode.Type != RedeemTypeInvitation || !redeemCode.CanUse() {
-			logger.LegacyPrintf("service.auth", "[Auth] Invitation code invalid: type=%s, status=%s", redeemCode.Type, redeemCode.Status)
+			logger.ComponentPrintf("service.auth", "[Auth] Invitation code invalid: type=%s, status=%s", redeemCode.Type, redeemCode.Status)
 			return "", nil, ErrInvitationCodeInvalid
 		}
 		invitationRedeemCode = redeemCode
@@ -177,7 +177,7 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 		// 如果邮件验证已开启但邮件服务未配置，拒绝注册
 		// 这是一个配置错误，不应该允许绕过验证
 		if s.emailService == nil {
-			logger.LegacyPrintf("service.auth", "%s", "[Auth] Email verification enabled but email service not configured, rejecting registration")
+			logger.ComponentPrintf("service.auth", "%s", "[Auth] Email verification enabled but email service not configured, rejecting registration")
 			return "", nil, ErrServiceUnavailable
 		}
 		if verifyCode == "" {
@@ -192,7 +192,7 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 	// 检查邮箱是否已存在
 	existsEmail, err := s.userRepo.ExistsByEmail(ctx, email)
 	if err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Database error checking email exists: %v", err)
+		logger.ComponentPrintf("service.auth", "[Auth] Database error checking email exists: %v", err)
 		return "", nil, ErrServiceUnavailable
 	}
 	if existsEmail {
@@ -231,12 +231,12 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 	s.assignSubscriptions(ctx, user.ID, grantPlan.Subscriptions, "auto assigned by signup defaults")
 	if s.affiliateService != nil {
 		if _, err := s.affiliateService.EnsureUserAffiliate(ctx, user.ID); err != nil {
-			logger.LegacyPrintf("service.auth", "[Auth] Failed to initialize affiliate profile for user %d: %v", user.ID, err)
+			logger.ComponentPrintf("service.auth", "[Auth] Failed to initialize affiliate profile for user %d: %v", user.ID, err)
 		}
 		if affiliateCode != "" {
 			if err := s.affiliateService.BindInviterByCode(ctx, user.ID, affiliateCode); err != nil {
 				// 邀请返利码绑定失败不影响注册，只记录日志
-				logger.LegacyPrintf("service.auth", "[Auth] Failed to bind affiliate inviter for user %d: %v", user.ID, err)
+				logger.ComponentPrintf("service.auth", "[Auth] Failed to bind affiliate inviter for user %d: %v", user.ID, err)
 			}
 		}
 	}
@@ -244,7 +244,7 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 	if promoCode != "" && s.promoService != nil && s.settingService != nil && s.settingService.IsPromoCodeEnabled(ctx) {
 		if err := s.promoService.ApplyPromoCode(ctx, user.ID, promoCode); err != nil {
 			// 优惠码应用失败不影响注册，只记录日志
-			logger.LegacyPrintf("service.auth", "[Auth] Failed to apply promo code for user %d: %v", user.ID, err)
+			logger.ComponentPrintf("service.auth", "[Auth] Failed to apply promo code for user %d: %v", user.ID, err)
 		} else {
 			// 重新获取用户信息以获取更新后的余额
 			if updatedUser, err := s.userRepo.GetByID(ctx, user.ID); err == nil {
@@ -270,7 +270,7 @@ func (s *AuthService) createEmailRegistrationUser(ctx context.Context, user *Use
 	if invitationRedeemCode != nil && s.entClient != nil {
 		tx, err := s.entClient.Tx(ctx)
 		if err != nil {
-			logger.LegacyPrintf("service.auth", "[Auth] Failed to begin registration transaction: %v", err)
+			logger.ComponentPrintf("service.auth", "[Auth] Failed to begin registration transaction: %v", err)
 			return ErrServiceUnavailable
 		}
 		defer func() { _ = tx.Rollback() }()
@@ -280,11 +280,11 @@ func (s *AuthService) createEmailRegistrationUser(ctx context.Context, user *Use
 			return err
 		}
 		if err := s.redeemRepo.Use(txCtx, invitationRedeemCode.ID, user.ID); err != nil {
-			logger.LegacyPrintf("service.auth", "[Auth] Failed to consume invitation code for user %d: %v", user.ID, err)
+			logger.ComponentPrintf("service.auth", "[Auth] Failed to consume invitation code for user %d: %v", user.ID, err)
 			return ErrInvitationCodeInvalid
 		}
 		if err := tx.Commit(); err != nil {
-			logger.LegacyPrintf("service.auth", "[Auth] Failed to commit registration transaction: %v", err)
+			logger.ComponentPrintf("service.auth", "[Auth] Failed to commit registration transaction: %v", err)
 			return ErrServiceUnavailable
 		}
 		return nil
@@ -297,10 +297,10 @@ func (s *AuthService) createEmailRegistrationUser(ctx context.Context, user *Use
 		return nil
 	}
 	if err := s.redeemRepo.Use(ctx, invitationRedeemCode.ID, user.ID); err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to consume invitation code for user %d: %v", user.ID, err)
+		logger.ComponentPrintf("service.auth", "[Auth] Failed to consume invitation code for user %d: %v", user.ID, err)
 		if user.ID > 0 && s.userRepo != nil {
 			if rollbackErr := s.userRepo.Delete(ctx, user.ID); rollbackErr != nil {
-				logger.LegacyPrintf("service.auth", "[Auth] Failed to roll back user %d after invitation code failure: %v", user.ID, rollbackErr)
+				logger.ComponentPrintf("service.auth", "[Auth] Failed to roll back user %d after invitation code failure: %v", user.ID, rollbackErr)
 			}
 		}
 		return ErrInvitationCodeInvalid
@@ -313,7 +313,7 @@ func (s *AuthService) createRegistrationUser(ctx context.Context, user *User) er
 		if errors.Is(err, ErrEmailExists) {
 			return ErrEmailExists
 		}
-		logger.LegacyPrintf("service.auth", "[Auth] Database error creating user: %v", err)
+		logger.ComponentPrintf("service.auth", "[Auth] Database error creating user: %v", err)
 		return ErrServiceUnavailable
 	}
 	return nil
@@ -341,7 +341,7 @@ func (s *AuthService) SendVerifyCode(ctx context.Context, email string, locale .
 	// 检查邮箱是否已存在
 	existsEmail, err := s.userRepo.ExistsByEmail(ctx, email)
 	if err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Database error checking email exists: %v", err)
+		logger.ComponentPrintf("service.auth", "[Auth] Database error checking email exists: %v", err)
 		return ErrServiceUnavailable
 	}
 	if existsEmail {
@@ -364,11 +364,11 @@ func (s *AuthService) SendVerifyCode(ctx context.Context, email string, locale .
 
 // SendVerifyCodeAsync 异步发送邮箱验证码并返回倒计时
 func (s *AuthService) SendVerifyCodeAsync(ctx context.Context, email string, locale ...string) (*SendVerifyCodeResult, error) {
-	logger.LegacyPrintf("service.auth", "[Auth] SendVerifyCodeAsync called for email: %s", email)
+	logger.ComponentPrintf("service.auth", "[Auth] SendVerifyCodeAsync called for email: %s", email)
 
 	// 检查是否开放注册（默认关闭）
 	if s.settingService == nil || !s.settingService.IsRegistrationEnabled(ctx) {
-		logger.LegacyPrintf("service.auth", "%s", "[Auth] Registration is disabled")
+		logger.ComponentPrintf("service.auth", "%s", "[Auth] Registration is disabled")
 		return nil, ErrRegDisabled
 	}
 
@@ -382,17 +382,17 @@ func (s *AuthService) SendVerifyCodeAsync(ctx context.Context, email string, loc
 	// 检查邮箱是否已存在
 	existsEmail, err := s.userRepo.ExistsByEmail(ctx, email)
 	if err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Database error checking email exists: %v", err)
+		logger.ComponentPrintf("service.auth", "[Auth] Database error checking email exists: %v", err)
 		return nil, ErrServiceUnavailable
 	}
 	if existsEmail {
-		logger.LegacyPrintf("service.auth", "[Auth] Email already exists: %s", email)
+		logger.ComponentPrintf("service.auth", "[Auth] Email already exists: %s", email)
 		return nil, ErrEmailExists
 	}
 
 	// 检查邮件队列服务是否配置
 	if s.emailQueueService == nil {
-		logger.LegacyPrintf("service.auth", "%s", "[Auth] Email queue service not configured")
+		logger.ComponentPrintf("service.auth", "%s", "[Auth] Email queue service not configured")
 		return nil, errors.New("email queue service not configured")
 	}
 
@@ -403,13 +403,13 @@ func (s *AuthService) SendVerifyCodeAsync(ctx context.Context, email string, loc
 	}
 
 	// 异步发送
-	logger.LegacyPrintf("service.auth", "[Auth] Enqueueing verify code for: %s", email)
+	logger.ComponentPrintf("service.auth", "[Auth] Enqueueing verify code for: %s", email)
 	if err := s.emailQueueService.EnqueueVerifyCode(email, siteName, firstEmailLocale(locale)); err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to enqueue: %v", err)
+		logger.ComponentPrintf("service.auth", "[Auth] Failed to enqueue: %v", err)
 		return nil, fmt.Errorf("enqueue verify code: %w", err)
 	}
 
-	logger.LegacyPrintf("service.auth", "[Auth] Verify code enqueued successfully for: %s", email)
+	logger.ComponentPrintf("service.auth", "[Auth] Verify code enqueued successfully for: %s", email)
 	return &SendVerifyCodeResult{
 		Countdown: 60, // 60秒倒计时
 	}, nil
@@ -420,7 +420,7 @@ func (s *AuthService) SendVerifyCodeAsync(ctx context.Context, email string, loc
 // 此处跳过二次校验，避免一次性 token 在注册提交时重复使用导致误报失败。
 func (s *AuthService) VerifyTurnstileForRegister(ctx context.Context, token, remoteIP, verifyCode string) error {
 	if s.IsEmailVerifyEnabled(ctx) && strings.TrimSpace(verifyCode) != "" {
-		logger.LegacyPrintf("service.auth", "%s", "[Auth] Email verify flow detected, skip duplicate Turnstile check on register")
+		logger.ComponentPrintf("service.auth", "%s", "[Auth] Email verify flow detected, skip duplicate Turnstile check on register")
 		return nil
 	}
 	return s.VerifyTurnstile(ctx, token, remoteIP)
@@ -432,27 +432,27 @@ func (s *AuthService) VerifyTurnstile(ctx context.Context, token string, remoteI
 
 	if required {
 		if s.settingService == nil {
-			logger.LegacyPrintf("service.auth", "%s", "[Auth] Turnstile required but settings service is not configured")
+			logger.ComponentPrintf("service.auth", "%s", "[Auth] Turnstile required but settings service is not configured")
 			return ErrTurnstileNotConfigured
 		}
 		enabled := s.settingService.IsTurnstileEnabled(ctx)
 		secretConfigured := s.settingService.GetTurnstileSecretKey(ctx) != ""
 		if !enabled || !secretConfigured {
-			logger.LegacyPrintf("service.auth", "[Auth] Turnstile required but not configured (enabled=%v, secret_configured=%v)", enabled, secretConfigured)
+			logger.ComponentPrintf("service.auth", "[Auth] Turnstile required but not configured (enabled=%v, secret_configured=%v)", enabled, secretConfigured)
 			return ErrTurnstileNotConfigured
 		}
 	}
 
 	if s.turnstileService == nil {
 		if required {
-			logger.LegacyPrintf("service.auth", "%s", "[Auth] Turnstile required but service not configured")
+			logger.ComponentPrintf("service.auth", "%s", "[Auth] Turnstile required but service not configured")
 			return ErrTurnstileNotConfigured
 		}
 		return nil // 服务未配置则跳过验证
 	}
 
 	if !required && s.settingService != nil && s.settingService.IsTurnstileEnabled(ctx) && s.settingService.GetTurnstileSecretKey(ctx) == "" {
-		logger.LegacyPrintf("service.auth", "%s", "[Auth] Turnstile enabled but secret key not configured")
+		logger.ComponentPrintf("service.auth", "%s", "[Auth] Turnstile enabled but secret key not configured")
 	}
 
 	return s.turnstileService.VerifyToken(ctx, token, remoteIP)
@@ -491,7 +491,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 			return "", nil, ErrInvalidCredentials
 		}
 		// 记录数据库错误但不暴露给用户
-		logger.LegacyPrintf("service.auth", "[Auth] Database error during login: %v", err)
+		logger.ComponentPrintf("service.auth", "[Auth] Database error during login: %v", err)
 		return "", nil, ErrServiceUnavailable
 	}
 
@@ -544,7 +544,7 @@ func (s *AuthService) LoginOrRegisterOAuth(ctx context.Context, email, username 
 
 			randomPassword, err := randomHexString(32)
 			if err != nil {
-				logger.LegacyPrintf("service.auth", "[Auth] Failed to generate random password for oauth signup: %v", err)
+				logger.ComponentPrintf("service.auth", "[Auth] Failed to generate random password for oauth signup: %v", err)
 				return "", nil, ErrServiceUnavailable
 			}
 			hashedPassword, err := s.HashPassword(randomPassword)
@@ -552,7 +552,7 @@ func (s *AuthService) LoginOrRegisterOAuth(ctx context.Context, email, username 
 				return "", nil, fmt.Errorf("hash password: %w", err)
 			}
 
-			signupSource := inferLegacySignupSource(email)
+			signupSource := inferSignupSourceFromEmail(email)
 			grantPlan := s.resolveSignupGrantPlan(ctx, signupSource)
 			var defaultRPMLimit int
 			if s.settingService != nil {
@@ -576,11 +576,11 @@ func (s *AuthService) LoginOrRegisterOAuth(ctx context.Context, email, username 
 					// 并发场景：GetByEmail 与 Create 之间用户被创建。
 					user, err = s.userRepo.GetByEmail(ctx, email)
 					if err != nil {
-						logger.LegacyPrintf("service.auth", "[Auth] Database error getting user after conflict: %v", err)
+						logger.ComponentPrintf("service.auth", "[Auth] Database error getting user after conflict: %v", err)
 						return "", nil, ErrServiceUnavailable
 					}
 				} else {
-					logger.LegacyPrintf("service.auth", "[Auth] Database error creating oauth user: %v", err)
+					logger.ComponentPrintf("service.auth", "[Auth] Database error creating oauth user: %v", err)
 					return "", nil, ErrServiceUnavailable
 				}
 			} else {
@@ -589,7 +589,7 @@ func (s *AuthService) LoginOrRegisterOAuth(ctx context.Context, email, username 
 				s.assignSubscriptions(ctx, user.ID, grantPlan.Subscriptions, "auto assigned by signup defaults")
 			}
 		} else {
-			logger.LegacyPrintf("service.auth", "[Auth] Database error during oauth login: %v", err)
+			logger.ComponentPrintf("service.auth", "[Auth] Database error during oauth login: %v", err)
 			return "", nil, ErrServiceUnavailable
 		}
 	}
@@ -602,7 +602,7 @@ func (s *AuthService) LoginOrRegisterOAuth(ctx context.Context, email, username 
 	if user.Username == "" && username != "" {
 		user.Username = username
 		if err := s.userRepo.Update(ctx, user); err != nil {
-			logger.LegacyPrintf("service.auth", "[Auth] Failed to update username after oauth login: %v", err)
+			logger.ComponentPrintf("service.auth", "[Auth] Failed to update username after oauth login: %v", err)
 		}
 	}
 	token, err := s.GenerateToken(user)
@@ -678,7 +678,7 @@ func (s *AuthService) LoginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 
 			randomPassword, err := randomHexString(32)
 			if err != nil {
-				logger.LegacyPrintf("service.auth", "[Auth] Failed to generate random password for oauth signup: %v", err)
+				logger.ComponentPrintf("service.auth", "[Auth] Failed to generate random password for oauth signup: %v", err)
 				return nil, nil, ErrServiceUnavailable
 			}
 			hashedPassword, err := s.HashPassword(randomPassword)
@@ -689,7 +689,7 @@ func (s *AuthService) LoginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 			// 优先用 caller 显式传入的 signupSource（如 "dingtalk" / "linuxdo" / "oidc" / "wechat"），
 			// 否则才按邮箱后缀推断——避免有真实邮箱的 OAuth 用户被推断为 "email" 渠道，导致渠道授权错读。
 			if strings.TrimSpace(signupSource) == "" {
-				signupSource = inferLegacySignupSource(email)
+				signupSource = inferSignupSourceFromEmail(email)
 			}
 			grantPlan := s.resolveSignupGrantPlan(ctx, signupSource)
 			var defaultRPMLimit int
@@ -712,7 +712,7 @@ func (s *AuthService) LoginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 			if s.entClient != nil && invitationRedeemCode != nil {
 				tx, err := s.entClient.Tx(ctx)
 				if err != nil {
-					logger.LegacyPrintf("service.auth", "[Auth] Failed to begin transaction for oauth registration: %v", err)
+					logger.ComponentPrintf("service.auth", "[Auth] Failed to begin transaction for oauth registration: %v", err)
 					return nil, nil, ErrServiceUnavailable
 				}
 				defer func() { _ = tx.Rollback() }()
@@ -722,11 +722,11 @@ func (s *AuthService) LoginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 					if errors.Is(err, ErrEmailExists) {
 						user, err = s.userRepo.GetByEmail(ctx, email)
 						if err != nil {
-							logger.LegacyPrintf("service.auth", "[Auth] Database error getting user after conflict: %v", err)
+							logger.ComponentPrintf("service.auth", "[Auth] Database error getting user after conflict: %v", err)
 							return nil, nil, ErrServiceUnavailable
 						}
 					} else {
-						logger.LegacyPrintf("service.auth", "[Auth] Database error creating oauth user: %v", err)
+						logger.ComponentPrintf("service.auth", "[Auth] Database error creating oauth user: %v", err)
 						return nil, nil, ErrServiceUnavailable
 					}
 				} else {
@@ -734,7 +734,7 @@ func (s *AuthService) LoginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 						return nil, nil, ErrInvitationCodeInvalid
 					}
 					if err := tx.Commit(); err != nil {
-						logger.LegacyPrintf("service.auth", "[Auth] Failed to commit oauth registration transaction: %v", err)
+						logger.ComponentPrintf("service.auth", "[Auth] Failed to commit oauth registration transaction: %v", err)
 						return nil, nil, ErrServiceUnavailable
 					}
 					user = newUser
@@ -747,11 +747,11 @@ func (s *AuthService) LoginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 					if errors.Is(err, ErrEmailExists) {
 						user, err = s.userRepo.GetByEmail(ctx, email)
 						if err != nil {
-							logger.LegacyPrintf("service.auth", "[Auth] Database error getting user after conflict: %v", err)
+							logger.ComponentPrintf("service.auth", "[Auth] Database error getting user after conflict: %v", err)
 							return nil, nil, ErrServiceUnavailable
 						}
 					} else {
-						logger.LegacyPrintf("service.auth", "[Auth] Database error creating oauth user: %v", err)
+						logger.ComponentPrintf("service.auth", "[Auth] Database error creating oauth user: %v", err)
 						return nil, nil, ErrServiceUnavailable
 					}
 				} else {
@@ -767,7 +767,7 @@ func (s *AuthService) LoginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 				}
 			}
 		} else {
-			logger.LegacyPrintf("service.auth", "[Auth] Database error during oauth login: %v", err)
+			logger.ComponentPrintf("service.auth", "[Auth] Database error during oauth login: %v", err)
 			return nil, nil, ErrServiceUnavailable
 		}
 	}
@@ -779,7 +779,7 @@ func (s *AuthService) LoginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 	if user.Username == "" && username != "" {
 		user.Username = username
 		if err := s.userRepo.Update(ctx, user); err != nil {
-			logger.LegacyPrintf("service.auth", "[Auth] Failed to update username after oauth login: %v", err)
+			logger.ComponentPrintf("service.auth", "[Auth] Failed to update username after oauth login: %v", err)
 		}
 	}
 	tokenPair, err := s.GenerateTokenPair(ctx, user, "")
@@ -801,7 +801,7 @@ func (s *AuthService) assignSubscriptions(ctx context.Context, userID int64, ite
 			ValidityDays: item.ValidityDays,
 			Notes:        notes,
 		}); err != nil {
-			logger.LegacyPrintf("service.auth", "[Auth] Failed to assign default subscription: user_id=%d plan_id=%d group_id=%d err=%v", userID, item.PlanID, item.GroupID, err)
+			logger.ComponentPrintf("service.auth", "[Auth] Failed to assign default subscription: user_id=%d plan_id=%d group_id=%d err=%v", userID, item.PlanID, item.GroupID, err)
 		}
 	}
 }
@@ -829,7 +829,7 @@ func (s *AuthService) resolveSignupGrantPlan(ctx context.Context, signupSource s
 
 	resolved, enabled, err := s.settingService.ResolveAuthSourceGrantSettings(ctx, signupSource, false)
 	if err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to load auth source signup defaults for %s: %v", signupSource, err)
+		logger.ComponentPrintf("service.auth", "[Auth] Failed to load auth source signup defaults for %s: %v", signupSource, err)
 		return plan
 	}
 	if !enabled {
@@ -874,11 +874,11 @@ func (s *AuthService) bindOAuthAffiliate(ctx context.Context, userID int64, affi
 		return
 	}
 	if _, err := s.affiliateService.EnsureUserAffiliate(ctx, userID); err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to initialize affiliate profile for user %d: %v", userID, err)
+		logger.ComponentPrintf("service.auth", "[Auth] Failed to initialize affiliate profile for user %d: %v", userID, err)
 	}
 	if code := strings.TrimSpace(affiliateCode); code != "" {
 		if err := s.affiliateService.BindInviterByCode(ctx, userID, code); err != nil {
-			logger.LegacyPrintf("service.auth", "[Auth] Failed to bind affiliate inviter for user %d: %v", userID, err)
+			logger.ComponentPrintf("service.auth", "[Auth] Failed to bind affiliate inviter for user %d: %v", userID, err)
 		}
 	}
 }
@@ -908,7 +908,7 @@ func (s *AuthService) updateUserSignupSource(ctx context.Context, userID int64, 
 	if err := s.entClient.User.UpdateOneID(userID).
 		SetSignupSource(signupSource).
 		Exec(ctx); err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to update signup source: user_id=%d source=%s err=%v", userID, signupSource, err)
+		logger.ComponentPrintf("service.auth", "[Auth] Failed to update signup source: user_id=%d source=%s err=%v", userID, signupSource, err)
 	}
 }
 
@@ -921,7 +921,7 @@ func (s *AuthService) touchUserLogin(ctx context.Context, userID int64) {
 		SetLastLoginAt(now).
 		SetLastActiveAt(now).
 		Exec(ctx); err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to touch login timestamps: user_id=%d err=%v", userID, err)
+		logger.ComponentPrintf("service.auth", "[Auth] Failed to touch login timestamps: user_id=%d err=%v", userID, err)
 	}
 }
 
@@ -932,7 +932,7 @@ func (s *AuthService) backfillEmailIdentityOnSuccessfulLogin(ctx context.Context
 	identity, created := s.ensureEmailAuthIdentity(ctx, user, "auth_service_login_backfill")
 	if s.shouldApplyEmailFirstBindDefaults(ctx, user.ID, identity, created) {
 		if err := s.ApplyProviderDefaultSettingsOnFirstBind(ctx, user.ID, "email"); err != nil {
-			logger.LegacyPrintf("service.auth", "[Auth] Failed to apply email first bind defaults: user_id=%d err=%v", user.ID, err)
+			logger.ComponentPrintf("service.auth", "[Auth] Failed to apply email first bind defaults: user_id=%d err=%v", user.ID, err)
 		}
 	}
 }
@@ -959,7 +959,7 @@ func (s *AuthService) shouldApplyEmailFirstBindDefaults(
 
 	hasGrant, err := s.hasProviderGrantRecord(ctx, userID, "email", "first_bind")
 	if err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to inspect email first bind grant state: user_id=%d err=%v", userID, err)
+		logger.ComponentPrintf("service.auth", "[Auth] Failed to inspect email first bind grant state: user_id=%d err=%v", userID, err)
 		return false
 	}
 	return !hasGrant
@@ -1028,7 +1028,7 @@ func (s *AuthService) ensureEmailAuthIdentity(ctx context.Context, user *User, s
 
 	existed, err := buildQuery().Exist(ctx)
 	if err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to inspect email auth identity: user_id=%d email=%s err=%v", user.ID, email, err)
+		logger.ComponentPrintf("service.auth", "[Auth] Failed to inspect email auth identity: user_id=%d email=%s err=%v", user.ID, email, err)
 		return nil, false
 	}
 
@@ -1054,25 +1054,25 @@ func (s *AuthService) ensureEmailAuthIdentity(ctx context.Context, user *User, s
 			}
 		}
 		if err != nil {
-			logger.LegacyPrintf("service.auth", "[Auth] Failed to ensure email auth identity: user_id=%d email=%s err=%v", user.ID, email, err)
+			logger.ComponentPrintf("service.auth", "[Auth] Failed to ensure email auth identity: user_id=%d email=%s err=%v", user.ID, email, err)
 			return nil, false
 		}
 	}
 
 	identity, err := buildQuery().Only(ctx)
 	if err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to reload email auth identity: user_id=%d email=%s err=%v", user.ID, email, err)
+		logger.ComponentPrintf("service.auth", "[Auth] Failed to reload email auth identity: user_id=%d email=%s err=%v", user.ID, email, err)
 		return nil, false
 	}
 	if identity.UserID != user.ID {
-		logger.LegacyPrintf("service.auth", "[Auth] Email auth identity ownership mismatch: user_id=%d email=%s owner_id=%d", user.ID, email, identity.UserID)
+		logger.ComponentPrintf("service.auth", "[Auth] Email auth identity ownership mismatch: user_id=%d email=%s owner_id=%d", user.ID, email, identity.UserID)
 		return nil, false
 	}
 
 	return identity, !existed
 }
 
-func inferLegacySignupSource(email string) string {
+func inferSignupSourceFromEmail(email string) string {
 	normalized := strings.ToLower(strings.TrimSpace(email))
 	switch {
 	case strings.HasSuffix(normalized, DingTalkConnectSyntheticEmailDomain):
@@ -1246,7 +1246,7 @@ func (s *AuthService) RefreshToken(ctx context.Context, oldTokenString string) (
 		if errors.Is(err, ErrUserNotFound) {
 			return "", ErrInvalidToken
 		}
-		logger.LegacyPrintf("service.auth", "[Auth] Database error refreshing token: %v", err)
+		logger.ComponentPrintf("service.auth", "[Auth] Database error refreshing token: %v", err)
 		return "", ErrServiceUnavailable
 	}
 
@@ -1287,16 +1287,16 @@ func (s *AuthService) preparePasswordReset(ctx context.Context, email, frontendB
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
 			// Security: Log but don't reveal that user doesn't exist
-			logger.LegacyPrintf("service.auth", "[Auth] Password reset requested for non-existent email: %s", email)
+			logger.ComponentPrintf("service.auth", "[Auth] Password reset requested for non-existent email: %s", email)
 			return "", "", false
 		}
-		logger.LegacyPrintf("service.auth", "[Auth] Database error checking email for password reset: %v", err)
+		logger.ComponentPrintf("service.auth", "[Auth] Database error checking email for password reset: %v", err)
 		return "", "", false
 	}
 
 	// Check if user is active
 	if !user.IsActive() {
-		logger.LegacyPrintf("service.auth", "[Auth] Password reset requested for inactive user: %s", email)
+		logger.ComponentPrintf("service.auth", "[Auth] Password reset requested for inactive user: %s", email)
 		return "", "", false
 	}
 
@@ -1328,11 +1328,11 @@ func (s *AuthService) RequestPasswordReset(ctx context.Context, email, frontendB
 	}
 
 	if err := s.emailService.SendPasswordResetEmail(ctx, email, siteName, resetURL, firstEmailLocale(locale)); err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to send password reset email to %s: %v", email, err)
+		logger.ComponentPrintf("service.auth", "[Auth] Failed to send password reset email to %s: %v", email, err)
 		return nil // Silent success to prevent enumeration
 	}
 
-	logger.LegacyPrintf("service.auth", "[Auth] Password reset email sent to: %s", email)
+	logger.ComponentPrintf("service.auth", "[Auth] Password reset email sent to: %s", email)
 	return nil
 }
 
@@ -1352,11 +1352,11 @@ func (s *AuthService) RequestPasswordResetAsync(ctx context.Context, email, fron
 	}
 
 	if err := s.emailQueueService.EnqueuePasswordReset(email, siteName, resetURL, firstEmailLocale(locale)); err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to enqueue password reset email for %s: %v", email, err)
+		logger.ComponentPrintf("service.auth", "[Auth] Failed to enqueue password reset email for %s: %v", email, err)
 		return nil // Silent success to prevent enumeration
 	}
 
-	logger.LegacyPrintf("service.auth", "[Auth] Password reset email enqueued for: %s", email)
+	logger.ComponentPrintf("service.auth", "[Auth] Password reset email enqueued for: %s", email)
 	return nil
 }
 
@@ -1383,7 +1383,7 @@ func (s *AuthService) ResetPassword(ctx context.Context, email, token, newPasswo
 		if errors.Is(err, ErrUserNotFound) {
 			return ErrInvalidResetToken // Token was valid but user was deleted
 		}
-		logger.LegacyPrintf("service.auth", "[Auth] Database error getting user for password reset: %v", err)
+		logger.ComponentPrintf("service.auth", "[Auth] Database error getting user for password reset: %v", err)
 		return ErrServiceUnavailable
 	}
 
@@ -1403,17 +1403,17 @@ func (s *AuthService) ResetPassword(ctx context.Context, email, token, newPasswo
 	user.TokenVersion++ // Invalidate all existing tokens
 
 	if err := s.userRepo.Update(ctx, user); err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Database error updating password for user %d: %v", user.ID, err)
+		logger.ComponentPrintf("service.auth", "[Auth] Database error updating password for user %d: %v", user.ID, err)
 		return ErrServiceUnavailable
 	}
 
 	// Also revoke all refresh tokens for this user
 	if err := s.RevokeAllUserSessions(ctx, user.ID); err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to revoke refresh tokens for user %d: %v", user.ID, err)
+		logger.ComponentPrintf("service.auth", "[Auth] Failed to revoke refresh tokens for user %d: %v", user.ID, err)
 		// Don't return error - password was already changed successfully
 	}
 
-	logger.LegacyPrintf("service.auth", "[Auth] Password reset successful for user: %s", email)
+	logger.ComponentPrintf("service.auth", "[Auth] Password reset successful for user: %s", email)
 	return nil
 }
 
@@ -1498,13 +1498,13 @@ func (s *AuthService) generateRefreshToken(ctx context.Context, user *User, fami
 
 	// 添加到用户Token集合
 	if err := s.refreshTokenCache.AddToUserTokenSet(ctx, user.ID, tokenHash, ttl); err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to add token to user set: %v", err)
+		logger.ComponentPrintf("service.auth", "[Auth] Failed to add token to user set: %v", err)
 		// 不影响主流程
 	}
 
 	// 添加到家族Token集合
 	if err := s.refreshTokenCache.AddToFamilyTokenSet(ctx, familyID, tokenHash, ttl); err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to add token to family set: %v", err)
+		logger.ComponentPrintf("service.auth", "[Auth] Failed to add token to family set: %v", err)
 		// 不影响主流程
 	}
 
@@ -1541,10 +1541,10 @@ func (s *AuthService) refreshTokenPair(ctx context.Context, refreshToken string,
 	if err != nil {
 		if errors.Is(err, ErrRefreshTokenNotFound) {
 			// Token不存在，可能是已被使用（Token轮转）或已过期
-			logger.LegacyPrintf("service.auth", "[Auth] Refresh token not found, possible reuse attack")
+			logger.ComponentPrintf("service.auth", "[Auth] Refresh token not found, possible reuse attack")
 			return nil, ErrRefreshTokenInvalid
 		}
-		logger.LegacyPrintf("service.auth", "[Auth] Error getting refresh token: %v", err)
+		logger.ComponentPrintf("service.auth", "[Auth] Error getting refresh token: %v", err)
 		return nil, ErrServiceUnavailable
 	}
 
@@ -1563,7 +1563,7 @@ func (s *AuthService) refreshTokenPair(ctx context.Context, refreshToken string,
 			_ = s.refreshTokenCache.DeleteTokenFamily(ctx, data.FamilyID)
 			return nil, ErrRefreshTokenInvalid
 		}
-		logger.LegacyPrintf("service.auth", "[Auth] Database error getting user for token refresh: %v", err)
+		logger.ComponentPrintf("service.auth", "[Auth] Database error getting user for token refresh: %v", err)
 		return nil, ErrServiceUnavailable
 	}
 
@@ -1589,7 +1589,7 @@ func (s *AuthService) refreshTokenPair(ctx context.Context, refreshToken string,
 
 	// Token轮转：立即使旧Token失效
 	if err := s.refreshTokenCache.DeleteRefreshToken(ctx, tokenHash); err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to delete old refresh token: %v", err)
+		logger.ComponentPrintf("service.auth", "[Auth] Failed to delete old refresh token: %v", err)
 		return nil, ErrServiceUnavailable
 	}
 
@@ -1641,7 +1641,7 @@ func (s *AuthService) RevokeAllUserTokens(ctx context.Context, userID int64) err
 	}
 
 	if err := s.RevokeAllUserSessions(ctx, userID); err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to revoke refresh sessions after token invalidation for user %d: %v", userID, err)
+		logger.ComponentPrintf("service.auth", "[Auth] Failed to revoke refresh sessions after token invalidation for user %d: %v", userID, err)
 	}
 	return nil
 }

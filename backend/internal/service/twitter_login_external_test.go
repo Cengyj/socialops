@@ -39,7 +39,7 @@ func TestHTTPDeviceParamProviderFailsClosedWhenUnconfigured(t *testing.T) {
 	require.Error(t, err)
 	kind, ok := socialExecutionFailureKind(err)
 	require.True(t, ok)
-	require.Equal(t, SocialExecutionFailureUnsupported, kind)
+	require.Equal(t, SocialExecutionFailureConfiguration, kind)
 }
 
 func TestHTTPDeviceParamProviderFailsClosedOnBusinessError(t *testing.T) {
@@ -56,9 +56,9 @@ func TestHTTPDeviceParamProviderFailsClosedOnBusinessError(t *testing.T) {
 	require.Equal(t, SocialExecutionFailureNetwork, kind)
 }
 
-// TestRegistrarSeedsDeviceFingerprint verifies the acquired execution auth
-// carries the real device fingerprint supplied by the provider, not the static
-// defaults.
+// TestRegistrarSeedsDeviceFingerprint verifies the full login auth backup
+// carries the real device fingerprint supplied by the provider, while the
+// execution auth stays limited to the OAuth fields needed by the executor.
 func TestRegistrarSeedsDeviceFingerprint(t *testing.T) {
 	fake := &twitterLoginFakeClient{t: t}
 	fake.handler = func(req *http.Request, body string, idx int) (*http.Response, error) {
@@ -97,10 +97,20 @@ func TestRegistrarSeedsDeviceFingerprint(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, int32(1), fetched.Load())
-	var auth twitterAuthHeaders
-	require.NoError(t, json.Unmarshal([]byte(result.ExecutionAuth), &auth))
-	require.Equal(t, "real-uuid", auth.ClientUuid)
-	require.Equal(t, "real-device", auth.ClientDeviceId)
+	var authCookie twitterAuthHeaders
+	require.NoError(t, json.Unmarshal([]byte(result.AuthCookie), &authCookie))
+	require.Equal(t, "real-uuid", authCookie.ClientUuid)
+	require.Equal(t, "real-device", authCookie.ClientDeviceId)
+
+	require.True(t, json.Valid([]byte(result.ExecutionAuth)))
+	var executionAuth map[string]any
+	require.NoError(t, json.Unmarshal([]byte(result.ExecutionAuth), &executionAuth))
+	require.Equal(t, "oauth-token", executionAuth["access_token"])
+	require.Equal(t, "oauth-secret", executionAuth["token_secret"])
+	require.Equal(t, "northwind_ops", executionAuth["screen_name"])
+	require.Len(t, executionAuth, 3)
+	require.NotContains(t, executionAuth, "client_uuid")
+	require.NotContains(t, executionAuth, "client_device_id")
 }
 
 // TestRegistrarFailsClosedWhenDeviceProviderFails verifies that when a device

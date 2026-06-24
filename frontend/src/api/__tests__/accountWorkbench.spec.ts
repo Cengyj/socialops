@@ -38,7 +38,7 @@ describe('user account workbench api', () => {
         phone: '+15550000001',
         email: 'mine@example.com',
         email_password: 'mail-secret',
-        execution_auth: '{"access_token":"token"}',
+        execution_auth: 'encrypted-execution-auth-ciphertext',
         default_proxy_snapshot: '{"id":2,"endpoint":"http://proxy.local:8080"}',
         account_status: 'available',
         task_status: 'idle',
@@ -58,6 +58,38 @@ describe('user account workbench api', () => {
     expect(result).toEqual(page)
   })
 
+  it('forwards user account workbench list filters to the backend', async () => {
+    const page = {
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 200,
+      pages: 0,
+    }
+    get.mockResolvedValue({ data: page })
+
+    const result = await accountWorkbenchAPI.listMyAccounts({
+      page: 1,
+      page_size: 200,
+      search: '#777',
+      platform: 'x_twitter',
+      account_status: 'invalid',
+      task_status: 'pending',
+    })
+
+    expect(get).toHaveBeenCalledWith('/accounts', {
+      params: {
+        page: 1,
+        page_size: 200,
+        search: '#777',
+        platform: 'x_twitter',
+        account_status: 'invalid',
+        task_status: 'pending',
+      },
+    })
+    expect(result).toEqual(page)
+  })
+
   it('does not expose the removed account task-log reader', () => {
     expect(('listMy' + 'TaskLogs') in accountWorkbenchAPI).toBe(false)
   })
@@ -66,23 +98,41 @@ describe('user account workbench api', () => {
     expect(('estimate' + 'Task') in accountWorkbenchAPI).toBe(false)
   })
 
-  it('submits user tasks with a saved template contract only', async () => {
+  it('submits user tasks by action and lets the backend load the default template', async () => {
     post.mockResolvedValue({ data: { submitted: 1, enqueued: 1, failed_closed: 0, logs: [] } })
 
     await accountWorkbenchAPI.submitTask({
       account_ids: [7],
-      template_id: 'tmpl_follow_1',
+      action: 'follow',
       client_request_id: 'user-template-submit',
     })
 
     expect(post).toHaveBeenCalledWith('/accounts/tasks', {
       account_ids: [7],
-      template_id: 'tmpl_follow_1',
+      action: 'follow',
       client_request_id: 'user-template-submit',
     })
-    expect(JSON.stringify(post.mock.calls[0][1])).not.toContain('"action"')
+    expect(JSON.stringify(post.mock.calls[0][1])).not.toContain('"template_id"')
     expect(JSON.stringify(post.mock.calls[0][1])).not.toContain('"target"')
     expect(JSON.stringify(post.mock.calls[0][1])).not.toContain('"content"')
+  })
+
+  it('serializes task-log status filters for active workbench polling', async () => {
+    get.mockResolvedValue({ data: { logs: [] } })
+
+    await accountWorkbenchAPI.listTaskLogs({
+      account_ids: [7, 9],
+      statuses: ['pending', 'running'],
+      limit: 200,
+    })
+
+    expect(get).toHaveBeenCalledWith('/accounts/tasks', {
+      params: {
+        account_ids: '7,9',
+        statuses: 'pending,running',
+        limit: 200,
+      },
+    })
   })
 
   it('keeps structured task details on submit responses for immediate workbench feedback', async () => {
@@ -102,13 +152,13 @@ describe('user account workbench api', () => {
           charged: false,
           charged_amount: 0,
           charge_status: 'not_charged',
-          target: 'https://x.com/openai/status/1',
+          target: 'https://x.com/northwind/status/1',
           content: 'hello world',
           payload: {
-            target: 'https://x.com/openai/status/1',
+            target: 'https://x.com/northwind/status/1',
             post: {
               text: 'hello world',
-              quote_post_url: 'https://x.com/openai/status/2',
+              quote_post_url: 'https://x.com/northwind/status/2',
               media: [
                 {
                   source: 'inline',
@@ -125,7 +175,7 @@ describe('user account workbench api', () => {
             template_type: 'post',
             params: {
               contents: ['hello world'],
-              quote_post_url: 'https://x.com/openai/status/2',
+              quote_post_url: 'https://x.com/northwind/status/2',
               media: [
                 {
                   source: 'inline',
@@ -144,14 +194,14 @@ describe('user account workbench api', () => {
 
     const result = await accountWorkbenchAPI.submitTask({
       account_ids: [7],
-      template_id: 'tmpl_post',
+      action: 'post',
       client_request_id: 'user-template-submit',
     })
 
     expect(result).toEqual(response)
     expect(result.logs[0].payload?.post?.media?.[0]?.file_name).toBe('post-image-1.png')
     expect(result.logs[0].template_snapshot?.template_name).toBe('Rich post')
-    expect(result.logs[0].target).toBe('https://x.com/openai/status/1')
+    expect(result.logs[0].target).toBe('https://x.com/northwind/status/1')
     expect(result.logs[0].content).toBe('hello world')
   })
 
@@ -176,15 +226,27 @@ describe('user account workbench api', () => {
         accounts: [],
       },
     })
-    post.mockResolvedValueOnce({ data: { total: 2, removed: 2, skipped: 0, errors: [] } })
+    const deleteResult = {
+      total: 2,
+      succeeded: 2,
+      removed: 2,
+      skipped: 0,
+      failed: 0,
+      errors: [],
+      items: [
+        { id: 1, status: 'succeeded' },
+        { id: 2, status: 'succeeded' },
+      ],
+    }
+    post.mockResolvedValueOnce({ data: deleteResult })
     del.mockResolvedValue({ data: undefined })
 
     const importResult = await accountWorkbenchAPI.batchImportMyAccounts([
       { platform: 'x_twitter', name: '@one' },
       { platform: 'x_twitter', name: '@two' },
     ])
-    await accountWorkbenchAPI.batchDeleteMyAccounts([1, 2])
-    await accountWorkbenchAPI.deleteMyAccount(1)
+    const batchDeleteResult = await accountWorkbenchAPI.batchDeleteMyAccounts([1, 2])
+    const singleDeleteResult = await accountWorkbenchAPI.deleteMyAccount(1)
 
     expect(post).toHaveBeenNthCalledWith(1, '/accounts/batch-import', { accounts: [
       { platform: 'x_twitter', name: '@one' },
@@ -192,6 +254,8 @@ describe('user account workbench api', () => {
     ] })
     expect(post).toHaveBeenNthCalledWith(2, '/accounts/batch-delete', { ids: [1, 2] })
     expect(del).toHaveBeenCalledWith('/accounts/1')
+    expect(batchDeleteResult).toEqual(deleteResult)
+    expect(singleDeleteResult).toBeUndefined()
     expect(importResult).toMatchObject({
       total: 2,
       succeeded: 2,
@@ -206,6 +270,39 @@ describe('user account workbench api', () => {
     })
   })
 
+  it('exports current-user accounts as a CSV blob without response normalization', async () => {
+    const blob = new Blob(['platform,name,password\nx_twitter,@mine,pool-secret\n'], { type: 'text/csv' })
+    get.mockResolvedValueOnce({ data: blob })
+
+    await expect(accountWorkbenchAPI.exportMyAccounts()).resolves.toBe(blob)
+
+    expect(get).toHaveBeenCalledWith('/accounts/export', { responseType: 'blob' })
+  })
+
+  it('exports current-user accounts with the active list filters', async () => {
+    const blob = new Blob(['platform,name\nx_twitter,@northwind\n'], { type: 'text/csv' })
+    get.mockResolvedValueOnce({ data: blob })
+
+    await expect(accountWorkbenchAPI.exportMyAccounts({
+      search: 'northwind',
+      platform: 'x_twitter',
+      account_status: 'available',
+      task_status: 'stored',
+      account_ids: [101, 202],
+    })).resolves.toBe(blob)
+
+    expect(get).toHaveBeenCalledWith('/accounts/export', {
+      params: {
+        search: 'northwind',
+        platform: 'x_twitter',
+        account_status: 'available',
+        task_status: 'stored',
+        account_ids: '101,202',
+      },
+      responseType: 'blob',
+    })
+  })
+
   it('updates only mutable current-user account fields through the user endpoint', async () => {
     const payload = {
       password: 'new-password',
@@ -215,8 +312,9 @@ describe('user account workbench api', () => {
       backup_code: 'backup',
       email_client_id: 'client-id',
       email_token: 'email-token',
+      registration_ip: '203.0.113.10',
       auth_cookie: 'ct0=token',
-      execution_auth: '{"access_token":"token"}',
+      execution_auth: 'encrypted-execution-auth-ciphertext',
       remark: 'operator note',
     }
     put.mockResolvedValue({ data: { id: 7, name: '@kept', platform: 'x_twitter', account_status: 'available', task_status: 'stored', created_at: '', updated_at: '' } })
@@ -225,7 +323,6 @@ describe('user account workbench api', () => {
 
     expect(put).toHaveBeenCalledWith('/accounts/7', payload)
     expect(JSON.stringify(put.mock.calls[0][1])).not.toContain('platform_user_id')
-    expect(JSON.stringify(put.mock.calls[0][1])).not.toContain('registration_ip')
     expect(JSON.stringify(put.mock.calls[0][1])).not.toContain('"name"')
     expect(JSON.stringify(put.mock.calls[0][1])).not.toContain('"platform"')
   })

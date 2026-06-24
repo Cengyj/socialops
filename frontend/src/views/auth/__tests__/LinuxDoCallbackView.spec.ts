@@ -97,9 +97,9 @@ describe('LinuxDoCallbackView', () => {
     sessionStorage.clear()
   })
 
-  it('accepts the legacy fragment token success callback without pending-session exchange', async () => {
+  it('accepts the fragment token success callback without pending-session exchange', async () => {
     window.location.hash =
-      '#access_token=legacy-access-token&refresh_token=legacy-refresh-token&expires_in=3600&token_type=Bearer&redirect=%2Flegacy-dashboard'
+      '#access_token=fragment-access-token&refresh_token=fragment-refresh-token&expires_in=3600&token_type=Bearer&redirect=%2Ffragment-dashboard'
     setToken.mockResolvedValue({})
 
     mount(LinuxDoCallbackView, {
@@ -116,19 +116,19 @@ describe('LinuxDoCallbackView', () => {
     await flushPromises()
 
     expect(exchangePendingOAuthCompletion).not.toHaveBeenCalled()
-    expect(setToken).toHaveBeenCalledWith('legacy-access-token')
-    expect(localStorage.getItem('refresh_token')).toBe('legacy-refresh-token')
+    expect(setToken).toHaveBeenCalledWith('fragment-access-token')
+    expect(localStorage.getItem('refresh_token')).toBe('fragment-refresh-token')
     expect(localStorage.getItem('token_expires_at')).not.toBeNull()
     expect(showSuccess).toHaveBeenCalledWith('auth.loginSuccess')
-    expect(replace).toHaveBeenCalledWith('/legacy-dashboard')
+    expect(replace).toHaveBeenCalledWith('/fragment-dashboard')
   })
 
-  it('accepts the legacy pending oauth invitation fragment without pending-session exchange', async () => {
-    window.location.hash = '#error=invitation_required&pending_oauth_token=legacy-pending-token&redirect=%2Flegacy-invite'
+  it('accepts the pending oauth invitation fragment without pending-session exchange', async () => {
+    window.location.hash = '#error=invitation_required&pending_oauth_token=fragment-pending-token&redirect=%2Ffragment-invite'
     apiClientPost.mockResolvedValue({
       data: {
-        access_token: 'legacy-access-token',
-        refresh_token: 'legacy-refresh-token',
+        access_token: 'fragment-access-token',
+        refresh_token: 'fragment-refresh-token',
         expires_in: 3600,
         token_type: 'Bearer'
       }
@@ -156,11 +156,11 @@ describe('LinuxDoCallbackView', () => {
     expect(apiClientPost).toHaveBeenCalledWith('/auth/oauth/linuxdo/complete-registration', {
       adopt_display_name: true,
       adopt_avatar: true,
-      pending_oauth_token: 'legacy-pending-token',
+      pending_oauth_token: 'fragment-pending-token',
       invitation_code: 'invite-code'
     })
-    expect(setToken).toHaveBeenCalledWith('legacy-access-token')
-    expect(replace).toHaveBeenCalledWith('/legacy-invite')
+    expect(setToken).toHaveBeenCalledWith('fragment-access-token')
+    expect(replace).toHaveBeenCalledWith('/fragment-invite')
   })
 
   it('does not send adoption decisions during the initial exchange', async () => {
@@ -338,7 +338,7 @@ describe('LinuxDoCallbackView', () => {
     )
   })
 
-  it('keeps rendering bind-login UI for legacy pending bind responses instead of treating them as success', async () => {
+  it('keeps rendering bind-login UI for pending bind responses instead of treating them as success', async () => {
     exchangePendingOAuthCompletion.mockResolvedValue({
       error: 'adopt_existing_user_by_email',
       redirect: '/profile/security',

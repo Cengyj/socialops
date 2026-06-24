@@ -88,10 +88,10 @@
               >
                 <div class="flex items-center justify-between gap-3">
                   <span class="text-gray-500 dark:text-gray-400">{{ formatTrendLabel(point.date) }}</span>
-                  <span class="font-semibold text-gray-900 dark:text-white">{{ t('dashboard.trendCount', { count: formatNumber(point.requests || 0) }) }}</span>
+                  <span class="font-semibold text-gray-900 dark:text-white">{{ t('dashboard.trendCount', { count: formatNumber(point.operations || 0) }) }}</span>
                 </div>
                 <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {{ t('dashboard.chargedAmount', { amount: formatCurrency(point.actual_cost || point.cost || 0) }) }}
+                  {{ t('dashboard.chargedAmount', { amount: formatCurrency(point.charged || 0) }) }}
                 </div>
               </div>
             </div>
@@ -116,39 +116,35 @@
               </router-link>
             </div>
             <div class="overflow-x-auto">
-              <table class="min-w-full divide-y divide-gray-100 dark:divide-dark-700">
+              <table class="w-full min-w-max divide-y divide-gray-200 dark:divide-dark-700" data-testid="dashboard-recent-usage-table">
                 <thead class="bg-gray-50 dark:bg-dark-800">
                   <tr>
-                    <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('usage.operation') }}</th>
-                    <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('usage.platform') }}</th>
-                    <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('usage.account') }}</th>
-                    <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('usage.status') }}</th>
-                    <th class="px-5 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('usage.quantity') }}</th>
-                    <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('usage.chargeStatus') }}</th>
-                    <th class="px-5 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('usage.cost') }}</th>
-                    <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('usage.result') }}</th>
-                    <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('usage.time') }}</th>
+                    <th class="whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-dark-400 sm:px-6">{{ t('usage.platform') }}</th>
+                    <th class="whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-dark-400 sm:px-6">{{ t('usage.operation') }}</th>
+                    <th class="whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-dark-400 sm:px-6">{{ t('usage.account') }}</th>
+                    <th class="whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-dark-400 sm:px-6">{{ t('usage.result') }}</th>
+                    <th class="whitespace-nowrap px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-dark-400 sm:px-6">{{ t('usage.cost') }}</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-dark-400 sm:px-6">{{ t('usage.summary') }}</th>
+                    <th class="whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-dark-400 sm:px-6">{{ t('usage.time') }}</th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100 bg-white dark:divide-dark-700 dark:bg-dark-900">
-                  <tr v-for="row in recentTasks" :key="row.id">
-                    <td class="px-5 py-3 text-sm font-medium text-gray-900 dark:text-white">{{ actionLabel(row.operation) }}</td>
-                    <td class="px-5 py-3 text-sm text-gray-600 dark:text-gray-300">{{ platformLabel(row.platform) }}</td>
-                    <td class="px-5 py-3 text-sm text-gray-600 dark:text-gray-300">{{ row.account_name || '-' }}</td>
-                    <td class="px-5 py-3 text-sm">
+                <tbody class="divide-y divide-gray-200 bg-white dark:divide-dark-700 dark:bg-dark-900">
+                  <tr v-for="row in recentTasks" :key="row.id" class="hover:bg-gray-50 dark:hover:bg-dark-800">
+                    <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-900 dark:text-gray-100 sm:px-6">{{ platformLabel(row.platform) }}</td>
+                    <td class="whitespace-nowrap px-4 py-4 text-sm font-medium text-gray-900 dark:text-white sm:px-6">{{ actionLabel(row.operation) }}</td>
+                    <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-900 dark:text-gray-100 sm:px-6">{{ row.account_name || '-' }}</td>
+                    <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-900 dark:text-gray-100 sm:px-6">
                       <span :class="['badge', statusClass(row.status)]">{{ statusLabel(row.status) }}</span>
                     </td>
-                    <td class="px-5 py-3 text-right text-sm text-gray-600 dark:text-gray-300">{{ formatNumber(row.quantity) }}</td>
-                    <td class="px-5 py-3 text-sm text-gray-600 dark:text-gray-300">{{ chargeStatusLabel(row.charge_status) }}</td>
-                    <td class="px-5 py-3 text-right text-sm text-gray-600 dark:text-gray-300">{{ formatCurrency(row.cost) }}</td>
-                    <td class="max-w-xs px-5 py-3 text-sm text-gray-600 dark:text-gray-300">
+                    <td class="whitespace-nowrap px-4 py-4 text-right text-sm text-gray-900 dark:text-gray-100 sm:px-6">{{ formatCurrency(row.cost) }}</td>
+                    <td class="max-w-sm px-4 py-4 text-sm text-gray-900 dark:text-gray-100 sm:px-6">
                       <div v-if="resultSummary(row)" class="line-clamp-2 font-medium text-gray-900 dark:text-white">{{ resultSummary(row) }}</div>
                       <div class="line-clamp-2" :class="resultSummary(row) ? 'mt-1' : ''">{{ resultMessage(row) }}</div>
                     </td>
-                    <td class="px-5 py-3 text-sm text-gray-600 dark:text-gray-300">{{ formatDate(row.completed_at || row.created_at) }}</td>
+                    <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-900 dark:text-gray-100 sm:px-6">{{ formatDate(row.completed_at || row.created_at) }}</td>
                   </tr>
                   <tr v-if="recentTasks.length === 0">
-                    <td class="px-5 py-10 text-center text-sm text-gray-500 dark:text-gray-400" colspan="9">
+                    <td class="px-4 py-12 text-center text-sm text-gray-500 dark:text-dark-400 sm:px-6" colspan="7">
                       {{ t('dashboard.noUsageRecords') }}
                     </td>
                   </tr>
@@ -300,23 +296,23 @@ const metricCards = computed<Array<{
   },
   {
     label: t('dashboard.todayRequests'),
-    value: formatNumber(stats.value.today_requests || 0),
-    meta: t('dashboard.chargedAmount', { amount: formatCurrency(stats.value.today_actual_cost || 0) }),
+    value: formatNumber(stats.value.today_operations || 0),
+    meta: t('dashboard.chargedAmount', { amount: formatCurrency(stats.value.today_charged || 0) }),
     icon: 'clock',
     iconBg: 'bg-amber-50 dark:bg-amber-900/20',
     iconClass: 'text-amber-600 dark:text-amber-300',
   },
   {
     label: t('dashboard.totalRequests'),
-    value: formatNumber(stats.value.total_requests || 0),
-    meta: t('dashboard.recentRpm', { count: formatNumber(stats.value.rpm || 0) }),
+    value: formatNumber(stats.value.total_operations || 0),
+    meta: t('dashboard.recentOperationsPerMinute', { count: formatNumber(stats.value.recent_operations_per_minute || 0) }),
     icon: 'chart',
     iconBg: 'bg-indigo-50 dark:bg-indigo-900/20',
     iconClass: 'text-indigo-600 dark:text-indigo-300',
   },
   {
     label: t('dashboard.totalCharged'),
-    value: formatCurrency(stats.value.total_actual_cost || 0),
+    value: formatCurrency(stats.value.total_charged || 0),
     meta: t('dashboard.successOnlyBilling'),
     icon: 'dollar',
     iconBg: 'bg-emerald-50 dark:bg-emerald-900/20',
@@ -340,13 +336,13 @@ const trendDots = computed(() => {
   const height = 130
   const padding = 12
   const points = trend.value
-  const maxValue = Math.max(1, ...points.map(point => point.requests || 0))
+  const maxValue = Math.max(1, ...points.map(point => point.operations || 0))
 
   return points.map((point, index) => {
     const x = points.length > 1
       ? padding + ((width - padding * 2) / (points.length - 1)) * index
       : width / 2
-    const y = height - padding - ((point.requests || 0) / maxValue) * (height - padding * 2)
+    const y = height - padding - ((point.operations || 0) / maxValue) * (height - padding * 2)
     return { ...point, x, y }
   })
 })
@@ -406,7 +402,7 @@ async function loadData() {
 function buildPlatformRows(items: PlatformDashboardStats[]): DistributionRow[] {
   const source = new Map<string, number>()
   items.forEach(item => {
-    const value = item.total_requests || 0
+    const value = item.total_operations || 0
     if (value > 0) {
       source.set(platformLabel(item.platform), value)
     }
@@ -457,19 +453,6 @@ function statusClass(status?: string | null) {
   if (status === 'success') return 'badge-success'
   if (status === 'failed') return 'badge-error'
   return 'badge-warning'
-}
-
-function chargeStatusLabel(value?: string | null) {
-  const normalized = String(value || '').trim().toLowerCase()
-  if (!normalized) return '-'
-  const key = `usage.chargeStatuses.${normalized}`
-  const translated = t(key)
-  if (translated !== key) return translated
-  return normalized
-    .split('_')
-    .filter(Boolean)
-    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
 }
 
 function resultMessage(row: UsageLog) {

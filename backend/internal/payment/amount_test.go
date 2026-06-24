@@ -138,8 +138,8 @@ func TestPaymentCurrencyHelpers(t *testing.T) {
 		{name: "hkd uses cents", currency: "hkd", amount: "12.34", wantMinor: 1234, wantBack: 12.34},
 		{name: "jpy has no minor unit", currency: "JPY", amount: "12", wantMinor: 12, wantBack: 12},
 		{name: "kwd uses three decimal minor units", currency: "KWD", amount: "12.345", wantMinor: 12345, wantBack: 12.345},
-		{name: "isk uses Stripe legacy two-decimal API amount", currency: "ISK", amount: "12", wantMinor: 1200, wantBack: 12},
-		{name: "ugx uses Stripe legacy two-decimal API amount", currency: "UGX", amount: "12.00", wantMinor: 1200, wantBack: 12},
+		{name: "isk uses Stripe special two-decimal API amount", currency: "ISK", amount: "12", wantMinor: 1200, wantBack: 12},
+		{name: "ugx uses Stripe special two-decimal API amount", currency: "UGX", amount: "12.00", wantMinor: 1200, wantBack: 12},
 		{name: "empty currency defaults to cny", currency: "", amount: "1.23", wantMinor: 123, wantBack: 1.23},
 	}
 

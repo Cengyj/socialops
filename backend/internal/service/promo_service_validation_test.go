@@ -115,7 +115,7 @@ func TestPromoServiceCreateRejectsInvalidNumericInput(t *testing.T) {
 			t.Parallel()
 
 			repo := &promoValidationRepoStub{}
-			svc := NewPromoService(repo, nil, nil, nil, nil)
+			svc := NewPromoService(repo, nil, nil, nil)
 
 			code, err := svc.Create(context.Background(), tc.input)
 
@@ -167,7 +167,7 @@ func TestPromoServiceUpdateRejectsInvalidInput(t *testing.T) {
 					UpdatedAt:   time.Now().UTC().Add(-time.Hour),
 				},
 			}
-			svc := NewPromoService(repo, nil, nil, nil, nil)
+			svc := NewPromoService(repo, nil, nil, nil)
 
 			code, err := svc.Update(context.Background(), 7, tc.input)
 
@@ -195,7 +195,7 @@ func TestPromoServiceDeleteRejectsUsedPromoCode(t *testing.T) {
 			UpdatedAt:   time.Now().UTC().Add(-time.Hour),
 		},
 	}
-	svc := NewPromoService(repo, nil, nil, nil, nil)
+	svc := NewPromoService(repo, nil, nil, nil)
 
 	err := svc.Delete(context.Background(), 9)
 

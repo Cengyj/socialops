@@ -7,7 +7,8 @@
 export interface SelectOption {
   value: string | number | boolean | null
   label: string
-  [key: string]: any // Support extra properties for custom templates
+  disabled?: boolean
+  [key: string]: unknown
 }
 
 export interface BasePaginationResponse<T> {
@@ -85,8 +86,8 @@ export interface User {
   oidc_bound?: boolean
   wechat_bound?: boolean
   role: 'admin' | 'user' // User role for authorization
-  balance: number // User balance for API usage
-  concurrency: number // Allowed concurrent requests
+  balance: number // Wallet balance for task execution billing
+  concurrency: number // Allowed concurrent task executions
   rpm_limit?: number // User-level RPM cap (0 = unlimited); effective as fallback when group has no rpm_limit
   status: 'active' | 'disabled' // Account status
   allowed_groups: number[] | null // Allowed group IDs (null = all non-exclusive groups)
@@ -209,7 +210,6 @@ export interface PublicSettings {
   doc_url: string
   home_content: string
   payment_enabled: boolean
-  risk_control_enabled: boolean
   purchase_subscription_enabled: boolean
   purchase_subscription_url: string
   table_default_page_size: number
@@ -237,8 +237,8 @@ export interface PublicSettings {
 
 export interface AuthResponse {
   access_token: string
-  refresh_token?: string  // New: Refresh Token for token renewal
-  expires_in?: number     // New: Access Token expiry time in seconds
+  refresh_token?: string
+  expires_in?: number
   token_type: string
   user: User & { run_mode?: 'standard' | 'simple' }
 }
@@ -335,12 +335,6 @@ export interface ApiResponse<T = unknown> {
   data: T
 }
 
-export interface ApiError {
-  detail: string
-  code?: string
-  field?: string
-}
-
 export interface PaginatedResponse<T> {
   items: T[]
   total: number
@@ -368,30 +362,7 @@ export interface AppState {
   toasts: Toast[]
 }
 
-// ==================== Validation Types ====================
-
-export interface ValidationError {
-  field: string
-  message: string
-}
-
-// ==================== Table/List Types ====================
-
-export interface SortConfig {
-  key: string
-  order: 'asc' | 'desc'
-}
-
-export interface FilterConfig {
-  [key: string]: string | number | boolean | null | undefined
-}
-
-export interface PaginationConfig {
-  page: number
-  page_size: number
-}
-
-// ==================== API Key & Subscription Group Types ====================
+// ==================== Subscription & Access Group Types ====================
 
 export type SubscriptionType = 'standard' | 'subscription'
 
@@ -415,62 +386,6 @@ export interface Group {
 export interface AdminGroup extends Group {
   // 分组排序
   sort_order: number
-}
-
-export interface ApiKey {
-  id: number
-  user_id: number
-  key: string
-  name: string
-  group_id: number | null
-  status: 'active' | 'inactive' | 'quota_exhausted' | 'expired'
-  ip_whitelist: string[]
-  ip_blacklist: string[]
-  last_used_at: string | null
-  quota: number // Quota limit in USD (0 = unlimited)
-  quota_used: number // Used quota amount in USD
-  expires_at: string | null // Expiration time (null = never expires)
-  created_at: string
-  updated_at: string
-  group?: Group
-  rate_limit_5h: number
-  rate_limit_1d: number
-  rate_limit_7d: number
-  usage_5h: number
-  usage_1d: number
-  usage_7d: number
-  window_5h_start: string | null
-  window_1d_start: string | null
-  window_7d_start: string | null
-  reset_5h_at: string | null
-  reset_1d_at: string | null
-  reset_7d_at: string | null
-}
-
-export interface CreateApiKeyRequest {
-  name: string
-  custom_key?: string // Optional custom API Key
-  ip_whitelist?: string[]
-  ip_blacklist?: string[]
-  quota?: number // Quota limit in USD (0 = unlimited)
-  expires_in_days?: number // Days until expiry (null = never expires)
-  rate_limit_5h?: number
-  rate_limit_1d?: number
-  rate_limit_7d?: number
-}
-
-export interface UpdateApiKeyRequest {
-  name?: string
-  status?: 'active' | 'inactive'
-  ip_whitelist?: string[]
-  ip_blacklist?: string[]
-  quota?: number // Quota limit in USD (null = no change, 0 = unlimited)
-  expires_at?: string | null // Expiration time (null = no change)
-  reset_quota?: boolean // Reset quota_used to 0
-  rate_limit_5h?: number
-  rate_limit_1d?: number
-  rate_limit_7d?: number
-  reset_rate_limit_usage?: boolean
 }
 
 export interface CreateGroupRequest {
@@ -514,8 +429,8 @@ export interface RedeemCode {
   expires_at?: string | null
   updated_at?: string
   notes?: string
-  group_id?: number | null // Internal compatibility binding for legacy subscription codes.
-  plan_id?: number | null // Subscription package used by new subscription codes.
+  group_id?: number | null // Internal group binding used by current subscription redemption.
+  plan_id?: number | null // Subscription package used by plan-based subscription codes.
   validity_days?: number // Subscription validity days, usually copied from the selected package.
   user?: User
   group?: Group // 关联的分组
@@ -525,8 +440,8 @@ export interface GenerateRedeemCodesRequest {
   count: number
   type: RedeemCodeType
   value: number
-  group_id?: number | null // Internal compatibility binding for legacy subscription codes.
-  plan_id?: number | null // Subscription package used by new subscription codes.
+  group_id?: number | null // Internal group binding used by current subscription redemption.
+  plan_id?: number | null // Subscription package used by plan-based subscription codes.
   validity_days?: number // Subscription validity days, usually copied from the selected package.
   expires_at?: string | null
   expires_in_days?: number
@@ -538,11 +453,6 @@ export interface BatchUpdateRedeemCodeFields {
   notes?: string
   group_id?: number | null
   plan_id?: number | null
-}
-
-export interface BatchUpdateRedeemCodesRequest {
-  ids: number[]
-  fields: BatchUpdateRedeemCodeFields
 }
 
 export interface RedeemCodeRequest {
@@ -622,22 +532,6 @@ export interface SubscriptionProgress {
 export interface SubscriptionProgressEntry {
   subscription: UserSubscription
   progress: SubscriptionProgress
-}
-
-export interface AssignSubscriptionRequest {
-  user_id: number
-  group_id?: number
-  plan_id?: number
-  validity_days?: number
-  notes?: string
-}
-
-export interface BulkAssignSubscriptionRequest {
-  user_ids: number[]
-  group_id?: number
-  plan_id?: number
-  validity_days?: number
-  notes?: string
 }
 
 export interface CreateUserSubscriptionFromPlanRequest {
@@ -820,51 +714,6 @@ export interface TotpLoginResponse {
 export interface TotpLogin2FARequest {
   temp_token: string
   totp_code: string
-}
-
-// ==================== Scheduled Test Types ====================
-
-export interface ScheduledTestPlan {
-  id: number
-  account_id: number
-  model_id: string
-  cron_expression: string
-  enabled: boolean
-  max_results: number
-  auto_recover: boolean
-  last_run_at: string | null
-  next_run_at: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface ScheduledTestResult {
-  id: number
-  plan_id: number
-  status: string
-  response_text: string
-  error_message: string
-  latency_ms: number
-  started_at: string
-  finished_at: string
-  created_at: string
-}
-
-export interface CreateScheduledTestPlanRequest {
-  account_id: number
-  model_id: string
-  cron_expression: string
-  enabled?: boolean
-  max_results?: number
-  auto_recover?: boolean
-}
-
-export interface UpdateScheduledTestPlanRequest {
-  model_id?: string
-  cron_expression?: string
-  enabled?: boolean
-  max_results?: number
-  auto_recover?: boolean
 }
 
 // Payment types

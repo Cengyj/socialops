@@ -28,7 +28,7 @@ type SocialIP struct {
 	UserID int64 `json:"user_id,omitempty"`
 	// IP/代理标签名称，如 Tokyo Residential 01
 	Name string `json:"name,omitempty"`
-	// 类型：residential / static / mobile / datacenter
+	// 类型：residential / static / mobile / datacenter / dynamic
 	IPType string `json:"ip_type,omitempty"`
 	// 代理端点地址，如 socks5://user:pass@host:port
 	Endpoint *string `json:"endpoint,omitempty"`

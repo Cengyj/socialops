@@ -425,16 +425,6 @@ async function openPaymentTab(wrapper: ReturnType<typeof mountView>) {
   await flushPromises();
 }
 
-async function openAuthTab(wrapper: ReturnType<typeof mountView>) {
-  const authTabButton = wrapper
-    .findAll("button")
-    .find((node) => node.text().includes("admin.settings.tabs.auth"));
-
-  expect(authTabButton).toBeDefined();
-  await authTabButton?.trigger("click");
-  await flushPromises();
-}
-
 async function openUsersTab(wrapper: ReturnType<typeof mountView>) {
   const usersTabButton = wrapper
     .findAll("button")
@@ -442,6 +432,16 @@ async function openUsersTab(wrapper: ReturnType<typeof mountView>) {
 
   expect(usersTabButton).toBeDefined();
   await usersTabButton?.trigger("click");
+  await flushPromises();
+}
+
+async function openSecurityTab(wrapper: ReturnType<typeof mountView>) {
+  const securityTabButton = wrapper
+    .findAll("button")
+    .find((node) => node.text().includes("admin.settings.tabs.security"));
+
+  expect(securityTabButton).toBeDefined();
+  await securityTabButton?.trigger("click");
   await flushPromises();
 }
 
@@ -482,18 +482,16 @@ describe("admin SettingsView payment visible method controls", () => {
     adminSettingsFetch.mockResolvedValue(undefined);
   });
 
-  it("allows every commercial settings tab to be selected without falling back to hidden options", async () => {
+  it("allows every real settings tab to be selected without falling back to hidden options", async () => {
     const wrapper = mountView();
 
     await flushPromises();
 
     const tabKeys = [
       "general",
-      "registration",
+      "agreement",
       "security",
-      "auth",
       "users",
-      "features",
       "payment",
       "email",
       "backup",
@@ -525,7 +523,7 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(wrapper.text()).not.toContain("admin.settings.general.title");
   });
 
-  it("keeps a save action visible for email settings because SMTP and notifications are editable", async () => {
+  it("keeps a save action visible for email settings because SMTP and templates are editable", async () => {
     const wrapper = mountView();
 
     await flushPromises();
@@ -544,37 +542,44 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(saveButton, "email settings must not be a dead-end tab without a save action").toBeDefined();
   });
 
-  it("saves real commercial feature switches from the features tab", async () => {
+  it("removes the duplicate features tab and keeps switches in owner tabs", async () => {
     const wrapper = mountView();
 
     await flushPromises();
     const featuresTabButton = wrapper
       .findAll("button")
       .find((node) => node.text().includes("admin.settings.tabs.features"));
-
-    expect(featuresTabButton).toBeDefined();
-    await featuresTabButton?.trigger("click");
-    await flushPromises();
-
-    expect(wrapper.text()).toContain("admin.settings.features.title");
-
-    const saveButton = wrapper
+    const authTabButton = wrapper
       .findAll("button")
-      .find((node) => node.text().includes("common.save"));
+      .find((node) => node.text().includes("admin.settings.tabs.auth"));
+    const affiliateTabButton = wrapper
+      .findAll("button")
+      .find((node) => node.text().includes("admin.settings.tabs.affiliate"));
+    const notificationsTabButton = wrapper
+      .findAll("button")
+      .find((node) => node.text().includes("admin.settings.tabs.notifications"));
 
-    expect(saveButton).toBeDefined();
-    await saveButton?.trigger("click");
+    expect(featuresTabButton).toBeUndefined();
+    expect(authTabButton).toBeUndefined();
+    expect(affiliateTabButton).toBeUndefined();
+    expect(notificationsTabButton).toBeUndefined();
+
+    await openPaymentTab(wrapper);
+    expect(wrapper.text()).toContain("admin.settings.payment.enabled");
+    expect(wrapper.text()).toContain("admin.settings.payment.balanceDisabled");
+    expect(wrapper.text()).toContain("admin.settings.payment.purchaseEntry");
+
+    await openUsersTab(wrapper);
     await flushPromises();
 
-    const payload = updateSettings.mock.calls[0]?.[0];
-    expect(payload).toHaveProperty("payment_enabled");
-    expect(payload).toHaveProperty("payment_balance_disabled");
-    expect(payload).toHaveProperty("purchase_subscription_enabled");
-    expect(payload).toHaveProperty("risk_control_enabled");
-    expect(payload).toHaveProperty("affiliate_enabled");
-    expect(payload).toHaveProperty("promo_code_enabled");
-    expect(payload).toHaveProperty("invitation_code_enabled");
-    expect(payload).toHaveProperty("backend_mode_enabled");
+    expect(wrapper.text()).not.toContain("admin.settings.features.payment");
+    expect(wrapper.text()).not.toContain("admin.settings.features.disableBalanceRecharge");
+    expect(wrapper.text()).not.toContain("admin.settings.features.purchaseEntry");
+    expect(wrapper.text()).not.toContain("admin.settings.features.promoCode");
+    expect(wrapper.text()).not.toContain("admin.settings.features.invitationCode");
+    expect(wrapper.text()).not.toContain("admin.settings.features.backendMode");
+    expect(wrapper.text()).not.toContain("admin.settings.features.affiliate");
+    expect(wrapper.text()).toContain("admin.settings.affiliate.title");
   });
 
   it("refreshes shared settings caches after a successful save", async () => {
@@ -610,7 +615,7 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(wrapper.text()).not.toContain("admin.settings.features.title");
   });
 
-  it("does not render legacy visible payment method controls", async () => {
+  it("does not render removed visible payment method controls", async () => {
     const wrapper = mountView();
 
     await flushPromises();
@@ -644,7 +649,7 @@ describe("admin SettingsView payment visible method controls", () => {
     }
   });
 
-  it("does not submit legacy visible payment method settings", async () => {
+  it("does not submit removed visible payment method settings", async () => {
     const wrapper = mountView();
 
     await flushPromises();
@@ -793,7 +798,7 @@ describe("admin SettingsView wechat connect controls", () => {
     const wrapper = mountView();
 
     await flushPromises();
-    await openAuthTab(wrapper);
+    await openSecurityTab(wrapper);
 
     expect(
       (
@@ -838,7 +843,7 @@ describe("admin SettingsView wechat connect controls", () => {
     const wrapper = mountView();
 
     await flushPromises();
-    await openAuthTab(wrapper);
+    await openSecurityTab(wrapper);
 
     const link = wrapper.get('[data-testid="github-oauth-apps-guide-link"]');
     expect(link.text()).toContain("OAuth Apps");
@@ -851,7 +856,7 @@ describe("admin SettingsView wechat connect controls", () => {
     const wrapper = mountView();
 
     await flushPromises();
-    await openAuthTab(wrapper);
+    await openSecurityTab(wrapper);
 
     await wrapper
       .get('[data-testid="wechat-connect-mp-app-id"]')
@@ -905,7 +910,7 @@ describe("admin SettingsView wechat connect controls", () => {
     const wrapper = mountView();
 
     await flushPromises();
-    await openAuthTab(wrapper);
+    await openSecurityTab(wrapper);
 
     await wrapper
       .get('[data-testid="wechat-connect-open-enabled"]')
@@ -972,7 +977,7 @@ describe("admin SettingsView wechat connect controls", () => {
     );
   });
 
-  it("normalizes the legacy payment routing alias before displaying and saving settings", async () => {
+  it("normalizes the stored underscore payment routing alias before displaying and saving settings", async () => {
     getSettings.mockResolvedValueOnce({
       ...baseSettingsResponse,
       payment_load_balance_strategy: "round_robin",
@@ -1032,11 +1037,13 @@ describe("admin SettingsView wechat connect controls", () => {
     expect(wrapper.text()).toContain("首次绑定时授权");
   });
 
-  it("saves affiliate per-invitee rebate cap from the subscription and rebate settings tab", async () => {
+  it("saves affiliate per-invitee rebate cap from the user defaults tab", async () => {
     const wrapper = mountView();
 
     await flushPromises();
     await openUsersTab(wrapper);
+    await wrapper.get('[data-testid="affiliate-enabled"]').setValue(true);
+    await flushPromises();
     await wrapper.get('[data-testid="affiliate-rebate-per-invitee-cap"]').setValue(12.5);
 
     const saveButton = wrapper
@@ -1055,7 +1062,7 @@ describe("admin SettingsView wechat connect controls", () => {
     );
   });
 
-  it("preserves optional OIDC compatibility flags instead of forcing them on save", async () => {
+  it("preserves optional OIDC security flags instead of forcing them on save", async () => {
     getSettings.mockResolvedValueOnce({
       ...baseSettingsResponse,
       oidc_connect_enabled: true,
@@ -1066,7 +1073,7 @@ describe("admin SettingsView wechat connect controls", () => {
     const wrapper = mountView();
 
     await flushPromises();
-    await openAuthTab(wrapper);
+    await openSecurityTab(wrapper);
     await wrapper.find("form").trigger("submit.prevent");
     await flushPromises();
 
@@ -1126,7 +1133,7 @@ describe("admin SettingsView wechat connect controls", () => {
     const wrapper = mountView();
 
     await flushPromises();
-    await openAuthTab(wrapper);
+    await openSecurityTab(wrapper);
 
     expect((wrapper.get('[data-testid="linuxdo-connect-client-id"]').element as HTMLInputElement).value).toBe("linuxdo-client");
     expect(wrapper.get('[data-testid="linuxdo-connect-client-secret"]').attributes("placeholder")).toContain("admin.settings.secretConfiguredPlaceholder");
@@ -1152,7 +1159,7 @@ describe("admin SettingsView wechat connect controls", () => {
     const wrapper = mountView();
 
     await flushPromises();
-    await openAuthTab(wrapper);
+    await openSecurityTab(wrapper);
 
     await wrapper.get('[data-testid="linuxdo-connect-enabled"]').setValue(true);
     await wrapper.get('[data-testid="linuxdo-connect-client-id"]').setValue("linuxdo-updated");

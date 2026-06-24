@@ -20,7 +20,7 @@ import (
 // --- Refund Flow ---
 
 // getOrderProviderInstance looks up the provider instance that processed this order.
-// For legacy orders without provider_instance_id, it resolves only when the
+// For historical orders without provider_instance_id, it resolves only when the
 // historical instance is uniquely identifiable from the stored order fields.
 func (s *PaymentService) getOrderProviderInstance(ctx context.Context, o *dbent.PaymentOrder) (*dbent.PaymentProviderInstance, error) {
 	if s == nil || s.entClient == nil || o == nil {
@@ -33,7 +33,7 @@ func (s *PaymentService) getOrderProviderInstance(ctx context.Context, o *dbent.
 
 	instIDStr := strings.TrimSpace(psStringValue(o.ProviderInstanceID))
 	if instIDStr == "" {
-		return s.resolveUniqueLegacyOrderProviderInstance(ctx, o)
+		return s.resolveUniqueHistoricalOrderProviderInstance(ctx, o)
 	}
 
 	instID, err := strconv.ParseInt(instIDStr, 10, 64)
@@ -44,7 +44,7 @@ func (s *PaymentService) getOrderProviderInstance(ctx context.Context, o *dbent.
 }
 
 // getRefundOrderProviderInstance resolves the provider instance for refund paths.
-// Refunds must be pinned to an explicit historical binding, so legacy
+// Refunds must be pinned to an explicit historical binding, so historical
 // "best-effort" provider guessing is intentionally not allowed here.
 func (s *PaymentService) getRefundOrderProviderInstance(ctx context.Context, o *dbent.PaymentOrder) (*dbent.PaymentProviderInstance, error) {
 	if s == nil || s.entClient == nil || o == nil {
@@ -74,7 +74,7 @@ func (s *PaymentService) getRefundOrderProviderInstance(ctx context.Context, o *
 	return inst, nil
 }
 
-func (s *PaymentService) resolveUniqueLegacyOrderProviderInstance(ctx context.Context, o *dbent.PaymentOrder) (*dbent.PaymentProviderInstance, error) {
+func (s *PaymentService) resolveUniqueHistoricalOrderProviderInstance(ctx context.Context, o *dbent.PaymentOrder) (*dbent.PaymentProviderInstance, error) {
 	paymentType := payment.GetBasePaymentType(strings.TrimSpace(o.PaymentType))
 	providerKey := strings.TrimSpace(psStringValue(o.ProviderKey))
 	if providerKey != "" {
@@ -84,7 +84,7 @@ func (s *PaymentService) resolveUniqueLegacyOrderProviderInstance(ctx context.Co
 		if err != nil {
 			return nil, err
 		}
-		matched := psFilterLegacyOrderProviderInstances(paymentType, instances)
+		matched := psFilterHistoricalOrderProviderInstances(paymentType, instances)
 		if len(matched) == 1 {
 			return matched[0], nil
 		}
@@ -101,14 +101,14 @@ func (s *PaymentService) resolveUniqueLegacyOrderProviderInstance(ctx context.Co
 		return nil, err
 	}
 
-	matched := psFilterLegacyOrderProviderInstances(paymentType, instances)
+	matched := psFilterHistoricalOrderProviderInstances(paymentType, instances)
 	if len(matched) == 1 {
 		return matched[0], nil
 	}
 	return nil, nil
 }
 
-func psFilterLegacyOrderProviderInstances(orderPaymentType string, instances []*dbent.PaymentProviderInstance) []*dbent.PaymentProviderInstance {
+func psFilterHistoricalOrderProviderInstances(orderPaymentType string, instances []*dbent.PaymentProviderInstance) []*dbent.PaymentProviderInstance {
 	if len(instances) == 0 {
 		return nil
 	}
@@ -117,14 +117,14 @@ func psFilterLegacyOrderProviderInstances(orderPaymentType string, instances []*
 	}
 	var matched []*dbent.PaymentProviderInstance
 	for _, inst := range instances {
-		if psLegacyOrderMatchesInstance(orderPaymentType, inst) {
+		if psHistoricalOrderMatchesInstance(orderPaymentType, inst) {
 			matched = append(matched, inst)
 		}
 	}
 	return matched
 }
 
-func psLegacyOrderMatchesInstance(orderPaymentType string, inst *dbent.PaymentProviderInstance) bool {
+func psHistoricalOrderMatchesInstance(orderPaymentType string, inst *dbent.PaymentProviderInstance) bool {
 	if inst == nil {
 		return false
 	}
@@ -217,7 +217,7 @@ func (s *PaymentService) PrepareRefund(ctx context.Context, oid int64, amt float
 		return nil, nil, infraerrors.InternalServer("PROVIDER_LOOKUP_FAILED", "failed to look up payment provider for this order")
 	}
 	if inst == nil {
-		// Legacy order without provider_instance_id — block refund
+		// Historical order without provider_instance_id: block refund instead of guessing.
 		return nil, nil, infraerrors.Forbidden("REFUND_DISABLED", "refund is not available for this order")
 	}
 	if !inst.RefundEnabled {

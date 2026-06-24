@@ -25,24 +25,24 @@ import (
 )
 
 const (
-	wechatOAuthCookiePath         = "/api/v1/auth/oauth/wechat"
-	wechatOAuthCookieMaxAgeSec    = 10 * 60
-	wechatOAuthStateCookieName    = "wechat_oauth_state"
-	wechatOAuthRedirectCookieName = "wechat_oauth_redirect"
-	wechatOAuthIntentCookieName   = "wechat_oauth_intent"
-	wechatOAuthModeCookieName     = "wechat_oauth_mode"
-	wechatOAuthBindUserCookieName = "wechat_oauth_bind_user"
-	wechatOAuthDefaultRedirectTo  = "/dashboard"
-	wechatOAuthDefaultFrontendCB  = "/auth/wechat/callback"
-	wechatOAuthProviderKey        = "wechat-main"
-	wechatOAuthLegacyProviderKey  = "wechat"
-	wechatPaymentOAuthCookiePath  = "/api/v1/auth/oauth/wechat/payment"
-	wechatPaymentOAuthStateName   = "wechat_payment_oauth_state"
-	wechatPaymentOAuthRedirect    = "wechat_payment_oauth_redirect"
-	wechatPaymentOAuthContextName = "wechat_payment_oauth_context"
-	wechatPaymentOAuthScope       = "wechat_payment_oauth_scope"
-	wechatPaymentOAuthDefaultTo   = "/purchase"
-	wechatPaymentOAuthFrontendCB  = "/auth/wechat/payment/callback"
+	wechatOAuthCookiePath            = "/api/v1/auth/oauth/wechat"
+	wechatOAuthCookieMaxAgeSec       = 10 * 60
+	wechatOAuthStateCookieName       = "wechat_oauth_state"
+	wechatOAuthRedirectCookieName    = "wechat_oauth_redirect"
+	wechatOAuthIntentCookieName      = "wechat_oauth_intent"
+	wechatOAuthModeCookieName        = "wechat_oauth_mode"
+	wechatOAuthBindUserCookieName    = "wechat_oauth_bind_user"
+	wechatOAuthDefaultRedirectTo     = "/dashboard"
+	wechatOAuthDefaultFrontendCB     = "/auth/wechat/callback"
+	wechatOAuthProviderKey           = "wechat-main"
+	wechatOAuthHistoricalProviderKey = "wechat"
+	wechatPaymentOAuthCookiePath     = "/api/v1/auth/oauth/wechat/payment"
+	wechatPaymentOAuthStateName      = "wechat_payment_oauth_state"
+	wechatPaymentOAuthRedirect       = "wechat_payment_oauth_redirect"
+	wechatPaymentOAuthContextName    = "wechat_payment_oauth_context"
+	wechatPaymentOAuthScope          = "wechat_payment_oauth_scope"
+	wechatPaymentOAuthDefaultTo      = "/purchase"
+	wechatPaymentOAuthFrontendCB     = "/auth/wechat/payment/callback"
 
 	wechatOAuthIntentLogin      = "login"
 	wechatOAuthIntentBind       = "bind_current_user"
@@ -268,7 +268,7 @@ func (h *AuthHandler) WeChatOAuthCallback(c *gin.Context) {
 		return
 	}
 	if existingIdentityUser == nil {
-		existingIdentityUser, err = h.findWeChatUserByLegacyOpenID(c.Request.Context(), identityRef, cfg, openid)
+		existingIdentityUser, err = h.findWeChatUserByStoredOpenID(c.Request.Context(), identityRef, cfg, openid)
 		if err != nil {
 			redirectOAuthError(c, frontendCallback, "session_error", infraerrors.Reason(err), infraerrors.Message(err))
 			return
@@ -471,12 +471,12 @@ func (h *AuthHandler) WeChatPaymentOAuthCallback(c *gin.Context) {
 }
 
 func (h *AuthHandler) wechatPaymentResumeService() *service.PaymentResumeService {
-	var legacyKey []byte
+	var historicalVerificationKey []byte
 	key, err := payment.ProvideEncryptionKey(h.cfg)
 	if err == nil {
-		legacyKey = []byte(key)
+		historicalVerificationKey = []byte(key)
 	}
-	return service.NewLegacyAwarePaymentResumeService(legacyKey)
+	return service.NewHistoricalKeyAwarePaymentResumeService(historicalVerificationKey)
 }
 
 type completeWeChatOAuthRequest struct {
@@ -527,7 +527,7 @@ func (h *AuthHandler) CompleteWeChatOAuthRegistration(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	if updatedSession, handled, err := h.legacyCompleteRegistrationSessionStatus(c, session); err != nil {
+	if updatedSession, handled, err := h.pendingOAuthRegistrationChoiceSessionStatus(c, session); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	} else if handled {
@@ -635,8 +635,8 @@ func (h *AuthHandler) createWeChatChoicePendingSession(
 	redirectTo string,
 	browserSessionKey string,
 	upstreamClaims map[string]any,
-	compatEmail string,
-	compatEmailUser *dbent.User,
+	providerEmail string,
+	providerEmailUser *dbent.User,
 	forceEmailOnSignup bool,
 ) error {
 	suggestionEmail := strings.TrimSpace(suggestedEmail)
@@ -657,12 +657,12 @@ func (h *AuthHandler) createWeChatChoicePendingSession(
 		"force_email_on_signup":     forceEmailOnSignup,
 		"choice_reason":             "third_party_signup",
 	}
-	if strings.TrimSpace(compatEmail) != "" {
-		completionResponse["compat_email"] = strings.TrimSpace(compatEmail)
+	if strings.TrimSpace(providerEmail) != "" {
+		completionResponse["compat_email"] = strings.TrimSpace(providerEmail)
 	}
-	if compatEmailUser != nil {
-		completionResponse["email"] = strings.TrimSpace(compatEmailUser.Email)
-		completionResponse["existing_account_email"] = strings.TrimSpace(compatEmailUser.Email)
+	if providerEmailUser != nil {
+		completionResponse["email"] = strings.TrimSpace(providerEmailUser.Email)
+		completionResponse["existing_account_email"] = strings.TrimSpace(providerEmailUser.Email)
 		completionResponse["existing_account_bindable"] = true
 		completionResponse["choice_reason"] = "compat_email_match"
 	}
@@ -671,8 +671,8 @@ func (h *AuthHandler) createWeChatChoicePendingSession(
 	}
 
 	resolvedChoiceEmail := suggestionEmail
-	if compatEmailUser != nil {
-		resolvedChoiceEmail = strings.TrimSpace(compatEmailUser.Email)
+	if providerEmailUser != nil {
+		resolvedChoiceEmail = strings.TrimSpace(providerEmailUser.Email)
 	}
 
 	return h.createOAuthPendingSession(c, oauthPendingSessionPayload{
@@ -802,7 +802,7 @@ func (h *AuthHandler) ensureWeChatBindOwnership(
 	return nil
 }
 
-func (h *AuthHandler) findWeChatUserByLegacyOpenID(
+func (h *AuthHandler) findWeChatUserByStoredOpenID(
 	ctx context.Context,
 	identity service.PendingAuthIdentityKey,
 	cfg wechatOAuthConfig,
@@ -891,8 +891,8 @@ func wechatCompatibleProviderKeys(providerKey string) []string {
 		preferred = wechatOAuthProviderKey
 	}
 	keys := []string{preferred}
-	if !strings.EqualFold(preferred, wechatOAuthLegacyProviderKey) {
-		keys = append(keys, wechatOAuthLegacyProviderKey)
+	if !strings.EqualFold(preferred, wechatOAuthHistoricalProviderKey) {
+		keys = append(keys, wechatOAuthHistoricalProviderKey)
 	}
 	return keys
 }

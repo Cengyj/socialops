@@ -146,7 +146,6 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		TurnstileEnabled:                       settings.TurnstileEnabled,
 		TurnstileSiteKey:                       settings.TurnstileSiteKey,
 		TurnstileSecretKeyConfigured:           settings.TurnstileSecretKeyConfigured,
-		APIKeyACLTrustForwardedIP:              settings.APIKeyACLTrustForwardedIP,
 		LinuxDoConnectEnabled:                  settings.LinuxDoConnectEnabled,
 		LinuxDoConnectClientID:                 settings.LinuxDoConnectClientID,
 		LinuxDoConnectClientSecretConfigured:   settings.LinuxDoConnectClientSecretConfigured,
@@ -230,7 +229,6 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		CustomEndpoints:                        dto.ParseCustomEndpoints(settings.CustomEndpoints),
 		DefaultConcurrency:                     settings.DefaultConcurrency,
 		DefaultBalance:                         settings.DefaultBalance,
-		RiskControlEnabled:                     settings.RiskControlEnabled,
 		AffiliateRebateRate:                    settings.AffiliateRebateRate,
 		AffiliateRebateFreezeHours:             settings.AffiliateRebateFreezeHours,
 		AffiliateRebateDurationDays:            settings.AffiliateRebateDurationDays,
@@ -346,9 +344,6 @@ type UpdateSettingsRequest struct {
 	TurnstileEnabled   bool   `json:"turnstile_enabled"`
 	TurnstileSiteKey   string `json:"turnstile_site_key"`
 	TurnstileSecretKey string `json:"turnstile_secret_key"`
-
-	// API Key IP 访问控制设置
-	APIKeyACLTrustForwardedIP *bool `json:"api_key_acl_trust_forwarded_ip"`
 
 	// LinuxDo Connect OAuth 登录
 	LinuxDoConnectEnabled      bool   `json:"linuxdo_connect_enabled"`
@@ -534,9 +529,6 @@ type UpdateSettingsRequest struct {
 
 	// Affiliate (邀请返利) feature switch
 	AffiliateEnabled *bool `json:"affiliate_enabled"`
-
-	// 风控中心功能开关
-	RiskControlEnabled *bool `json:"risk_control_enabled"`
 }
 
 func preserveOmittedUpdateSettingsFields(req *UpdateSettingsRequest, previous *service.SystemSettings, fields map[string]json.RawMessage) {
@@ -1469,12 +1461,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 
 	// 自定义菜单项验证
 	const (
-		maxCustomMenuItems    = 20
-		maxMenuItemLabelLen   = 50
-		maxMenuItemURLLen     = 2048
+		maxCustomMenuItems     = 20
+		maxMenuItemLabelLen    = 50
+		maxMenuItemURLLen      = 2048
 		maxMenuItemPageSlugLen = 64
-		maxMenuItemIconSVGLen = 10 * 1024 // 10KB
-		maxMenuItemIDLen      = 32
+		maxMenuItemIconSVGLen  = 10 * 1024 // 10KB
+		maxMenuItemIDLen       = 32
 	)
 
 	customMenuJSON := previousSettings.CustomMenuItems
@@ -1625,34 +1617,28 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		})
 	}
 	settings := &service.SystemSettings{
-		RegistrationEnabled:              req.RegistrationEnabled,
-		EmailVerifyEnabled:               req.EmailVerifyEnabled,
-		RegistrationEmailSuffixWhitelist: req.RegistrationEmailSuffixWhitelist,
-		PromoCodeEnabled:                 req.PromoCodeEnabled,
-		PasswordResetEnabled:             req.PasswordResetEnabled,
-		FrontendURL:                      req.FrontendURL,
-		InvitationCodeEnabled:            req.InvitationCodeEnabled,
-		TotpEnabled:                      req.TotpEnabled,
-		LoginAgreementEnabled:            req.LoginAgreementEnabled,
-		LoginAgreementMode:               loginAgreementMode,
-		LoginAgreementUpdatedAt:          loginAgreementUpdatedAt,
-		LoginAgreementDocuments:          loginAgreementDocuments,
-		SMTPHost:                         req.SMTPHost,
-		SMTPPort:                         req.SMTPPort,
-		SMTPUsername:                     req.SMTPUsername,
-		SMTPPassword:                     req.SMTPPassword,
-		SMTPFrom:                         req.SMTPFrom,
-		SMTPFromName:                     req.SMTPFromName,
-		SMTPUseTLS:                       req.SMTPUseTLS,
-		TurnstileEnabled:                 req.TurnstileEnabled,
-		TurnstileSiteKey:                 req.TurnstileSiteKey,
-		TurnstileSecretKey:               req.TurnstileSecretKey,
-		APIKeyACLTrustForwardedIP: func() bool {
-			if req.APIKeyACLTrustForwardedIP != nil {
-				return *req.APIKeyACLTrustForwardedIP
-			}
-			return previousSettings.APIKeyACLTrustForwardedIP
-		}(),
+		RegistrationEnabled:                    req.RegistrationEnabled,
+		EmailVerifyEnabled:                     req.EmailVerifyEnabled,
+		RegistrationEmailSuffixWhitelist:       req.RegistrationEmailSuffixWhitelist,
+		PromoCodeEnabled:                       req.PromoCodeEnabled,
+		PasswordResetEnabled:                   req.PasswordResetEnabled,
+		FrontendURL:                            req.FrontendURL,
+		InvitationCodeEnabled:                  req.InvitationCodeEnabled,
+		TotpEnabled:                            req.TotpEnabled,
+		LoginAgreementEnabled:                  req.LoginAgreementEnabled,
+		LoginAgreementMode:                     loginAgreementMode,
+		LoginAgreementUpdatedAt:                loginAgreementUpdatedAt,
+		LoginAgreementDocuments:                loginAgreementDocuments,
+		SMTPHost:                               req.SMTPHost,
+		SMTPPort:                               req.SMTPPort,
+		SMTPUsername:                           req.SMTPUsername,
+		SMTPPassword:                           req.SMTPPassword,
+		SMTPFrom:                               req.SMTPFrom,
+		SMTPFromName:                           req.SMTPFromName,
+		SMTPUseTLS:                             req.SMTPUseTLS,
+		TurnstileEnabled:                       req.TurnstileEnabled,
+		TurnstileSiteKey:                       req.TurnstileSiteKey,
+		TurnstileSecretKey:                     req.TurnstileSecretKey,
 		LinuxDoConnectEnabled:                  req.LinuxDoConnectEnabled,
 		LinuxDoConnectClientID:                 req.LinuxDoConnectClientID,
 		LinuxDoConnectClientSecret:             req.LinuxDoConnectClientSecret,
@@ -1809,12 +1795,6 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.AffiliateEnabled
 		}(),
-		RiskControlEnabled: func() bool {
-			if req.RiskControlEnabled != nil {
-				return *req.RiskControlEnabled
-			}
-			return previousSettings.RiskControlEnabled
-		}(),
 	}
 
 	authSourceDefaults := &service.AuthSourceDefaultSettings{
@@ -1970,7 +1950,6 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		TurnstileEnabled:                       updatedSettings.TurnstileEnabled,
 		TurnstileSiteKey:                       updatedSettings.TurnstileSiteKey,
 		TurnstileSecretKeyConfigured:           updatedSettings.TurnstileSecretKeyConfigured,
-		APIKeyACLTrustForwardedIP:              updatedSettings.APIKeyACLTrustForwardedIP,
 		LinuxDoConnectEnabled:                  updatedSettings.LinuxDoConnectEnabled,
 		LinuxDoConnectClientID:                 updatedSettings.LinuxDoConnectClientID,
 		LinuxDoConnectClientSecretConfigured:   updatedSettings.LinuxDoConnectClientSecretConfigured,
@@ -2094,8 +2073,6 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PaymentAlipayForceQRCode:               updatedPaymentCfg.AlipayForceQRCode,
 
 		AffiliateEnabled: updatedSettings.AffiliateEnabled,
-
-		RiskControlEnabled: updatedSettings.RiskControlEnabled,
 	}
 
 	response.Success(c, systemSettingsResponseData(payload, updatedAuthSourceDefaults))
@@ -2215,9 +2192,6 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if req.TurnstileSecretKey != "" {
 		changed = append(changed, "turnstile_secret_key")
-	}
-	if before.APIKeyACLTrustForwardedIP != after.APIKeyACLTrustForwardedIP {
-		changed = append(changed, "api_key_acl_trust_forwarded_ip")
 	}
 	if before.LinuxDoConnectEnabled != after.LinuxDoConnectEnabled {
 		changed = append(changed, "linuxdo_connect_enabled")
@@ -2480,9 +2454,6 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.AffiliateEnabled != after.AffiliateEnabled {
 		changed = append(changed, "affiliate_enabled")
-	}
-	if before.RiskControlEnabled != after.RiskControlEnabled {
-		changed = append(changed, "risk_control_enabled")
 	}
 	changed = appendAuthSourceDefaultChanges(changed, beforeAuthSourceDefaults, afterAuthSourceDefaults)
 	return changed

@@ -181,12 +181,12 @@ func (s *SystemOperationLockService) renewLoop(lock *SystemOperationLock) {
 			)
 			cancel()
 			if err != nil {
-				logger.LegacyPrintf("service.system_operation_lock", "[SystemOperationLock] renew failed operation_id=%s err=%v", lock.operationID, err)
+				logger.ComponentPrintf("service.system_operation_lock", "[SystemOperationLock] renew failed operation_id=%s err=%v", lock.operationID, err)
 				// 瞬时故障不应导致续租协程退出，下一轮继续尝试续租。
 				continue
 			}
 			if !ok {
-				logger.LegacyPrintf("service.system_operation_lock", "[SystemOperationLock] renew stopped operation_id=%s reason=ownership_lost", lock.operationID)
+				logger.ComponentPrintf("service.system_operation_lock", "[SystemOperationLock] renew stopped operation_id=%s reason=ownership_lost", lock.operationID)
 				return
 			}
 		case <-lock.stopCh:

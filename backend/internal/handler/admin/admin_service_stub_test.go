@@ -9,7 +9,6 @@ import (
 
 type stubAdminService struct {
 	users             []service.User
-	apiKeys           []service.APIKey
 	redeems           []service.RedeemCode
 	getUserErr        error
 	boundAuthIdentity *service.AdminBindAuthIdentityInput
@@ -42,15 +41,6 @@ func newStubAdminService() *stubAdminService {
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	apiKey := service.APIKey{
-		ID:        10,
-		UserID:    user.ID,
-		Key:       "sk-test",
-		Name:      "test",
-		Status:    service.StatusActive,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
 	redeem := service.RedeemCode{
 		ID:        5,
 		Code:      "R-TEST",
@@ -61,7 +51,6 @@ func newStubAdminService() *stubAdminService {
 	}
 	return &stubAdminService{
 		users:   []service.User{user},
-		apiKeys: []service.APIKey{apiKey},
 		redeems: []service.RedeemCode{redeem},
 	}
 }
@@ -110,16 +99,8 @@ func (s *stubAdminService) BatchUpdateConcurrency(_ context.Context, userIDs []i
 	return len(userIDs), nil
 }
 
-func (s *stubAdminService) GetUserAPIKeys(context.Context, int64, int, int, string, string) ([]service.APIKey, int64, error) {
-	return s.apiKeys, int64(len(s.apiKeys)), nil
-}
-
-func (s *stubAdminService) GetUserUsageStats(_ context.Context, userID int64, period string) (any, error) {
-	return map[string]any{"user_id": userID, "period": period}, nil
-}
-
-func (s *stubAdminService) GetUserRPMStatus(context.Context, int64) (*service.UserRPMStatus, error) {
-	return &service.UserRPMStatus{PerGroup: []service.UserGroupRPMStatus{}}, nil
+func (s *stubAdminService) GetUserUsageStats(_ context.Context, userID int64) (*service.AdminUserUsageStats, error) {
+	return &service.AdminUserUsageStats{TotalOperations: userID, TotalCharged: float64(userID) / 10}, nil
 }
 
 func (s *stubAdminService) GetUserBalanceHistory(context.Context, int64, int, int, string) ([]service.RedeemCode, int64, float64, error) {
@@ -140,10 +121,6 @@ func (s *stubAdminService) BindUserAuthIdentity(_ context.Context, userID int64,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}, nil
-}
-
-func (s *stubAdminService) ReplaceUserGroup(context.Context, int64, int64, int64) (*service.ReplaceUserGroupResult, error) {
-	return &service.ReplaceUserGroupResult{}, nil
 }
 
 func (s *stubAdminService) ListRedeemCodes(_ context.Context, _ int, _ int, codeType, status, search string, sortBy, sortOrder string) ([]service.RedeemCode, int64, error) {
@@ -172,53 +149,4 @@ func (s *stubAdminService) BatchDeleteRedeemCodes(_ context.Context, ids []int64
 
 func (s *stubAdminService) ExpireRedeemCode(_ context.Context, id int64) (*service.RedeemCode, error) {
 	return &service.RedeemCode{ID: id, Code: "R-TEST", Status: service.StatusExpired}, nil
-}
-
-func (s *stubAdminService) AdminUpdateAPIKeyGroupID(_ context.Context, keyID int64, groupID *int64) (*service.AdminUpdateAPIKeyGroupIDResult, error) {
-	for i := range s.apiKeys {
-		if s.apiKeys[i].ID == keyID {
-			key := s.apiKeys[i]
-			if groupID != nil {
-				if *groupID == 0 {
-					key.GroupID = nil
-				} else {
-					gid := *groupID
-					key.GroupID = &gid
-				}
-			}
-			return &service.AdminUpdateAPIKeyGroupIDResult{APIKey: &key}, nil
-		}
-	}
-	return nil, service.ErrAPIKeyNotFound
-}
-
-func (s *stubAdminService) AdminResetAPIKeyRateLimitUsage(_ context.Context, keyID int64) (*service.APIKey, error) {
-	for i := range s.apiKeys {
-		if s.apiKeys[i].ID == keyID {
-			s.apiKeys[i].Usage5h = 0
-			s.apiKeys[i].Usage1d = 0
-			s.apiKeys[i].Usage7d = 0
-			s.apiKeys[i].Window5hStart = nil
-			s.apiKeys[i].Window1dStart = nil
-			s.apiKeys[i].Window7dStart = nil
-			key := s.apiKeys[i]
-			return &key, nil
-		}
-	}
-	return nil, service.ErrAPIKeyNotFound
-}
-
-func (s *stubAdminService) AdminUpdateAPIKeyGroupAndRateLimitUsage(ctx context.Context, keyID int64, groupID *int64, resetRateLimitUsage bool) (*service.AdminUpdateAPIKeyGroupIDResult, error) {
-	result, err := s.AdminUpdateAPIKeyGroupID(ctx, keyID, groupID)
-	if err != nil {
-		return nil, err
-	}
-	if resetRateLimitUsage {
-		key, err := s.AdminResetAPIKeyRateLimitUsage(ctx, keyID)
-		if err != nil {
-			return nil, err
-		}
-		result.APIKey = key
-	}
-	return result, nil
 }

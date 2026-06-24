@@ -59,7 +59,9 @@ docker-compose.override.yml
 # ===================
 # IDE / 编辑器
 # ===================
-.idea/
+.idea/*
+!.idea/runConfigurations/
+!.idea/runConfigurations/*.xml
 .vscode/
 *.swp
 *.swo
@@ -110,9 +112,12 @@ backend/data/
 
 # 本地部署运行时数据
 deploy/data/
+deploy/dev-data/
 deploy/dev-data-real/
+deploy/dev-postgres_data/
 deploy/postgres_data/
 deploy/redis_data/
+deploy/dev-*.log
 
 # ===================
 # 本地配置文件（包含敏感信息）
@@ -145,3 +150,7 @@ docs/*
 frontend/coverage/
 aicodex
 output/
+.playwright-cli/
+.codex-total-accounts-filter-smoke.png
+frontend-settings-custom-menu-slug.png
+test-results/

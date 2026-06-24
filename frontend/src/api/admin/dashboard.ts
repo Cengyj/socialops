@@ -10,21 +10,20 @@ export interface AdminDashboardStats {
   error_accounts?: number
   ratelimit_accounts?: number
   overload_accounts?: number
-  total_requests?: number
-  today_requests?: number
-  total_actual_cost?: number
-  today_actual_cost?: number
+  total_operations?: number
+  today_operations?: number
+  total_charged?: number
+  today_charged?: number
   average_duration_ms?: number
-  rpm?: number
+  recent_operations_per_minute?: number
   stats_updated_at?: string
   stats_stale?: boolean
 }
 
 export interface AdminDashboardTrendPoint {
   date: string
-  requests?: number
-  actual_cost?: number
-  cost?: number
+  operations?: number
+  charged?: number
 }
 
 export interface AdminUserUsageTrendPoint {
@@ -32,54 +31,26 @@ export interface AdminUserUsageTrendPoint {
   user_id: number
   email?: string
   username?: string
-  requests?: number
-  actual_cost?: number
+  operations?: number
+  charged?: number
 }
 
 export interface AdminUserSpendingRankingItem {
   user_id: number
   email?: string
-  username?: string
-  actual_cost?: number
-  requests?: number
+  charged?: number
+  operations?: number
 }
 
 export interface AdminUserSpendingRankingResponse {
   ranking: AdminUserSpendingRankingItem[]
-  total_actual_cost?: number
-  total_requests?: number
+  total_charged?: number
+  total_operations?: number
 }
 
 export interface AdminDashboardTrendParams {
   granularity?: 'day' | 'hour'
   limit?: number
-}
-
-function normalizeTrend(
-  data: AdminDashboardTrendPoint[] | { trend?: AdminDashboardTrendPoint[] } | null | undefined
-): AdminDashboardTrendPoint[] {
-  if (Array.isArray(data)) return data
-  return data?.trend ?? []
-}
-
-function normalizeUserTrend(
-  data: AdminUserUsageTrendPoint[] | { trend?: AdminUserUsageTrendPoint[] } | null | undefined
-): AdminUserUsageTrendPoint[] {
-  if (Array.isArray(data)) return data
-  return data?.trend ?? []
-}
-
-function normalizeRanking(
-  data: AdminUserSpendingRankingResponse | AdminUserSpendingRankingItem[] | null | undefined
-): AdminUserSpendingRankingResponse {
-  if (Array.isArray(data)) {
-    return { ranking: data }
-  }
-  return {
-    ranking: data?.ranking ?? [],
-    total_actual_cost: data?.total_actual_cost ?? 0,
-    total_requests: data?.total_requests ?? 0,
-  }
 }
 
 const dashboardAPI = {
@@ -89,27 +60,27 @@ const dashboardAPI = {
   },
 
   async getUsageTrend(params?: AdminDashboardTrendParams): Promise<AdminDashboardTrendPoint[]> {
-    const { data } = await apiClient.get<AdminDashboardTrendPoint[] | { trend?: AdminDashboardTrendPoint[] }>(
+    const { data } = await apiClient.get<AdminDashboardTrendPoint[]>(
       '/admin/dashboard/trend',
       { params }
     )
-    return normalizeTrend(data)
+    return data
   },
 
   async getUserUsageTrend(params?: AdminDashboardTrendParams): Promise<AdminUserUsageTrendPoint[]> {
-    const { data } = await apiClient.get<AdminUserUsageTrendPoint[] | { trend?: AdminUserUsageTrendPoint[] }>(
+    const { data } = await apiClient.get<AdminUserUsageTrendPoint[]>(
       '/admin/dashboard/users-trend',
       { params }
     )
-    return normalizeUserTrend(data)
+    return data
   },
 
   async getUserSpendingRanking(params?: AdminDashboardTrendParams): Promise<AdminUserSpendingRankingResponse> {
-    const { data } = await apiClient.get<AdminUserSpendingRankingResponse | AdminUserSpendingRankingItem[]>(
+    const { data } = await apiClient.get<AdminUserSpendingRankingResponse>(
       '/admin/dashboard/users-ranking',
       { params }
     )
-    return normalizeRanking(data)
+    return data
   },
 }
 

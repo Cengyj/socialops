@@ -29,11 +29,11 @@ type SocialTaskLog struct {
 	SocialAccountID int64 `json:"social_account_id,omitempty"`
 	// 执行任务的用户 ID
 	UserID int64 `json:"user_id,omitempty"`
-	// Billable social action: login_check / follow / message / post / like / retweet
+	// Social task action: login / login_check / follow / post / like / retweet / update_profile / update_avatar / update_banner
 	Action string `json:"action,omitempty"`
 	// 操作目标（如目标用户名、URL 等）
 	Target *string `json:"target,omitempty"`
-	// 操作内容（如私信内容、推文内容等）
+	// 操作内容（如发帖内容等）
 	Content *string `json:"content,omitempty"`
 	// Structured execution payload snapshot
 	Payload domain.SocialTaskPayload `json:"payload,omitempty"`

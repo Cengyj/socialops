@@ -77,7 +77,7 @@ func TestCreateAndRedeem_SubscriptionRequiresPlanOrGroupID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, code)
 }
 
-func TestCreateAndRedeem_LegacySubscriptionGroupRequiresNonZeroValidityDays(t *testing.T) {
+func TestCreateAndRedeem_GroupOnlySubscriptionRequiresNonZeroValidityDays(t *testing.T) {
 	groupID := int64(5)
 	h := newCreateAndRedeemHandler()
 

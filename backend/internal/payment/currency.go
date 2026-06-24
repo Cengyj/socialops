@@ -15,10 +15,10 @@ type paymentCurrencyAmountUnit struct {
 }
 
 var (
-	zeroDecimalAmountUnit  = paymentCurrencyAmountUnit{apiMinorUnit: 0, maxFractionDigits: 0}
-	twoDecimalAmountUnit   = paymentCurrencyAmountUnit{apiMinorUnit: 2, maxFractionDigits: 2}
-	threeDecimalAmountUnit = paymentCurrencyAmountUnit{apiMinorUnit: 3, maxFractionDigits: 3}
-	stripeLegacyZeroAmount = paymentCurrencyAmountUnit{apiMinorUnit: 2, maxFractionDigits: 0}
+	zeroDecimalAmountUnit              = paymentCurrencyAmountUnit{apiMinorUnit: 0, maxFractionDigits: 0}
+	twoDecimalAmountUnit               = paymentCurrencyAmountUnit{apiMinorUnit: 2, maxFractionDigits: 2}
+	threeDecimalAmountUnit             = paymentCurrencyAmountUnit{apiMinorUnit: 3, maxFractionDigits: 3}
+	stripeSpecialZeroDecimalAmountUnit = paymentCurrencyAmountUnit{apiMinorUnit: 2, maxFractionDigits: 0}
 )
 
 var paymentCurrencyAmountUnits = map[string]paymentCurrencyAmountUnit{
@@ -37,8 +37,8 @@ var paymentCurrencyAmountUnits = map[string]paymentCurrencyAmountUnit{
 	"XAF": zeroDecimalAmountUnit,
 	"XOF": zeroDecimalAmountUnit,
 	"XPF": zeroDecimalAmountUnit,
-	"ISK": stripeLegacyZeroAmount,
-	"UGX": stripeLegacyZeroAmount,
+	"ISK": stripeSpecialZeroDecimalAmountUnit,
+	"UGX": stripeSpecialZeroDecimalAmountUnit,
 	"BHD": threeDecimalAmountUnit,
 	"IQD": threeDecimalAmountUnit,
 	"JOD": threeDecimalAmountUnit,

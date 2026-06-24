@@ -36,38 +36,38 @@ func newUserEntRepo(t *testing.T) (*userRepository, *dbent.Client) {
 	return newUserRepositoryWithSQL(client, db), client
 }
 
-func TestUserRepositoryGetByEmailNormalizesLegacySpacingAndCase(t *testing.T) {
+func TestUserRepositoryGetByEmailNormalizesStoredSpacingAndCase(t *testing.T) {
 	repo, _ := newUserEntRepo(t)
 	ctx := context.Background()
 
 	err := repo.Create(ctx, &service.User{
-		Email:        " Legacy@Example.com ",
-		Username:     "legacy-user",
+		Email:        " Stored@Example.com ",
+		Username:     "stored-user",
 		PasswordHash: "hash",
 		Role:         service.RoleUser,
 		Status:       service.StatusActive,
 	})
 	require.NoError(t, err)
 
-	got, err := repo.GetByEmail(ctx, "legacy@example.com")
+	got, err := repo.GetByEmail(ctx, "stored@example.com")
 	require.NoError(t, err)
-	require.Equal(t, " Legacy@Example.com ", got.Email)
+	require.Equal(t, " Stored@Example.com ", got.Email)
 }
 
-func TestUserRepositoryExistsByEmailNormalizesLegacySpacingAndCase(t *testing.T) {
+func TestUserRepositoryExistsByEmailNormalizesStoredSpacingAndCase(t *testing.T) {
 	repo, _ := newUserEntRepo(t)
 	ctx := context.Background()
 
 	err := repo.Create(ctx, &service.User{
-		Email:        " Legacy@Example.com ",
-		Username:     "legacy-user",
+		Email:        " Stored@Example.com ",
+		Username:     "stored-user",
 		PasswordHash: "hash",
 		Role:         service.RoleUser,
 		Status:       service.StatusActive,
 	})
 	require.NoError(t, err)
 
-	exists, err := repo.ExistsByEmail(ctx, "  LEGACY@example.com  ")
+	exists, err := repo.ExistsByEmail(ctx, "  STORED@example.com  ")
 	require.NoError(t, err)
 	require.True(t, exists)
 }

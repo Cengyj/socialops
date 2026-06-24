@@ -21,7 +21,7 @@ const orderFactory = (overrides: Partial<PaymentOrder> = {}): PaymentOrder => ({
   fee_rate: 3,
   currency: 'HKD',
   payment_type: 'stripe',
-  out_trade_no: 'sub2_refund_dialog_currency',
+  out_trade_no: 'socialops_refund_dialog_currency',
   status: 'COMPLETED',
   order_type: 'subscription',
   created_at: '2026-06-04T12:00:00Z',

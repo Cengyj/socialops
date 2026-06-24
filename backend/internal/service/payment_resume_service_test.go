@@ -117,7 +117,7 @@ func TestCanonicalizeReturnURLRejectsNonCanonicalPath(t *testing.T) {
 func TestBuildPaymentReturnURL(t *testing.T) {
 	t.Parallel()
 
-	got, err := buildPaymentReturnURL("https://example.com/payment/result?from=checkout#fragment", 42, "sub2_42", "resume-token")
+	got, err := buildPaymentReturnURL("https://example.com/payment/result?from=checkout#fragment", 42, "socialops_42", "resume-token")
 	if err != nil {
 		t.Fatalf("buildPaymentReturnURL returned error: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestBuildPaymentReturnURL(t *testing.T) {
 	if query.Get("order_id") != strconv.FormatInt(42, 10) {
 		t.Fatalf("order_id = %q", query.Get("order_id"))
 	}
-	if query.Get("out_trade_no") != "sub2_42" {
+	if query.Get("out_trade_no") != "socialops_42" {
 		t.Fatalf("out_trade_no = %q", query.Get("out_trade_no"))
 	}
 	if query.Get("resume_token") != "resume-token" {
@@ -150,7 +150,7 @@ func TestBuildPaymentReturnURL(t *testing.T) {
 func TestBuildPaymentReturnURLWithoutResumeTokenStillIncludesOutTradeNo(t *testing.T) {
 	t.Parallel()
 
-	got, err := buildPaymentReturnURL("https://example.com/payment/result", 42, "sub2_42", "")
+	got, err := buildPaymentReturnURL("https://example.com/payment/result", 42, "socialops_42", "")
 	if err != nil {
 		t.Fatalf("buildPaymentReturnURL returned error: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestBuildPaymentReturnURLWithoutResumeTokenStillIncludesOutTradeNo(t *testi
 	if query.Get("order_id") != "42" {
 		t.Fatalf("order_id = %q", query.Get("order_id"))
 	}
-	if query.Get("out_trade_no") != "sub2_42" {
+	if query.Get("out_trade_no") != "socialops_42" {
 		t.Fatalf("out_trade_no = %q", query.Get("out_trade_no"))
 	}
 	if query.Get("resume_token") != "" {
@@ -174,7 +174,7 @@ func TestBuildPaymentReturnURLWithoutResumeTokenStillIncludesOutTradeNo(t *testi
 func TestBuildPaymentReturnURLEmptyBase(t *testing.T) {
 	t.Parallel()
 
-	got, err := buildPaymentReturnURL("", 42, "sub2_42", "resume-token")
+	got, err := buildPaymentReturnURL("", 42, "socialops_42", "resume-token")
 	if err != nil {
 		t.Fatalf("buildPaymentReturnURL returned error: %v", err)
 	}
@@ -360,12 +360,12 @@ func TestPaymentServiceParseWeChatPaymentResumeTokenUsesExplicitSigningKey(t *te
 	}
 }
 
-func TestPaymentServiceParseWeChatPaymentResumeTokenAcceptsLegacyEncryptionKeyDuringMigration(t *testing.T) {
+func TestPaymentServiceParseWeChatPaymentResumeTokenAcceptsHistoricalEncryptionKeyDuringMigration(t *testing.T) {
 	t.Setenv("PAYMENT_RESUME_SIGNING_KEY", "explicit-payment-resume-signing-key")
 
-	legacyKey := []byte("0123456789abcdef0123456789abcdef")
-	token, err := NewPaymentResumeService(legacyKey).CreateWeChatPaymentResumeToken(WeChatPaymentResumeClaims{
-		OpenID:      "openid-legacy-key",
+	historicalKey := []byte("0123456789abcdef0123456789abcdef")
+	token, err := NewPaymentResumeService(historicalKey).CreateWeChatPaymentResumeToken(WeChatPaymentResumeClaims{
+		OpenID:      "openid-historical-key",
 		PaymentType: payment.TypeWxpay,
 	})
 	if err != nil {
@@ -374,7 +374,7 @@ func TestPaymentServiceParseWeChatPaymentResumeTokenAcceptsLegacyEncryptionKeyDu
 
 	svc := &PaymentService{
 		configService: &PaymentConfigService{
-			encryptionKey: legacyKey,
+			encryptionKey: historicalKey,
 		},
 	}
 
@@ -382,16 +382,16 @@ func TestPaymentServiceParseWeChatPaymentResumeTokenAcceptsLegacyEncryptionKeyDu
 	if err != nil {
 		t.Fatalf("ParseWeChatPaymentResumeToken returned error: %v", err)
 	}
-	if claims.OpenID != "openid-legacy-key" {
-		t.Fatalf("openid = %q, want %q", claims.OpenID, "openid-legacy-key")
+	if claims.OpenID != "openid-historical-key" {
+		t.Fatalf("openid = %q, want %q", claims.OpenID, "openid-historical-key")
 	}
 }
 
-func TestNewConfiguredPaymentResumeServicePrefersExplicitSigningKeyAndKeepsLegacyVerificationFallback(t *testing.T) {
+func TestNewConfiguredPaymentResumeServicePrefersExplicitSigningKeyAndKeepsHistoricalVerificationFallback(t *testing.T) {
 	t.Setenv("PAYMENT_RESUME_SIGNING_KEY", "explicit-payment-resume-signing-key")
 
-	legacyKey := []byte("0123456789abcdef0123456789abcdef")
-	svc := newLegacyAwarePaymentResumeService(legacyKey)
+	historicalKey := []byte("0123456789abcdef0123456789abcdef")
+	svc := newHistoricalKeyAwarePaymentResumeService(historicalKey)
 
 	explicitToken, err := svc.CreateWeChatPaymentResumeToken(WeChatPaymentResumeClaims{
 		OpenID:      "openid-explicit-key",
@@ -409,20 +409,20 @@ func TestNewConfiguredPaymentResumeServicePrefersExplicitSigningKeyAndKeepsLegac
 		t.Fatalf("openid = %q, want %q", explicitClaims.OpenID, "openid-explicit-key")
 	}
 
-	legacyToken, err := NewPaymentResumeService(legacyKey).CreateWeChatPaymentResumeToken(WeChatPaymentResumeClaims{
-		OpenID:      "openid-legacy-key",
+	historicalToken, err := NewPaymentResumeService(historicalKey).CreateWeChatPaymentResumeToken(WeChatPaymentResumeClaims{
+		OpenID:      "openid-historical-key",
 		PaymentType: payment.TypeWxpay,
 	})
 	if err != nil {
 		t.Fatalf("CreateWeChatPaymentResumeToken returned error: %v", err)
 	}
 
-	legacyClaims, err := svc.ParseWeChatPaymentResumeToken(legacyToken)
+	historicalClaims, err := svc.ParseWeChatPaymentResumeToken(historicalToken)
 	if err != nil {
 		t.Fatalf("ParseWeChatPaymentResumeToken returned error: %v", err)
 	}
-	if legacyClaims.OpenID != "openid-legacy-key" {
-		t.Fatalf("openid = %q, want %q", legacyClaims.OpenID, "openid-legacy-key")
+	if historicalClaims.OpenID != "openid-historical-key" {
+		t.Fatalf("openid = %q, want %q", historicalClaims.OpenID, "openid-historical-key")
 	}
 }
 
@@ -625,7 +625,7 @@ func TestVisibleMethodLoadBalancerUsesConfiguredSourceWhenMultipleProvidersEnabl
 	}
 }
 
-func TestVisibleMethodLoadBalancerPreservesLegacyCrossProviderRoutingWhenSourceMissing(t *testing.T) {
+func TestVisibleMethodLoadBalancerPreservesEmptySourceCrossProviderRoutingWhenSourceMissing(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -671,7 +671,7 @@ func TestVisibleMethodLoadBalancerPreservesLegacyCrossProviderRoutingWhenSourceM
 		t.Fatalf("SelectInstance returned error: %v", err)
 	}
 	if inner.lastProviderKey != "" {
-		t.Fatalf("lastProviderKey = %q, want legacy cross-provider empty key", inner.lastProviderKey)
+		t.Fatalf("lastProviderKey = %q, want empty-source cross-provider key", inner.lastProviderKey)
 	}
 	if inner.lastPaymentType != payment.TypeAlipay {
 		t.Fatalf("lastPaymentType = %q, want %q", inner.lastPaymentType, payment.TypeAlipay)

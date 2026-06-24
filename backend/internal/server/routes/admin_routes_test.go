@@ -1,8 +1,6 @@
 package routes
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/Wei-Shaw/socialops/internal/handler"
@@ -28,17 +26,28 @@ func TestRegisterAdminRoutesDoesNotExposeAccountTaskEstimate(t *testing.T) {
 	})
 
 	requireRouteRegistered(t, router, "POST", "/api/v1/admin/accounts/tasks")
+	requireRouteRegistered(t, router, "POST", "/api/v1/admin/accounts/store-workbench")
 	requireRouteRegistered(t, router, "GET", "/api/v1/admin/total-accounts")
+	requireRouteRegistered(t, router, "GET", "/api/v1/admin/total-accounts/export")
+	requireRouteRegistered(t, router, "POST", "/api/v1/admin/total-accounts/import")
+	requireRouteRegistered(t, router, "PUT", "/api/v1/admin/total-accounts/:id")
+	requireRouteRegistered(t, router, "GET", "/api/v1/admin/global-proxies")
+	requireRouteRegistered(t, router, "POST", "/api/v1/admin/global-proxies")
+	requireRouteRegistered(t, router, "POST", "/api/v1/admin/global-proxies/test")
+	requireRouteRegistered(t, router, "PUT", "/api/v1/admin/global-proxies/:id")
+	requireRouteRegistered(t, router, "DELETE", "/api/v1/admin/global-proxies/:id")
+	requireRouteRegistered(t, router, "POST", "/api/v1/admin/global-proxies/:id/test")
+	requireRouteNotRegistered(t, router, "POST", "/api/v1/admin/total-accounts")
+	requireRouteNotRegistered(t, router, "POST", "/api/v1/admin/accounts/register")
 	requireRouteNotRegistered(t, router, "POST", "/api/v1/admin/accounts/tasks/estimate")
 	requireRouteNotRegistered(t, router, "PUT", "/api/v1/admin/accounts/:id/default-proxy")
-	requireRouteNotRegistered(t, router, "POST", "/api/v1/admin/accounts/register")
-	requireRouteNotRegistered(t, router, "POST", "/api/v1/admin/accounts/store-workbench")
+	requireRouteNotRegistered(t, router, "GET", "/api/v1/admin/login-proxies")
 	removedAdminProxyPath := "/api/v1/admin" + "/proxies"
 	requireRouteNotRegistered(t, router, "GET", removedAdminProxyPath)
 	requireRouteNotRegistered(t, router, "POST", removedAdminProxyPath)
 }
 
-func TestRegisterAdminRoutesRiskControlStubsUseStandardEnvelope(t *testing.T) {
+func TestRegisterAdminRoutesDoesNotExposeRemovedAPIKeyRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	v1 := router.Group("/api/v1")
@@ -52,36 +61,161 @@ func TestRegisterAdminRoutesRiskControlStubsUseStandardEnvelope(t *testing.T) {
 	)
 
 	tests := []struct {
-		path string
-		want []string
+		method string
+		path   string
 	}{
-		{
-			path: "/api/v1/admin/risk-control/status",
-			want: []string{`"code":0`, `"message":"success"`, `"data":`, `"enabled":false`, `"status":"disabled"`},
-		},
-		{
-			path: "/api/v1/admin/risk-control/config",
-			want: []string{`"code":0`, `"message":"success"`, `"data":`, `"enabled":false`},
-		},
-		{
-			path: "/api/v1/admin/risk-control/logs?page=2&page_size=5",
-			want: []string{`"code":0`, `"message":"success"`, `"items":[]`, `"total":0`, `"page":2`, `"page_size":5`},
-		},
+		{method: "PUT", path: "/api/v1/admin/api-keys/:id"},
+		{method: "GET", path: "/api/v1/admin/dashboard/api-keys-trend"},
+		{method: "POST", path: "/api/v1/admin/dashboard/api-keys-usage"},
+		{method: "GET", path: "/api/v1/admin/users/:id/api-keys"},
+		{method: "GET", path: "/api/v1/admin/users/:id/rpm-status"},
+		{method: "POST", path: "/api/v1/admin/users/:id/replace-group"},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.path, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
-
-			router.ServeHTTP(rec, req)
-
-			require.Equal(t, http.StatusOK, rec.Code)
-			for _, want := range tt.want {
-				require.Contains(t, rec.Body.String(), want)
-			}
+		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
+			requireRouteNotRegistered(t, router, tt.method, tt.path)
 		})
 	}
+}
+
+func TestRegisterAdminRoutesDoesNotExposeEmptyDashboardCompatibilityRoutes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	v1 := router.Group("/api/v1")
+
+	RegisterAdminRoutes(
+		v1,
+		newAdminRoutesTestHandlers(),
+		middleware.AdminAuthMiddleware(func(c *gin.Context) {
+			c.Next()
+		}),
+	)
+
+	requireRouteRegistered(t, router, "GET", "/api/v1/admin/dashboard/stats")
+	requireRouteRegistered(t, router, "GET", "/api/v1/admin/dashboard/trend")
+	requireRouteRegistered(t, router, "GET", "/api/v1/admin/dashboard/users-trend")
+	requireRouteRegistered(t, router, "GET", "/api/v1/admin/dashboard/users-ranking")
+
+	tests := []struct {
+		method string
+		path   string
+	}{
+		{method: "GET", path: "/api/v1/admin/dashboard/snapshot-v2"},
+		{method: "GET", path: "/api/v1/admin/dashboard/realtime"},
+		{method: "GET", path: "/api/v1/admin/dashboard/groups"},
+		{method: "POST", path: "/api/v1/admin/dashboard/users-usage"},
+		{method: "GET", path: "/api/v1/admin/dashboard/user-breakdown"},
+		{method: "POST", path: "/api/v1/admin/dashboard/aggregation/backfill"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
+			requireRouteNotRegistered(t, router, tt.method, tt.path)
+		})
+	}
+}
+
+func TestRegisterAdminRoutesKeepsSystemAdminAPIKeySettings(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	v1 := router.Group("/api/v1")
+
+	RegisterAdminRoutes(
+		v1,
+		newAdminRoutesTestHandlers(),
+		middleware.AdminAuthMiddleware(func(c *gin.Context) {
+			c.Next()
+		}),
+	)
+
+	requireRouteRegistered(t, router, "GET", "/api/v1/admin/settings/admin-api-key")
+	requireRouteRegistered(t, router, "POST", "/api/v1/admin/settings/admin-api-key/regenerate")
+	requireRouteRegistered(t, router, "DELETE", "/api/v1/admin/settings/admin-api-key")
+}
+
+func TestRegisterAdminRoutesDoesNotExposeSubscriptionAssignCompatibilityRoutes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	v1 := router.Group("/api/v1")
+
+	RegisterAdminRoutes(
+		v1,
+		newAdminRoutesTestHandlers(),
+		middleware.AdminAuthMiddleware(func(c *gin.Context) {
+			c.Next()
+		}),
+	)
+
+	requireRouteRegistered(t, router, "POST", "/api/v1/admin/subscriptions")
+	requireRouteRegistered(t, router, "POST", "/api/v1/admin/subscriptions/bulk")
+	requireRouteNotRegistered(t, router, "POST", "/api/v1/admin/subscriptions/assign")
+	requireRouteNotRegistered(t, router, "POST", "/api/v1/admin/subscriptions/bulk-assign")
+}
+
+func TestRegisterAdminRoutesDoesNotExposeDeprecatedDataManagementRoutes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	v1 := router.Group("/api/v1")
+
+	RegisterAdminRoutes(
+		v1,
+		newAdminRoutesTestHandlers(),
+		middleware.AdminAuthMiddleware(func(c *gin.Context) {
+			c.Next()
+		}),
+	)
+
+	requireRouteRegistered(t, router, "GET", "/api/v1/admin/backups")
+	requireRouteRegistered(t, router, "POST", "/api/v1/admin/backups")
+	requireRouteRegistered(t, router, "GET", "/api/v1/admin/backups/s3-config")
+
+	tests := []struct {
+		method string
+		path   string
+	}{
+		{method: "GET", path: "/api/v1/admin/data-management/agent/health"},
+		{method: "GET", path: "/api/v1/admin/data-management/config"},
+		{method: "PUT", path: "/api/v1/admin/data-management/config"},
+		{method: "GET", path: "/api/v1/admin/data-management/sources/:source_type/profiles"},
+		{method: "POST", path: "/api/v1/admin/data-management/sources/:source_type/profiles"},
+		{method: "PUT", path: "/api/v1/admin/data-management/sources/:source_type/profiles/:profile_id"},
+		{method: "DELETE", path: "/api/v1/admin/data-management/sources/:source_type/profiles/:profile_id"},
+		{method: "POST", path: "/api/v1/admin/data-management/sources/:source_type/profiles/:profile_id/activate"},
+		{method: "POST", path: "/api/v1/admin/data-management/s3/test"},
+		{method: "GET", path: "/api/v1/admin/data-management/s3/profiles"},
+		{method: "POST", path: "/api/v1/admin/data-management/s3/profiles"},
+		{method: "PUT", path: "/api/v1/admin/data-management/s3/profiles/:profile_id"},
+		{method: "DELETE", path: "/api/v1/admin/data-management/s3/profiles/:profile_id"},
+		{method: "POST", path: "/api/v1/admin/data-management/s3/profiles/:profile_id/activate"},
+		{method: "POST", path: "/api/v1/admin/data-management/backups"},
+		{method: "GET", path: "/api/v1/admin/data-management/backups"},
+		{method: "GET", path: "/api/v1/admin/data-management/backups/:job_id"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
+			requireRouteNotRegistered(t, router, tt.method, tt.path)
+		})
+	}
+}
+
+func TestRegisterAdminRoutesDoesNotExposeRiskControlStubs(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	v1 := router.Group("/api/v1")
+
+	RegisterAdminRoutes(
+		v1,
+		newAdminRoutesTestHandlers(),
+		middleware.AdminAuthMiddleware(func(c *gin.Context) {
+			c.Next()
+		}),
+	)
+
+	requireRouteNotRegistered(t, router, "GET", "/api/v1/admin/risk-control/status")
+	requireRouteNotRegistered(t, router, "GET", "/api/v1/admin/risk-control/config")
+	requireRouteNotRegistered(t, router, "GET", "/api/v1/admin/risk-control/logs")
 }
 
 func newAdminRoutesTestHandlers() *handler.Handlers {
@@ -91,7 +225,6 @@ func newAdminRoutesTestHandlers() *handler.Handlers {
 			User:             &admin.UserHandler{},
 			Group:            &admin.GroupHandler{},
 			Announcement:     &admin.AnnouncementHandler{},
-			DataManagement:   &admin.DataManagementHandler{},
 			Backup:           &admin.BackupHandler{},
 			Redeem:           &admin.RedeemHandler{},
 			Promo:            &admin.PromoHandler{},
@@ -99,10 +232,10 @@ func newAdminRoutesTestHandlers() *handler.Handlers {
 			System:           &admin.SystemHandler{},
 			Subscription:     &admin.SubscriptionHandler{},
 			UserAttribute:    &admin.UserAttributeHandler{},
-			APIKey:           &admin.AdminAPIKeyHandler{},
 			Affiliate:        &admin.AffiliateHandler{},
 			AccountWorkbench: &admin.AccountWorkbenchAdminHandler{},
 			TotalAccounts:    &admin.TotalAccountsHandler{},
+			GlobalProxies:    &admin.GlobalProxyHandler{},
 		},
 	}
 }

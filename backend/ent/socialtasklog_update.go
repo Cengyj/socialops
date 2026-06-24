@@ -133,12 +133,6 @@ func (_u *SocialTaskLogUpdate) SetNillablePayload(v *domain.SocialTaskPayload) *
 	return _u
 }
 
-// ClearPayload clears the value of the "payload" field.
-func (_u *SocialTaskLogUpdate) ClearPayload() *SocialTaskLogUpdate {
-	_u.mutation.ClearPayload()
-	return _u
-}
-
 // SetTemplateSnapshot sets the "template_snapshot" field.
 func (_u *SocialTaskLogUpdate) SetTemplateSnapshot(v domain.SocialTaskTemplateSnapshot) *SocialTaskLogUpdate {
 	_u.mutation.SetTemplateSnapshot(v)
@@ -150,12 +144,6 @@ func (_u *SocialTaskLogUpdate) SetNillableTemplateSnapshot(v *domain.SocialTaskT
 	if v != nil {
 		_u.SetTemplateSnapshot(*v)
 	}
-	return _u
-}
-
-// ClearTemplateSnapshot clears the value of the "template_snapshot" field.
-func (_u *SocialTaskLogUpdate) ClearTemplateSnapshot() *SocialTaskLogUpdate {
-	_u.mutation.ClearTemplateSnapshot()
 	return _u
 }
 
@@ -513,14 +501,8 @@ func (_u *SocialTaskLogUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if value, ok := _u.mutation.Payload(); ok {
 		_spec.SetField(socialtasklog.FieldPayload, field.TypeJSON, value)
 	}
-	if _u.mutation.PayloadCleared() {
-		_spec.ClearField(socialtasklog.FieldPayload, field.TypeJSON)
-	}
 	if value, ok := _u.mutation.TemplateSnapshot(); ok {
 		_spec.SetField(socialtasklog.FieldTemplateSnapshot, field.TypeJSON, value)
-	}
-	if _u.mutation.TemplateSnapshotCleared() {
-		_spec.ClearField(socialtasklog.FieldTemplateSnapshot, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(socialtasklog.FieldStatus, field.TypeString, value)
@@ -765,12 +747,6 @@ func (_u *SocialTaskLogUpdateOne) SetNillablePayload(v *domain.SocialTaskPayload
 	return _u
 }
 
-// ClearPayload clears the value of the "payload" field.
-func (_u *SocialTaskLogUpdateOne) ClearPayload() *SocialTaskLogUpdateOne {
-	_u.mutation.ClearPayload()
-	return _u
-}
-
 // SetTemplateSnapshot sets the "template_snapshot" field.
 func (_u *SocialTaskLogUpdateOne) SetTemplateSnapshot(v domain.SocialTaskTemplateSnapshot) *SocialTaskLogUpdateOne {
 	_u.mutation.SetTemplateSnapshot(v)
@@ -782,12 +758,6 @@ func (_u *SocialTaskLogUpdateOne) SetNillableTemplateSnapshot(v *domain.SocialTa
 	if v != nil {
 		_u.SetTemplateSnapshot(*v)
 	}
-	return _u
-}
-
-// ClearTemplateSnapshot clears the value of the "template_snapshot" field.
-func (_u *SocialTaskLogUpdateOne) ClearTemplateSnapshot() *SocialTaskLogUpdateOne {
-	_u.mutation.ClearTemplateSnapshot()
 	return _u
 }
 
@@ -1175,14 +1145,8 @@ func (_u *SocialTaskLogUpdateOne) sqlSave(ctx context.Context) (_node *SocialTas
 	if value, ok := _u.mutation.Payload(); ok {
 		_spec.SetField(socialtasklog.FieldPayload, field.TypeJSON, value)
 	}
-	if _u.mutation.PayloadCleared() {
-		_spec.ClearField(socialtasklog.FieldPayload, field.TypeJSON)
-	}
 	if value, ok := _u.mutation.TemplateSnapshot(); ok {
 		_spec.SetField(socialtasklog.FieldTemplateSnapshot, field.TypeJSON, value)
-	}
-	if _u.mutation.TemplateSnapshotCleared() {
-		_spec.ClearField(socialtasklog.FieldTemplateSnapshot, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(socialtasklog.FieldStatus, field.TypeString, value)

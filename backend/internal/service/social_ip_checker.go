@@ -50,7 +50,20 @@ func NewSocialIPChecker(entClient *dbent.Client) *SocialIPChecker {
 
 // TestIP tests connectivity of a single IP/proxy and updates its status.
 func (c *SocialIPChecker) TestIP(ctx context.Context, ipID int64) (*SocialIPCheckResult, error) {
-	ipEnt, err := c.entClient.SocialIP.Get(ctx, int64(ipID))
+	return c.testIP(ctx, ipID, 0)
+}
+
+// TestIPForUser tests connectivity of a single current-user proxy.
+func (c *SocialIPChecker) TestIPForUser(ctx context.Context, ipID, userID int64) (*SocialIPCheckResult, error) {
+	return c.testIP(ctx, ipID, userID)
+}
+
+func (c *SocialIPChecker) testIP(ctx context.Context, ipID, userID int64) (*SocialIPCheckResult, error) {
+	ipQuery := c.entClient.SocialIP.Query().Where(socialip.IDEQ(ipID))
+	if userID > 0 {
+		ipQuery = ipQuery.Where(socialip.UserIDEQ(userID))
+	}
+	ipEnt, err := ipQuery.Only(ctx)
 	if err != nil {
 		if dbent.IsNotFound(err) {
 			return nil, infraerrors.NotFound("SOCIAL_IP_NOT_FOUND", "social IP not found")
@@ -58,9 +71,9 @@ func (c *SocialIPChecker) TestIP(ctx context.Context, ipID int64) (*SocialIPChec
 		return nil, err
 	}
 
-	result := c.checkConnectivity(ipEnt)
+	result := c.checkConnectivity(ctx, ipEnt)
 
-	if err := c.updateCheckResult(ctx, ipEnt.ID, result); err != nil {
+	if err := c.updateCheckResult(ctx, ipEnt.ID, userID, result); err != nil {
 		slog.Error("failed to update IP status", "ip_id", ipID, "error", err)
 		return nil, err
 	}
@@ -72,6 +85,7 @@ func (c *SocialIPChecker) TestIP(ctx context.Context, ipID int64) (*SocialIPChec
 func (c *SocialIPChecker) TestAllByUser(ctx context.Context, userID int64) ([]*SocialIPCheckResult, error) {
 	ips, err := c.entClient.SocialIP.Query().
 		Where(socialip.UserIDEQ(int64(userID))).
+		Order(dbent.Asc(socialip.FieldID)).
 		All(ctx)
 	if err != nil {
 		return nil, err
@@ -79,53 +93,90 @@ func (c *SocialIPChecker) TestAllByUser(ctx context.Context, userID int64) ([]*S
 
 	results := make([]*SocialIPCheckResult, len(ips))
 	for i, ip := range ips {
-		results[i] = c.checkConnectivity(ip)
+		results[i] = c.checkConnectivity(ctx, ip)
+	}
 
-		// Update DB
-		if err := c.updateCheckResult(ctx, ip.ID, results[i]); err != nil {
+	tx, err := c.entClient.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	txClient := tx.Client()
+	for i, ip := range ips {
+		ent, err := updateCheckResultWithClient(ctx, txClient, ip.ID, userID, results[i])
+		if err != nil {
 			slog.Error("failed to update IP status", "ip_id", ip.ID, "error", err)
+			return nil, err
 		}
+		if err := syncDefaultProxySnapshotsForIP(ctx, txClient, socialIPFromEnt(ent)); err != nil {
+			slog.Error("failed to sync default proxy snapshots", "ip_id", ip.ID, "error", err)
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 
 	return results, nil
 }
 
-func (c *SocialIPChecker) updateCheckResult(ctx context.Context, id int64, result *SocialIPCheckResult) error {
-	update := c.entClient.SocialIP.UpdateOneID(id).
+func (c *SocialIPChecker) updateCheckResult(ctx context.Context, id, userID int64, result *SocialIPCheckResult) error {
+	tx, err := c.entClient.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	ent, err := updateCheckResultWithClient(ctx, tx.Client(), id, userID, result)
+	if err != nil {
+		return err
+	}
+	if err := syncDefaultProxySnapshotsForIP(ctx, tx.Client(), socialIPFromEnt(ent)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func updateCheckResultWithClient(ctx context.Context, client *dbent.Client, id, userID int64, result *SocialIPCheckResult) (*dbent.SocialIP, error) {
+	update := client.SocialIP.UpdateOneID(id).
 		SetStatus(result.Status).
 		SetLastCheckAt(time.Now())
+	if userID > 0 {
+		update.Where(socialip.UserIDEQ(userID))
+	}
 	if result.LatencyMs > 0 {
 		update.SetLatencyMs(result.LatencyMs)
 	} else {
 		update.ClearLatencyMs()
 	}
-	_, err := update.Save(ctx)
-	return err
+	ent, err := update.Save(ctx)
+	if err != nil {
+		if dbent.IsNotFound(err) {
+			return nil, infraerrors.NotFound("SOCIAL_IP_NOT_FOUND", "social IP not found")
+		}
+		return nil, err
+	}
+	return ent, nil
 }
 
-func (c *SocialIPChecker) checkConnectivity(ipEnt *dbent.SocialIP) *SocialIPCheckResult {
+func (c *SocialIPChecker) checkConnectivity(ctx context.Context, ipEnt *dbent.SocialIP) *SocialIPCheckResult {
 	result := &SocialIPCheckResult{
 		ID: int64(ipEnt.ID),
 	}
 
 	if ipEnt.Endpoint == nil || *ipEnt.Endpoint == "" {
 		result.Status = SocialIPStatusUnknown
-		result.Error = "no endpoint configured"
+		result.Error = safeSocialIPCheckErrorMessage(result.Status)
 		return result
 	}
 
-	endpoint := *ipEnt.Endpoint
-	_, parsed, err := proxyurl.Parse(endpoint)
+	endpoint, err := ResolveSocialIPExecutionEndpoint(ctx, *ipEnt.Endpoint)
 	if err != nil {
 		result.Status = SocialIPStatusOffline
-		result.Error = fmt.Sprintf("invalid endpoint URL: %v", err)
+		result.Error = safeSocialIPCheckErrorMessage(result.Status)
 		return result
 	}
-	if err := validateProxyEndpoint(parsed); err != nil {
-		result.Status = SocialIPStatusOffline
-		result.Error = err.Error()
-		return result
-	}
+	_, parsed, _ := proxyurl.Parse(endpoint)
 
 	start := time.Now()
 	var connErr error
@@ -137,7 +188,7 @@ func (c *SocialIPChecker) checkConnectivity(ipEnt *dbent.SocialIP) *SocialIPChec
 		connErr = c.testHTTPProxy(parsed)
 	default:
 		result.Status = SocialIPStatusUnknown
-		result.Error = fmt.Sprintf("unsupported scheme: %s", parsed.Scheme)
+		result.Error = safeSocialIPCheckErrorMessage(result.Status)
 		return result
 	}
 
@@ -146,12 +197,23 @@ func (c *SocialIPChecker) checkConnectivity(ipEnt *dbent.SocialIP) *SocialIPChec
 
 	if connErr != nil {
 		result.Status = SocialIPStatusOffline
-		result.Error = connErr.Error()
+		result.Error = safeSocialIPCheckErrorMessage(result.Status)
 	} else {
 		result.Status = SocialIPStatusOnline
 	}
 
 	return result
+}
+
+func safeSocialIPCheckErrorMessage(status string) string {
+	switch status {
+	case SocialIPStatusOffline:
+		return "proxy connectivity check failed"
+	case SocialIPStatusUnknown:
+		return "proxy endpoint is not ready for connectivity check"
+	default:
+		return "proxy connectivity check could not be completed"
+	}
 }
 
 func (c *SocialIPChecker) testSOCKS5(proxyURL *url.URL) error {
@@ -201,10 +263,6 @@ func validateProxyEndpoint(proxyURL *url.URL) error {
 	default:
 		return fmt.Errorf("unsupported scheme: %s", proxyURL.Scheme)
 	}
-	host := strings.TrimSpace(proxyURL.Hostname())
-	if host == "" {
-		return fmt.Errorf("proxy host is required")
-	}
 	port := proxyURL.Port()
 	if port == "" {
 		return fmt.Errorf("proxy port is required")
@@ -212,6 +270,17 @@ func validateProxyEndpoint(proxyURL *url.URL) error {
 	portNum, err := strconv.Atoi(port)
 	if err != nil || portNum <= 0 || portNum > 65535 {
 		return fmt.Errorf("proxy port is invalid")
+	}
+	return validatePublicProxyHost(proxyURL)
+}
+
+func validatePublicProxyHost(proxyURL *url.URL) error {
+	if proxyURL == nil {
+		return fmt.Errorf("proxy host is required")
+	}
+	host := strings.TrimSpace(proxyURL.Hostname())
+	if host == "" {
+		return fmt.Errorf("proxy host is required")
 	}
 	if strings.EqualFold(host, "localhost") {
 		return fmt.Errorf("proxy host points to a local address")

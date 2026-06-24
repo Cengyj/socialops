@@ -84,7 +84,7 @@ vi.mock('vue-i18n', async () => {
     'admin.dashboard.allocatableAccounts': 'Allocatable accounts',
     'admin.dashboard.storedAccountsMeta': '{count} stored',
     'admin.dashboard.todayTasks': 'Tasks today',
-    'admin.dashboard.recentRpmMeta': 'Last 5 min {count}/min',
+    'admin.dashboard.recentOperationsPerMinuteMeta': 'Last 5 min {count}/min',
     'admin.dashboard.totalTasks': 'Total tasks',
     'admin.dashboard.executionRecordsMeta': 'Successful and failed tasks both count as execution records',
     'admin.dashboard.todaySuccessfulCharges': 'Successful charges today',
@@ -134,18 +134,18 @@ describe('admin DashboardView', () => {
       total_users: 42,
       active_users: 8,
       today_new_users: 3,
-      today_requests: 17,
-      total_requests: 120,
-      today_actual_cost: 2.4,
-      total_actual_cost: 18.75,
-      rpm: 2
+      today_operations: 17,
+      total_operations: 120,
+      today_charged: 2.4,
+      total_charged: 18.75,
+      recent_operations_per_minute: 2
     })
     getUsageTrend.mockResolvedValue([
-      { date: '2026-06-01', requests: 9, actual_cost: 1.1 },
-      { date: '2026-06-02', requests: 17, actual_cost: 2.4 }
+      { date: '2026-06-01', operations: 9, charged: 1.1 },
+      { date: '2026-06-02', operations: 17, charged: 2.4 }
     ])
     getUserSpendingRanking.mockResolvedValue({
-      ranking: [{ user_id: 7, email: 'operator@example.com', requests: 11, actual_cost: 3.5 }]
+      ranking: [{ user_id: 7, email: 'operator@example.com', operations: 11, charged: 3.5 }]
     })
     getSocialAccountStats.mockResolvedValue({
       total: 12,

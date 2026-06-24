@@ -3,7 +3,7 @@ import { DriveStep } from 'driver.js'
 /**
  * SocialOps onboarding focuses on SaaS administration and social account workflows.
  */
-export const getAdminSteps = (t: (key: string) => string, _isSimpleMode = false): DriveStep[] => [
+export const getAdminSteps = (t: (key: string) => string): DriveStep[] => [
   {
     popover: {
       title: t('onboarding.admin.welcome.title'),

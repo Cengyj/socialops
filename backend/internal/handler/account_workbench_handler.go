@@ -2,13 +2,13 @@ package handler
 
 import (
 	"context"
-	"encoding/csv"
 	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/socialops/internal/handler/socialaccountcsv"
 	infraerrors "github.com/Wei-Shaw/socialops/internal/pkg/errors"
 	"github.com/Wei-Shaw/socialops/internal/pkg/pagination"
 	"github.com/Wei-Shaw/socialops/internal/pkg/response"
@@ -20,22 +20,29 @@ import (
 
 // AccountWorkbenchHandler handles user-facing social account operations.
 type AccountWorkbenchHandler struct {
-	svc       *service.SocialAccountService
-	ipSvc     *service.SocialIPService
-	billing   *service.SocialBillingService
-	executor  *service.SocialTaskExecutor
-	workbench *service.AccountWorkbenchService
-	templates *service.TaskSettingsService
+	svc           *service.SocialAccountService
+	ipSvc         *service.SocialIPService
+	globalProxies *service.GlobalProxyService
+	billing       *service.SocialBillingService
+	executor      *service.SocialTaskExecutor
+	workbench     *service.AccountWorkbenchService
+	templates     *service.TaskSettingsService
 }
 
 // NewAccountWorkbenchHandler creates a new AccountWorkbenchHandler.
 func NewAccountWorkbenchHandler(svc *service.SocialAccountService, ipSvc *service.SocialIPService, billing *service.SocialBillingService, executor *service.SocialTaskExecutor, templates *service.TaskSettingsService) *AccountWorkbenchHandler {
-	return &AccountWorkbenchHandler{svc: svc, ipSvc: ipSvc, billing: billing, executor: executor, workbench: service.NewAccountWorkbenchService(svc, ipSvc, billing, executor), templates: templates}
+	return NewAccountWorkbenchHandlerWithGlobalProxies(svc, ipSvc, nil, billing, executor, templates)
+}
+
+// NewAccountWorkbenchHandlerWithGlobalProxies creates a user workbench handler
+// with access to administrator-managed global fallback proxies.
+func NewAccountWorkbenchHandlerWithGlobalProxies(svc *service.SocialAccountService, ipSvc *service.SocialIPService, globalProxies *service.GlobalProxyService, billing *service.SocialBillingService, executor *service.SocialTaskExecutor, templates *service.TaskSettingsService) *AccountWorkbenchHandler {
+	return &AccountWorkbenchHandler{svc: svc, ipSvc: ipSvc, globalProxies: globalProxies, billing: billing, executor: executor, workbench: service.NewAccountWorkbenchServiceWithGlobalProxies(svc, ipSvc, globalProxies, billing, executor), templates: templates}
 }
 
 type socialTaskRequest struct {
 	AccountIDs      []int64 `json:"account_ids" binding:"required"`
-	TemplateID      string  `json:"template_id"`
+	Action          string  `json:"action"`
 	ClientRequestID string  `json:"client_request_id"`
 }
 
@@ -54,24 +61,18 @@ type batchDefaultProxyRequest struct {
 }
 
 type updateMyAccountRequest struct {
-	Name                 *string `json:"name"`
-	Platform             *string `json:"platform"`
-	PlatformUserID       *string `json:"platform_user_id"`
-	Password             *string `json:"password"`
-	Phone                *string `json:"phone"`
-	Email                *string `json:"email"`
-	EmailPassword        *string `json:"email_password"`
-	TwoFactor            *string `json:"two_factor"`
-	BackupCode           *string `json:"backup_code"`
-	EmailClientID        *string `json:"email_client_id"`
-	EmailToken           *string `json:"email_token"`
-	AuthCookie           *string `json:"auth_cookie"`
-	ExecutionAuth        *string `json:"execution_auth"`
-	AccountStatus        *string `json:"account_status"`
-	TaskStatus           *string `json:"task_status"`
-	TaskMessage          *string `json:"task_message"`
-	DefaultProxySnapshot *string `json:"default_proxy_snapshot"`
-	Remark               *string `json:"remark"`
+	Password       *string `json:"password"`
+	Phone          *string `json:"phone"`
+	Email          *string `json:"email"`
+	EmailPassword  *string `json:"email_password"`
+	TwoFactor      *string `json:"two_factor"`
+	BackupCode     *string `json:"backup_code"`
+	EmailClientID  *string `json:"email_client_id"`
+	EmailToken     *string `json:"email_token"`
+	RegistrationIP *string `json:"registration_ip"`
+	AuthCookie     *string `json:"auth_cookie"`
+	ExecutionAuth  *string `json:"execution_auth"`
+	Remark         *string `json:"remark"`
 }
 
 type userSocialAccountResponse struct {
@@ -123,15 +124,19 @@ type userSocialTaskLogResponse struct {
 // ListMyAccounts returns social accounts assigned to the current user.
 // GET /api/v1/accounts
 func (h *AccountWorkbenchHandler) ListMyAccounts(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := accountWorkbenchAuthSubject(c)
 	if !ok {
-		response.Unauthorized(c, "unauthorized")
 		return
 	}
 	page, pageSize := response.ParsePagination(c)
 	params := pagination.PaginationParams{Page: page, PageSize: pageSize}
+	filters := accountWorkbenchFiltersFromQuery(c)
 
-	accounts, result, err := h.svc.ListByUser(c.Request.Context(), subject.UserID, params)
+	svc, ok := h.accountService(c)
+	if !ok {
+		return
+	}
+	accounts, result, err := svc.ListByUser(c.Request.Context(), subject.UserID, params, filters)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -139,20 +144,47 @@ func (h *AccountWorkbenchHandler) ListMyAccounts(c *gin.Context) {
 	response.Paginated(c, userSocialAccountResponsesFromService(accounts), result.Total, page, pageSize)
 }
 
+// ListTaskLogs returns recent/current task logs for the current user's workbench.
+// GET /api/v1/accounts/tasks
+func (h *AccountWorkbenchHandler) ListTaskLogs(c *gin.Context) {
+	subject, ok := accountWorkbenchAuthSubject(c)
+	if !ok {
+		return
+	}
+	svc, ok := h.accountService(c)
+	if !ok {
+		return
+	}
+	filters, err := accountWorkbenchTaskLogFiltersFromQuery(c, subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	logs, err := svc.ListTaskLogsForUser(c.Request.Context(), filters)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"logs": h.userTaskLogResponses(c.Request.Context(), logs)})
+}
+
 // BatchImportMyAccounts binds or restores existing total-pool accounts for the current user.
 // POST /api/v1/accounts/batch-import
 func (h *AccountWorkbenchHandler) BatchImportMyAccounts(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := accountWorkbenchAuthSubject(c)
 	if !ok {
-		response.Unauthorized(c, "unauthorized")
 		return
 	}
 	var req batchImportMyAccountsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
+		response.ErrorFrom(c, accountWorkbenchInputRequiredError())
 		return
 	}
-	result, err := h.svc.BatchImportForUser(c.Request.Context(), subject.UserID, req.Accounts)
+	svc, ok := h.accountService(c)
+	if !ok {
+		return
+	}
+	result, err := svc.BatchImportForUser(c.Request.Context(), subject.UserID, req.Accounts)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -173,36 +205,42 @@ func (h *AccountWorkbenchHandler) BatchImportMyAccounts(c *gin.Context) {
 // UpdateMyAccount updates mutable credential fields for an assigned account.
 // PUT /api/v1/accounts/:id
 func (h *AccountWorkbenchHandler) UpdateMyAccount(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := accountWorkbenchAuthSubject(c)
 	if !ok {
-		response.Unauthorized(c, "unauthorized")
 		return
 	}
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "invalid id")
+	id, ok := accountWorkbenchPathID(c)
+	if !ok {
 		return
 	}
 	var req updateMyAccountRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
+		response.ErrorFrom(c, accountWorkbenchInputRequiredError())
 		return
 	}
-	account, err := h.svc.UpdateForUser(c.Request.Context(), id, subject.UserID, &service.UpdateSocialAccountInput{
-		Password:      req.Password,
-		Phone:         req.Phone,
-		Email:         req.Email,
-		EmailPassword: req.EmailPassword,
-		TwoFactor:     req.TwoFactor,
-		BackupCode:    req.BackupCode,
-		EmailClientID: req.EmailClientID,
-		EmailToken:    req.EmailToken,
-		AuthCookie:    req.AuthCookie,
-		ExecutionAuth: req.ExecutionAuth,
-		Remark:        req.Remark,
+	svc, ok := h.accountService(c)
+	if !ok {
+		return
+	}
+	account, err := svc.UpdateForUser(c.Request.Context(), id, subject.UserID, &service.UpdateSocialAccountInput{
+		Password:       req.Password,
+		Phone:          req.Phone,
+		Email:          req.Email,
+		EmailPassword:  req.EmailPassword,
+		TwoFactor:      req.TwoFactor,
+		BackupCode:     req.BackupCode,
+		EmailClientID:  req.EmailClientID,
+		EmailToken:     req.EmailToken,
+		RegistrationIP: req.RegistrationIP,
+		AuthCookie:     req.AuthCookie,
+		ExecutionAuth:  req.ExecutionAuth,
+		Remark:         req.Remark,
 	})
 	if err != nil {
 		if respondUserAccountScopeError(c, err) {
+			return
+		}
+		if respondUserAccountEditError(c, err) {
 			return
 		}
 		response.ErrorFrom(c, err)
@@ -211,43 +249,48 @@ func (h *AccountWorkbenchHandler) UpdateMyAccount(c *gin.Context) {
 	response.Success(c, userSocialAccountResponseFromService(account))
 }
 
-// DeleteMyAccount hides an assigned account from the current user's workbench.
+// DeleteMyAccount deletes an assigned account from the account pool.
 // DELETE /api/v1/accounts/:id
 func (h *AccountWorkbenchHandler) DeleteMyAccount(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := accountWorkbenchAuthSubject(c)
 	if !ok {
-		response.Unauthorized(c, "unauthorized")
 		return
 	}
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "invalid id")
+	id, ok := accountWorkbenchPathID(c)
+	if !ok {
 		return
 	}
-	if err := h.svc.RemoveFromUserWorkbench(c.Request.Context(), subject.UserID, id); err != nil {
+	svc, ok := h.accountService(c)
+	if !ok {
+		return
+	}
+	if err := svc.DeleteForUser(c.Request.Context(), subject.UserID, id); err != nil {
 		if respondUserAccountScopeError(c, err) {
 			return
 		}
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, gin.H{"deleted": 1})
+	response.Success(c, nil)
 }
 
-// BatchDeleteMyAccounts hides assigned accounts from the current user's workbench.
+// BatchDeleteMyAccounts deletes assigned accounts from the account pool.
 // POST /api/v1/accounts/batch-delete
 func (h *AccountWorkbenchHandler) BatchDeleteMyAccounts(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := accountWorkbenchAuthSubject(c)
 	if !ok {
-		response.Unauthorized(c, "unauthorized")
 		return
 	}
 	var req batchDeleteMyAccountsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
+		response.ErrorFrom(c, accountWorkbenchInputRequiredError())
 		return
 	}
-	result, err := h.svc.BatchRemoveFromUserWorkbench(c.Request.Context(), subject.UserID, req.IDs)
+	svc, ok := h.accountService(c)
+	if !ok {
+		return
+	}
+	result, err := svc.BatchDeleteForUser(c.Request.Context(), subject.UserID, req.IDs)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -258,12 +301,16 @@ func (h *AccountWorkbenchHandler) BatchDeleteMyAccounts(c *gin.Context) {
 // ExportMyAccounts exports the current user's assigned accounts with delivery fields.
 // GET /api/v1/accounts/export
 func (h *AccountWorkbenchHandler) ExportMyAccounts(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := accountWorkbenchAuthSubject(c)
 	if !ok {
-		response.Unauthorized(c, "unauthorized")
 		return
 	}
-	accounts, _, err := h.svc.ListByUser(c.Request.Context(), subject.UserID, pagination.PaginationParams{Page: 1, PageSize: 10000})
+	filters := accountWorkbenchFiltersFromQuery(c)
+	svc, ok := h.accountService(c)
+	if !ok {
+		return
+	}
+	accounts, err := svc.ListAllByUserForExport(c.Request.Context(), subject.UserID, filters)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -271,41 +318,7 @@ func (h *AccountWorkbenchHandler) ExportMyAccounts(c *gin.Context) {
 
 	c.Header("Content-Type", "text/csv")
 	c.Header("Content-Disposition", "attachment; filename=accounts.csv")
-	writer := csv.NewWriter(c.Writer)
-	if err := writer.Write([]string{"platform", "username", "name", "platform_user_id", "password", "phone", "email", "email_password", "two_factor", "backup_code", "email_client_id", "email_token", "registration_ip", "auth_cookie", "execution_auth", "default_proxy_snapshot", "account_status", "task_status", "remark", "created_at", "updated_at"}); err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	for _, a := range accounts {
-		if err := writer.Write([]string{
-			a.Platform,
-			a.Username,
-			a.Name,
-			ptrString(a.PlatformUserID),
-			ptrString(a.Password),
-			ptrString(a.Phone),
-			ptrString(a.Email),
-			ptrString(a.EmailPassword),
-			ptrString(a.TwoFactor),
-			ptrString(a.BackupCode),
-			ptrString(a.EmailClientID),
-			ptrString(a.EmailToken),
-			ptrString(a.RegistrationIP),
-			ptrString(a.AuthCookie),
-			ptrString(a.ExecutionAuth),
-			ptrString(a.DefaultProxySnapshot),
-			a.AccountStatus,
-			a.TaskStatus,
-			ptrString(a.Remark),
-			a.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-			a.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		}); err != nil {
-			response.ErrorFrom(c, err)
-			return
-		}
-	}
-	writer.Flush()
-	if err := writer.Error(); err != nil {
+	if err := socialaccountcsv.WriteDeliveryExport(c.Writer, accounts); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
@@ -314,55 +327,39 @@ func (h *AccountWorkbenchHandler) ExportMyAccounts(c *gin.Context) {
 
 // SubmitTask submits a batch task for social accounts.
 func (h *AccountWorkbenchHandler) SubmitTask(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := accountWorkbenchAuthSubject(c)
 	if !ok {
-		response.Unauthorized(c, "unauthorized")
 		return
 	}
 	var req socialTaskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
+		response.ErrorFrom(c, accountWorkbenchInputRequiredError())
 		return
 	}
 	idempotencyKey := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
 	if idempotencyKey == "" {
 		idempotencyKey = strings.TrimSpace(req.ClientRequestID)
 	}
-	if strings.TrimSpace(req.TemplateID) == "" {
-		response.ErrorFrom(c, infraerrors.BadRequest("TASK_TEMPLATE_REQUIRED", "task template is required"))
+	input := &service.AccountWorkbenchTaskInput{
+		Mode:           service.AccountWorkbenchTaskModeUser,
+		UserID:         subject.UserID,
+		AccountIDs:     req.AccountIDs,
+		Action:         req.Action,
+		IdempotencyKey: idempotencyKey,
+	}
+	if h == nil {
+		response.ErrorFrom(c, taskTemplateServiceUnavailableError())
 		return
 	}
-	if h.templates == nil {
-		response.ErrorFrom(c, infraerrors.ServiceUnavailable("TASK_TEMPLATE_SERVICE_UNAVAILABLE", "task template service is unavailable"))
-		return
-	}
-	tmpl, err := h.templates.GetTemplate(c.Request.Context(), subject.UserID, req.TemplateID)
-	if err != nil {
+	if err := h.templates.ApplyDefaultTemplateToTaskInput(c.Request.Context(), subject.UserID, input); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
-	if result := service.ValidateTaskTemplate(tmpl); !result.Valid {
-		response.ErrorFrom(c, infraerrors.BadRequest("TASK_TEMPLATE_INVALID", strings.Join(result.Errors, "; ")))
+	workbench, ok := h.taskSubmitService(c)
+	if !ok {
 		return
 	}
-	result, err := h.workbench.SubmitTask(c.Request.Context(), &service.AccountWorkbenchTaskInput{
-		Mode:        service.AccountWorkbenchTaskModeUser,
-		UserID:      subject.UserID,
-		AccountIDs:  req.AccountIDs,
-		Action:      tmpl.Type,
-		Target:      nil,
-		Content:     nil,
-		TargetPool:  tmpl.Params.Targets,
-		ContentPool: tmpl.Params.Contents,
-		Payload:     socialTaskPayloadFromTemplate(tmpl),
-		TemplateSnapshot: &service.SocialTaskTemplateSnapshot{
-			TemplateID:   tmpl.ID,
-			TemplateName: tmpl.Name,
-			TemplateType: tmpl.Type,
-			Params:       tmpl.Params,
-		},
-		IdempotencyKey: idempotencyKey,
-	})
+	result, err := workbench.SubmitTask(c.Request.Context(), input)
 	if err != nil {
 		if respondUserAccountScopeError(c, err) {
 			return
@@ -374,91 +371,42 @@ func (h *AccountWorkbenchHandler) SubmitTask(c *gin.Context) {
 	response.Success(c, gin.H{"submitted": len(publicLogs), "enqueued": result.Enqueued, "failed_closed": result.FailedClosed, "logs": publicLogs})
 }
 
-func socialTaskPayloadFromTemplate(tmpl *service.TaskTemplate) *service.SocialTaskPayload {
-	if tmpl == nil {
-		return nil
-	}
-	switch tmpl.Type {
-	case service.SocialTaskActionPost:
-		payload := &service.SocialTaskPayload{
-			Post: &service.SocialPostPayload{
-				QuotePostURL: tmpl.Params.QuotePostURL,
-				Media:        append([]service.SocialTaskMediaRef(nil), tmpl.Params.Media...),
-			},
-		}
-		if payload.IsZero() {
-			return nil
-		}
-		return payload
-	case service.SocialTaskActionUpdateProfile:
-		if tmpl.Params.Profile == nil {
-			return nil
-		}
-		profile := *tmpl.Params.Profile
-		payload := &service.SocialTaskPayload{Profile: &profile}
-		if payload.IsZero() {
-			return nil
-		}
-		return payload
-	case service.SocialTaskActionUpdateAvatar:
-		if tmpl.Params.Avatar == nil {
-			return nil
-		}
-		avatar := *tmpl.Params.Avatar
-		payload := &service.SocialTaskPayload{Avatar: &avatar}
-		if payload.IsZero() {
-			return nil
-		}
-		return payload
-	case service.SocialTaskActionUpdateBanner:
-		if tmpl.Params.Banner == nil {
-			return nil
-		}
-		banner := *tmpl.Params.Banner
-		payload := &service.SocialTaskPayload{Banner: &banner}
-		if payload.IsZero() {
-			return nil
-		}
-		return payload
-	default:
-		return nil
-	}
-}
-
 // SetDefaultProxy stores or clears the default execution proxy snapshot for an assigned account.
 // PUT /api/v1/accounts/:id/default-proxy
 func (h *AccountWorkbenchHandler) SetDefaultProxy(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := accountWorkbenchAuthSubject(c)
 	if !ok {
-		response.Unauthorized(c, "unauthorized")
 		return
 	}
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "invalid id")
+	id, ok := accountWorkbenchPathID(c)
+	if !ok {
 		return
 	}
 	var req struct {
 		ProxyID *int64 `json:"proxy_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
+		response.ErrorFrom(c, accountWorkbenchInputRequiredError())
+		return
+	}
+	svc, ok := h.accountService(c)
+	if !ok {
 		return
 	}
 	var proxy *service.SocialIP
 	if req.ProxyID != nil && *req.ProxyID > 0 {
-		ip, err := h.ipSvc.GetByIDForUser(c.Request.Context(), *req.ProxyID, subject.UserID)
-		if err != nil {
-			response.ErrorFrom(c, err)
+		ipSvc, ok := h.proxyService(c)
+		if !ok {
 			return
 		}
-		if err := ensureSocialIPUsable(ip); err != nil {
+		ip, err := ipSvc.GetByIDForUser(c.Request.Context(), *req.ProxyID, subject.UserID)
+		if err != nil {
 			response.ErrorFrom(c, err)
 			return
 		}
 		proxy = ip
 	}
-	account, err := h.svc.SetDefaultProxyForUser(c.Request.Context(), id, subject.UserID, proxy)
+	account, err := svc.SetDefaultProxyForUser(c.Request.Context(), id, subject.UserID, proxy)
 	if err != nil {
 		if respondUserAccountScopeError(c, err) {
 			return
@@ -472,14 +420,17 @@ func (h *AccountWorkbenchHandler) SetDefaultProxy(c *gin.Context) {
 // BatchSetDefaultProxy assigns, clears, or randomly distributes current-user online proxies.
 // POST /api/v1/accounts/default-proxy
 func (h *AccountWorkbenchHandler) BatchSetDefaultProxy(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := accountWorkbenchAuthSubject(c)
 	if !ok {
-		response.Unauthorized(c, "unauthorized")
 		return
 	}
 	var req batchDefaultProxyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
+		response.ErrorFrom(c, accountWorkbenchInputRequiredError())
+		return
+	}
+	svc, ok := h.accountService(c)
+	if !ok {
 		return
 	}
 
@@ -492,13 +443,21 @@ func (h *AccountWorkbenchHandler) BatchSetDefaultProxy(c *gin.Context) {
 			response.ErrorFrom(c, infraerrors.BadRequest("SOCIAL_IP_REQUIRED", "proxy is required for this assignment"))
 			return
 		}
-		proxy, err = h.ipSvc.GetByIDForUser(c.Request.Context(), *req.ProxyID, subject.UserID)
+		ipSvc, ok := h.proxyService(c)
+		if !ok {
+			return
+		}
+		proxy, err = ipSvc.GetByIDForUser(c.Request.Context(), *req.ProxyID, subject.UserID)
 		if err != nil {
 			response.ErrorFrom(c, err)
 			return
 		}
 	case service.DefaultProxyAssignmentRandom:
-		pool, err = h.ipSvc.ListUsableByUser(c.Request.Context(), subject.UserID)
+		ipSvc, ok := h.proxyService(c)
+		if !ok {
+			return
+		}
+		pool, err = ipSvc.ListUsableByUser(c.Request.Context(), subject.UserID)
 		if err != nil {
 			response.ErrorFrom(c, err)
 			return
@@ -509,12 +468,58 @@ func (h *AccountWorkbenchHandler) BatchSetDefaultProxy(c *gin.Context) {
 		return
 	}
 
-	result, err := h.svc.BatchSetDefaultProxyForUser(c.Request.Context(), subject.UserID, req.AccountIDs, req.Mode, proxy, pool)
+	result, err := svc.BatchSetDefaultProxyForUser(c.Request.Context(), subject.UserID, req.AccountIDs, req.Mode, proxy, pool)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
 	response.Success(c, result)
+}
+
+func accountWorkbenchAuthSubject(c *gin.Context) (middleware2.AuthSubject, bool) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "unauthorized")
+		return middleware2.AuthSubject{}, false
+	}
+	return subject, true
+}
+
+func accountWorkbenchPathID(c *gin.Context) (int64, bool) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "invalid id")
+		return 0, false
+	}
+	return id, true
+}
+
+func accountWorkbenchFiltersFromQuery(c *gin.Context) service.SocialAccountListFilters {
+	return service.SocialAccountListFilters{
+		Search:        c.Query("search"),
+		Platform:      c.Query("platform"),
+		AccountStatus: c.Query("account_status"),
+		TaskStatus:    c.Query("task_status"),
+		AccountIDs:    parseInt64ListQuery(c, "account_ids"),
+	}
+}
+
+func accountWorkbenchTaskLogFiltersFromQuery(c *gin.Context, userID int64) (service.SocialTaskLogListFilters, error) {
+	limit := 50
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 {
+			return service.SocialTaskLogListFilters{}, infraerrors.BadRequest("SOCIAL_TASK_LOG_LIMIT_INVALID", "task log limit is invalid")
+		}
+		limit = parsed
+	}
+	return service.SocialTaskLogListFilters{
+		UserID:     userID,
+		LogIDs:     parseInt64ListQuery(c, "log_ids"),
+		AccountIDs: parseInt64ListQuery(c, "account_ids"),
+		Statuses:   parseStringListQuery(c, "statuses"),
+		Limit:      limit,
+	}, nil
 }
 
 func respondUserAccountScopeError(c *gin.Context, err error) bool {
@@ -523,6 +528,50 @@ func respondUserAccountScopeError(c *gin.Context, err error) bool {
 	}
 	response.ErrorFrom(c, infraerrors.NotFound("SOCIAL_ACCOUNT_NOT_FOUND", "social account not found"))
 	return true
+}
+
+func respondUserAccountEditError(c *gin.Context, err error) bool {
+	if !errors.Is(err, service.ErrSocialAccountExecutionAuthInvalid) {
+		return false
+	}
+	response.ErrorFrom(c, infraerrors.BadRequest("SOCIAL_ACCOUNT_EXECUTION_AUTH_INVALID", "account execution auth is invalid"))
+	return true
+}
+
+func accountWorkbenchInputRequiredError() error {
+	return infraerrors.BadRequest("SOCIAL_ACCOUNT_INPUT_REQUIRED", "social account input is required")
+}
+
+func (h *AccountWorkbenchHandler) accountService(c *gin.Context) (*service.SocialAccountService, bool) {
+	if h == nil || h.svc == nil {
+		response.ErrorFrom(c, accountServiceUnavailableError())
+		return nil, false
+	}
+	return h.svc, true
+}
+
+func (h *AccountWorkbenchHandler) proxyService(c *gin.Context) (*service.SocialIPService, bool) {
+	if h == nil || h.ipSvc == nil {
+		response.ErrorFrom(c, proxyServiceUnavailableError())
+		return nil, false
+	}
+	return h.ipSvc, true
+}
+
+func (h *AccountWorkbenchHandler) taskSubmitService(c *gin.Context) (*service.AccountWorkbenchService, bool) {
+	if h == nil || h.workbench == nil {
+		response.ErrorFrom(c, socialTaskServiceUnavailableError())
+		return nil, false
+	}
+	return h.workbench, true
+}
+
+func accountServiceUnavailableError() error {
+	return infraerrors.ServiceUnavailable("SOCIAL_ACCOUNT_SERVICE_UNAVAILABLE", "social account service is unavailable")
+}
+
+func socialTaskServiceUnavailableError() error {
+	return infraerrors.ServiceUnavailable("SOCIAL_TASK_SERVICE_UNAVAILABLE", "social task service is unavailable")
 }
 
 func userSocialAccountResponsesFromService(accounts []*service.SocialAccount) []*userSocialAccountResponse {
@@ -559,30 +608,69 @@ func userSocialAccountResponseFromService(account *service.SocialAccount) *userS
 		ExecutionAuth:          account.ExecutionAuth,
 		AccountStatus:          account.AccountStatus,
 		TaskStatus:             account.TaskStatus,
-		TaskMessage:            shortUserTaskResult(account.TaskMessage),
+		TaskMessage:            userSocialAccountTaskMessage(account),
 		DefaultProxySnapshot:   account.DefaultProxySnapshot,
 		Remark:                 account.Remark,
-		DefaultProxyConfigured: strings.TrimSpace(ptrString(account.DefaultProxySnapshot)) != "",
+		DefaultProxyConfigured: userSocialAccountDefaultProxyConfigured(account),
 		CreatedAt:              account.CreatedAt,
 		UpdatedAt:              account.UpdatedAt,
 	}
 }
 
-func ensureSocialIPUsable(ip *service.SocialIP) error {
-	if ip == nil {
-		return infraerrors.BadRequest("SOCIAL_IP_NOT_AVAILABLE", "social IP is not available")
+func userSocialAccountTaskMessage(account *service.SocialAccount) *string {
+	if account == nil {
+		return nil
 	}
-	if ip.Status != service.SocialIPStatusOnline {
-		return infraerrors.BadRequest("SOCIAL_IP_NOT_AVAILABLE", "social IP must pass a connectivity test before execution")
-	}
-	return nil
+	return shortUserTaskResult(account.TaskMessage)
 }
 
-func ptrString(value *string) string {
-	if value == nil {
-		return ""
+func userSocialAccountDefaultProxyConfigured(account *service.SocialAccount) bool {
+	if account == nil || account.DefaultProxySnapshot == nil {
+		return false
 	}
-	return *value
+	return service.SocialIPSnapshotUsable(*account.DefaultProxySnapshot)
+}
+
+func parseInt64ListQuery(c *gin.Context, key string) []int64 {
+	parts := parseStringListQuery(c, key)
+	if len(parts) == 0 {
+		return nil
+	}
+	values := make([]int64, 0, len(parts))
+	for _, part := range parts {
+		parsed, err := strconv.ParseInt(part, 10, 64)
+		if err != nil || parsed <= 0 {
+			continue
+		}
+		values = append(values, parsed)
+	}
+	return values
+}
+
+func parseStringListQuery(c *gin.Context, key string) []string {
+	if c == nil {
+		return nil
+	}
+	rawValues := c.QueryArray(key)
+	if len(rawValues) == 0 {
+		raw := strings.TrimSpace(c.Query(key))
+		if raw != "" {
+			rawValues = []string{raw}
+		}
+	}
+	if len(rawValues) == 0 {
+		return nil
+	}
+	values := make([]string, 0, len(rawValues))
+	for _, raw := range rawValues {
+		for _, part := range strings.Split(raw, ",") {
+			trimmed := strings.TrimSpace(part)
+			if trimmed != "" {
+				values = append(values, trimmed)
+			}
+		}
+	}
+	return values
 }
 
 func (h *AccountWorkbenchHandler) userTaskLogResponses(ctx context.Context, logs []*service.SocialTaskLog) []*userSocialTaskLogResponse {
@@ -619,17 +707,26 @@ func userTaskLogResponseFromService(log *service.SocialTaskLog, account *service
 		Payload:          sanitizeUsageTaskPayload(log.Payload),
 		TemplateSnapshot: sanitizeUsageTaskTemplateSnapshot(log.TemplateSnapshot),
 		ResultMessage:    shortUserTaskResult(log.ResultMessage),
-		Charged:          log.ChargeStatus == service.SocialTaskChargeStatusCharged && log.ChargedAmount > 0,
+		Charged:          userTaskLogCharged(log),
 		ChargedAmount:    log.ChargedAmount,
 		ChargeStatus:     log.ChargeStatus,
 		ExecutedAt:       log.ExecutedAt,
 		CreatedAt:        log.CreatedAt,
 	}
-	if account != nil {
-		item.Platform = account.Platform
-		item.AccountName = account.Name
-	}
+	applyUserTaskLogAccount(item, account)
 	return item
+}
+
+func userTaskLogCharged(log *service.SocialTaskLog) bool {
+	return log != nil && log.ChargeStatus == service.SocialTaskChargeStatusCharged && log.ChargedAmount > 0
+}
+
+func applyUserTaskLogAccount(item *userSocialTaskLogResponse, account *service.SocialAccount) {
+	if item == nil || account == nil {
+		return
+	}
+	item.Platform = account.Platform
+	item.AccountName = account.Name
 }
 
 const (
@@ -643,6 +740,9 @@ const (
 	userTaskResultPostVideo       = "视频发帖媒体暂未开放，本次未扣费"
 	userTaskResultPostMediaType   = "发帖媒体类型暂不支持，本次未扣费"
 	userTaskResultChallenge       = "账号需要额外验证，本次未扣费"
+	userTaskResultPasswordInvalid = "密码错误，本次未扣费"
+	userTaskResultLoginConfig     = "登录依赖服务未配置，本次未扣费"
+	userTaskResultTimeout         = "任务执行超时，本次未扣费"
 )
 
 func shortUserTaskResult(value *string) *string {
@@ -656,18 +756,10 @@ func shortUserTaskResult(value *string) *string {
 	if safe := safeUserTaskResultMessage(message); safe != "" {
 		return &safe
 	}
-	if containsUnsafeUserTaskResultDetail(message) {
-		if isSafeUserTaskSuccessMessage(message) {
-			generic := userTaskResultCompletedHidden
-			return &generic
-		}
-		generic := userTaskResultFailedNoCharge
-		return &generic
-	}
-	if !isSafeUserTaskSuccessMessage(message) {
-		generic := userTaskResultFailedNoCharge
-		return &generic
-	}
+	return cappedUserTaskResult(message)
+}
+
+func cappedUserTaskResult(message string) *string {
 	const maxUserTaskResultLen = 160
 	runes := []rune(message)
 	if len(runes) > maxUserTaskResultLen {
@@ -682,10 +774,14 @@ func safeUserTaskResultMessage(message string) string {
 	case userTaskResultCompletedHidden,
 		userTaskResultFailedNoCharge,
 		"任务队列繁忙，本次未扣费",
-		"该平台动作暂不可用，本次未扣费",
+		userTaskResultTimeout,
 		"执行已完成，但扣费确认异常，请联系管理员处理",
 		"账号认证信息不可用，本次未扣费",
 		"执行代理不可用，本次未扣费",
+		"全局代理不可用，本次未扣费",
+		"平台网络请求失败，本次未扣费",
+		userTaskResultPasswordInvalid,
+		userTaskResultLoginConfig,
 		"该动作暂不支持，本次未扣费",
 		"任务参数不完整，本次未扣费",
 		"执行目标不存在，本次未扣费",
@@ -703,8 +799,25 @@ func safeUserTaskResultMessage(message string) string {
 		return normalizedExact
 	}
 
+	if known, ok := service.KnownTwitterTaskFailureMessage(message); ok {
+		return known
+	}
+	if service.IsTwitterPlatformFailureMessage(message) {
+		return ""
+	}
+
 	normalized := strings.ToLower(message)
+	if known := knownUserTaskFailureMessage(normalized); known != "" {
+		return known
+	}
 	switch {
+	case strings.Contains(normalized, "wrong password") ||
+		strings.Contains(normalized, "incorrect password") ||
+		strings.Contains(normalized, "invalid password") ||
+		strings.Contains(normalized, "password is incorrect") ||
+		strings.Contains(normalized, "password you entered is incorrect") ||
+		strings.Contains(normalized, "密码错误"):
+		return userTaskResultPasswordInvalid
 	case strings.Contains(normalized, "avatar image must be 400x400 pixels"):
 		return userTaskResultAvatarSize
 	case strings.Contains(normalized, "banner image must be 1500x500 pixels"):
@@ -717,18 +830,17 @@ func safeUserTaskResultMessage(message string) string {
 		strings.Contains(normalized, "twitter media upload returned processing failed"),
 		strings.Contains(normalized, "twitter media upload returned processing timeout"):
 		return userTaskResultMediaUpload
-	case strings.Contains(normalized, "media source is not supported yet"):
+	case strings.Contains(normalized, "media source is not supported for socialops execution"):
 		return userTaskResultMediaSource
-	case strings.Contains(normalized, "video media is not implemented yet"):
+	case strings.Contains(normalized, "video media is not supported for socialops execution"):
 		return userTaskResultPostVideo
 	case strings.Contains(normalized, "post media content type is not supported"):
 		return userTaskResultPostMediaType
 	case strings.Contains(normalized, "queue is full"):
 		return "任务队列繁忙，本次未扣费"
-	case strings.Contains(normalized, "not configured") ||
-		strings.Contains(normalized, "executor is not available") ||
-		strings.Contains(normalized, "executor queue"):
-		return "该平台动作暂不可用，本次未扣费"
+	case strings.Contains(normalized, "device fingerprint provider is not configured") ||
+		strings.Contains(normalized, "twitter login is not configured"):
+		return userTaskResultLoginConfig
 	case strings.Contains(normalized, "billing failed"):
 		return "执行已完成，但扣费确认异常，请联系管理员处理"
 	case strings.Contains(normalized, "auth cookie") ||
@@ -736,8 +848,14 @@ func safeUserTaskResultMessage(message string) string {
 		strings.Contains(normalized, "oauth") ||
 		strings.Contains(normalized, "token"):
 		return "账号认证信息不可用，本次未扣费"
+	case strings.Contains(normalized, "global proxy"):
+		return "全局代理不可用，本次未扣费"
 	case strings.Contains(normalized, "proxy"):
 		return "执行代理不可用，本次未扣费"
+	case strings.Contains(normalized, "network") ||
+		strings.Contains(normalized, "timeout") ||
+		strings.Contains(normalized, "connection"):
+		return "平台网络请求失败，本次未扣费"
 	case strings.Contains(normalized, "unsupported action"):
 		return "该动作暂不支持，本次未扣费"
 	case strings.Contains(normalized, "target is required") ||
@@ -769,37 +887,40 @@ func safeUserTaskResultMessage(message string) string {
 	}
 }
 
-func containsUnsafeUserTaskResultDetail(message string) bool {
-	normalized := strings.ToLower(message)
-	unsafeMarkers := []string{
-		"http://",
-		"https://",
-		"authorization",
-		"bearer ",
-		"token",
-		"secret",
-		"cookie",
-		"password",
-		"proxy",
-		"response body",
-		"stack",
-		"trace",
-		"trace_id",
-		"request_id",
-		"exception",
-		"panic",
+func knownUserTaskFailureMessage(normalized string) string {
+	switch {
+	case strings.Contains(normalized, "wrong password") ||
+		strings.Contains(normalized, "incorrect password") ||
+		strings.Contains(normalized, "invalid password") ||
+		strings.Contains(normalized, "password is incorrect") ||
+		strings.Contains(normalized, "password you entered is incorrect") ||
+		strings.Contains(normalized, "密码错误"):
+		return userTaskResultPasswordInvalid
+	case strings.Contains(normalized, "could not find your account") ||
+		strings.Contains(normalized, "account not found") ||
+		strings.Contains(normalized, "user not found"):
+		return "账号不存在，本次未扣费"
+	case strings.Contains(normalized, "challenge required") ||
+		strings.Contains(normalized, "captcha challenge") ||
+		strings.Contains(normalized, "verification required") ||
+		strings.Contains(normalized, "verify login") ||
+		strings.Contains(normalized, "additional verification") ||
+		strings.Contains(normalized, "confirm your identity"):
+		return userTaskResultChallenge
+	case strings.Contains(normalized, "suspended") ||
+		strings.Contains(normalized, "locked") ||
+		strings.Contains(normalized, "automated") ||
+		strings.Contains(normalized, "rate limit") ||
+		strings.Contains(normalized, "too frequent") ||
+		strings.Contains(normalized, "follow limit"):
+		return "账号状态或频率受限，本次未扣费"
+	case strings.Contains(normalized, "content is too long") ||
+		strings.Contains(normalized, "duplicate") ||
+		strings.Contains(normalized, "already") ||
+		strings.Contains(normalized, "restricted"):
+		return "内容或目标状态不符合平台要求，本次未扣费"
+	case strings.Contains(normalized, "authentication failed"):
+		return "账号认证信息不可用，本次未扣费"
 	}
-	for _, marker := range unsafeMarkers {
-		if strings.Contains(normalized, marker) {
-			return true
-		}
-	}
-	return false
-}
-
-func isSafeUserTaskSuccessMessage(message string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(message))
-	return normalized == "ok" ||
-		strings.Contains(normalized, "succeeded") ||
-		strings.Contains(normalized, "success")
+	return ""
 }

@@ -169,10 +169,10 @@ func (h *AuthHandler) DingTalkOAuthStart(c *gin.Context) {
 
 // ─── buildDingTalkAuthorizeURL ─────────────────────────────────────────────
 
-// ─── findDingTalkCompatEmailUser ───────────────────────────────────────────
+// ─── findDingTalkProviderEmailUser ─────────────────────────────────────────
 
-// findDingTalkCompatEmailUser 通过真实邮箱查找可与 DingTalk 账号兼容绑定的现有用户。
-func (h *AuthHandler) findDingTalkCompatEmailUser(ctx context.Context, email string) (*dbent.User, error) {
+// findDingTalkProviderEmailUser 通过第三方返回邮箱查找可绑定的现有用户。
+func (h *AuthHandler) findDingTalkProviderEmailUser(ctx context.Context, email string) (*dbent.User, error) {
 	if !dingTalkLevelThreeEnabled {
 		return nil, nil
 	}
@@ -196,7 +196,7 @@ func (h *AuthHandler) findDingTalkCompatEmailUser(ctx context.Context, email str
 		Order(dbent.Asc(dbuser.FieldID)).
 		All(ctx)
 	if err != nil {
-		return nil, infraerrors.InternalServer("COMPAT_EMAIL_LOOKUP_FAILED", "failed to look up compat email user").WithCause(err)
+		return nil, infraerrors.InternalServer("COMPAT_EMAIL_LOOKUP_FAILED", "failed to look up provider email user").WithCause(err)
 	}
 	switch len(userEntities) {
 	case 0:
@@ -211,7 +211,7 @@ func (h *AuthHandler) findDingTalkCompatEmailUser(ctx context.Context, email str
 // ─── createDingTalkOAuthChoicePendingSession ───────────────────────────────
 
 // createDingTalkOAuthChoicePendingSession 创建 DingTalk OAuth 三方注册/绑定的 choice pending session。
-// signupBlocked=true 时关闭"创建新账户"出口；若同时没有 compat email 匹配的已有账户，
+// signupBlocked=true 时关闭"创建新账户"出口；若同时没有第三方返回邮箱匹配的已有账户，
 // 直接把 step 切到 bind_login_required，避免前端展示一个没有实际可点选项的 choice 界面。
 func (h *AuthHandler) createDingTalkOAuthChoicePendingSession(
 	c *gin.Context,
@@ -221,8 +221,8 @@ func (h *AuthHandler) createDingTalkOAuthChoicePendingSession(
 	redirectTo string,
 	browserSessionKey string,
 	upstreamClaims map[string]any,
-	compatEmail string,
-	compatEmailUser *dbent.User,
+	providerEmail string,
+	providerEmailUser *dbent.User,
 	forceEmailOnSignup bool,
 	signupBlocked bool,
 ) error {
@@ -244,23 +244,23 @@ func (h *AuthHandler) createDingTalkOAuthChoicePendingSession(
 		"force_email_on_signup":     forceEmailOnSignup,
 		"choice_reason":             "third_party_signup",
 	}
-	if strings.TrimSpace(compatEmail) != "" {
-		completionResponse["compat_email"] = strings.TrimSpace(compatEmail)
+	if strings.TrimSpace(providerEmail) != "" {
+		completionResponse["compat_email"] = strings.TrimSpace(providerEmail)
 	}
 	resolvedChoiceEmail := suggestionEmail
-	if compatEmailUser != nil {
-		completionResponse["email"] = strings.TrimSpace(compatEmailUser.Email)
-		completionResponse["existing_account_email"] = strings.TrimSpace(compatEmailUser.Email)
+	if providerEmailUser != nil {
+		completionResponse["email"] = strings.TrimSpace(providerEmailUser.Email)
+		completionResponse["existing_account_email"] = strings.TrimSpace(providerEmailUser.Email)
 		completionResponse["existing_account_bindable"] = true
 		completionResponse["choice_reason"] = "compat_email_match"
-		resolvedChoiceEmail = strings.TrimSpace(compatEmailUser.Email)
+		resolvedChoiceEmail = strings.TrimSpace(providerEmailUser.Email)
 	}
-	if forceEmailOnSignup && compatEmailUser == nil {
+	if forceEmailOnSignup && providerEmailUser == nil {
 		completionResponse["choice_reason"] = "force_email_on_signup"
 	}
-	// 注册被拦：无论是否匹配到 compat email user，都跳过 choice，直接进 bind_login。
+	// 注册被拦：无论是否匹配到第三方返回邮箱用户，都跳过 choice，直接进 bind_login。
 	// "开放注册" 关闭 且 "钉钉企业模式豁免" 也关闭时，唯一合法出口是绑定已有账户，
-	// 不应该让用户看到"创建新账户"按钮；compat user 命中只是让 bind_login 的邮箱字段预填得更准。
+	// 不应该让用户看到"创建新账户"按钮；邮箱命中只是让 bind_login 的邮箱字段预填得更准。
 	if signupBlocked {
 		completionResponse["step"] = "bind_login_required"
 		completionResponse["existing_account_bindable"] = true
@@ -268,8 +268,8 @@ func (h *AuthHandler) createDingTalkOAuthChoicePendingSession(
 	}
 
 	var targetUserID *int64
-	if compatEmailUser != nil && compatEmailUser.ID > 0 {
-		targetUserID = &compatEmailUser.ID
+	if providerEmailUser != nil && providerEmailUser.ID > 0 {
+		targetUserID = &providerEmailUser.ID
 	}
 
 	return h.createOAuthPendingSession(c, oauthPendingSessionPayload{
@@ -511,14 +511,14 @@ func (h *AuthHandler) DingTalkOAuthCallback(c *gin.Context) {
 	}
 
 	// ─── L3/L4 有邮箱：统一 choice pending session ───
-	var compatEmailUser *dbent.User
+	var providerEmailUser *dbent.User
 	if dingTalkLevelThreeEnabled && staff.Email != "" {
-		compatEmailUser, _ = h.findDingTalkCompatEmailUser(c.Request.Context(), staff.Email)
+		providerEmailUser, _ = h.findDingTalkProviderEmailUser(c.Request.Context(), staff.Email)
 	}
 	if err := h.createDingTalkOAuthChoicePendingSession(
 		c, identityKey, staff.Email, staff.Email,
 		redirectTo, browserSessionKey, upstreamClaims,
-		staff.Email, compatEmailUser, forceEmailOnSignup,
+		staff.Email, providerEmailUser, forceEmailOnSignup,
 		signupBlocked,
 	); err != nil {
 		redirectOAuthError(c, frontendCallback, "session_error", infraerrors.Reason(err), infraerrors.Message(err))
@@ -733,7 +733,7 @@ func (h *AuthHandler) CompleteDingTalkOAuthRegistration(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	if updatedSession, handled, err := h.legacyCompleteRegistrationSessionStatus(c, session); err != nil {
+	if updatedSession, handled, err := h.pendingOAuthRegistrationChoiceSessionStatus(c, session); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	} else if handled {

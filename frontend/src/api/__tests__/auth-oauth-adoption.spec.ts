@@ -30,20 +30,6 @@ describe('oauth adoption auth api', () => {
     })
   })
 
-  it('posts bind-login decisions when finalizing pending oauth bind flow', async () => {
-    const { completePendingOAuthBindLogin } = await import('@/api/auth')
-
-    await completePendingOAuthBindLogin({
-      adoptDisplayName: true,
-      adoptAvatar: false
-    })
-
-    expect(post).toHaveBeenCalledWith('/auth/oauth/pending/exchange', {
-      adopt_display_name: true,
-      adopt_avatar: false
-    })
-  })
-
   it('posts linuxdo invitation completion with adoption decisions', async () => {
     const { completeLinuxDoOAuthRegistration } = await import('@/api/auth')
 
@@ -179,38 +165,6 @@ describe('oauth adoption auth api', () => {
 
     expect(getOAuthCompletionKind({ access_token: 'access-token' })).toBe('login')
     expect(getOAuthCompletionKind({ redirect: '/profile' })).toBe('bind')
-  })
-
-  it('provides bind-login utility helpers for invitation and suggested profile states', async () => {
-    const {
-      getPendingOAuthBindLoginKind,
-      hasPendingOAuthSuggestedProfile,
-      isPendingOAuthCreateAccountRequired
-    } = await import('@/api/auth')
-
-    expect(getPendingOAuthBindLoginKind({ access_token: 'access-token' })).toBe('login')
-    expect(getPendingOAuthBindLoginKind({ redirect: '/profile' })).toBe('bind')
-    expect(
-      isPendingOAuthCreateAccountRequired({
-        error: 'invitation_required'
-      })
-    ).toBe(true)
-    expect(
-      isPendingOAuthCreateAccountRequired({
-        error: 'other'
-      })
-    ).toBe(false)
-    expect(
-      hasPendingOAuthSuggestedProfile({
-        suggested_display_name: 'OAuth Nick'
-      })
-    ).toBe(true)
-    expect(
-      hasPendingOAuthSuggestedProfile({
-        suggested_avatar_url: 'https://cdn.example/avatar.png'
-      })
-    ).toBe(true)
-    expect(hasPendingOAuthSuggestedProfile({})).toBe(false)
   })
 
   it('requests an HttpOnly oauth bind cookie before redirect binding', async () => {

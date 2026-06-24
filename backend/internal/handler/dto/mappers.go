@@ -32,13 +32,6 @@ func UserFromService(u *service.User) *User {
 		return nil
 	}
 	out := UserFromServiceShallow(u)
-	if len(u.APIKeys) > 0 {
-		out.APIKeys = make([]APIKey, 0, len(u.APIKeys))
-		for i := range u.APIKeys {
-			k := u.APIKeys[i]
-			out.APIKeys = append(out.APIKeys, *APIKeyFromService(&k))
-		}
-	}
 	if len(u.Subscriptions) > 0 {
 		out.Subscriptions = make([]UserSubscription, 0, len(u.Subscriptions))
 		for i := range u.Subscriptions {
@@ -63,52 +56,6 @@ func UserFromServiceAdmin(u *service.User) *AdminUser {
 		LastUsedAt: u.LastUsedAt,
 		GroupRates: u.GroupRates,
 	}
-}
-
-func APIKeyFromService(k *service.APIKey) *APIKey {
-	if k == nil {
-		return nil
-	}
-	out := &APIKey{
-		ID:            k.ID,
-		UserID:        k.UserID,
-		Key:           k.Key,
-		Name:          k.Name,
-		GroupID:       k.GroupID,
-		Status:        k.Status,
-		IPWhitelist:   k.IPWhitelist,
-		IPBlacklist:   k.IPBlacklist,
-		LastUsedAt:    k.LastUsedAt,
-		Quota:         k.Quota,
-		QuotaUsed:     k.QuotaUsed,
-		ExpiresAt:     k.ExpiresAt,
-		CreatedAt:     k.CreatedAt,
-		UpdatedAt:     k.UpdatedAt,
-		RateLimit5h:   k.RateLimit5h,
-		RateLimit1d:   k.RateLimit1d,
-		RateLimit7d:   k.RateLimit7d,
-		Usage5h:       k.EffectiveUsage5h(),
-		Usage1d:       k.EffectiveUsage1d(),
-		Usage7d:       k.EffectiveUsage7d(),
-		Window5hStart: k.Window5hStart,
-		Window1dStart: k.Window1dStart,
-		Window7dStart: k.Window7dStart,
-		User:          UserFromServiceShallow(k.User),
-		Group:         GroupFromServiceShallow(k.Group),
-	}
-	if k.Window5hStart != nil && !service.IsWindowExpired(k.Window5hStart, service.RateLimitWindow5h) {
-		t := k.Window5hStart.Add(service.RateLimitWindow5h)
-		out.Reset5hAt = &t
-	}
-	if k.Window1dStart != nil && !service.IsWindowExpired(k.Window1dStart, service.RateLimitWindow1d) {
-		t := k.Window1dStart.Add(service.RateLimitWindow1d)
-		out.Reset1dAt = &t
-	}
-	if k.Window7dStart != nil && !service.IsWindowExpired(k.Window7dStart, service.RateLimitWindow7d) {
-		t := k.Window7dStart.Add(service.RateLimitWindow7d)
-		out.Reset7dAt = &t
-	}
-	return out
 }
 
 func GroupFromServiceShallow(g *service.Group) *Group {

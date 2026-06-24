@@ -22,7 +22,7 @@ func TestAffiliateHandlerClearUserSettingsDoesNotPartiallyClearOnResetFailure(t 
 		codeSet:  true,
 		resetErr: errors.New("reset failed"),
 	}
-	handler := NewAffiliateHandler(service.NewAffiliateService(repo, nil, nil, nil), nil)
+	handler := NewAffiliateHandler(service.NewAffiliateService(repo, nil, nil), nil)
 
 	router := gin.New()
 	router.DELETE("/admin/affiliates/users/:user_id", handler.ClearUserSettings)

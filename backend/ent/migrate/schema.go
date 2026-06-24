@@ -269,6 +269,49 @@ var (
 			},
 		},
 	}
+	// GlobalProxiesColumns holds the columns for the "global_proxies" table.
+	GlobalProxiesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "name", Type: field.TypeString, Size: 100},
+		{Name: "ip_type", Type: field.TypeString, Size: 30, Default: "residential"},
+		{Name: "endpoint", Type: field.TypeString, Nullable: true, Size: 500},
+		{Name: "status", Type: field.TypeString, Size: 20, Default: "unknown"},
+		{Name: "latency_ms", Type: field.TypeInt, Nullable: true},
+		{Name: "last_check_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "last_used_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "remark", Type: field.TypeString, Nullable: true, Size: 2147483647},
+	}
+	// GlobalProxiesTable holds the schema information for the "global_proxies" table.
+	GlobalProxiesTable = &schema.Table{
+		Name:       "global_proxies",
+		Columns:    GlobalProxiesColumns,
+		PrimaryKey: []*schema.Column{GlobalProxiesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "globalproxy_status",
+				Unique:  false,
+				Columns: []*schema.Column{GlobalProxiesColumns[7]},
+			},
+			{
+				Name:    "globalproxy_ip_type",
+				Unique:  false,
+				Columns: []*schema.Column{GlobalProxiesColumns[5]},
+			},
+			{
+				Name:    "globalproxy_deleted_at",
+				Unique:  false,
+				Columns: []*schema.Column{GlobalProxiesColumns[3]},
+			},
+			{
+				Name:    "globalproxy_status_last_used_at",
+				Unique:  false,
+				Columns: []*schema.Column{GlobalProxiesColumns[7], GlobalProxiesColumns[10]},
+			},
+		},
+	}
 	// GroupsColumns holds the columns for the "groups" table.
 	GroupsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -770,7 +813,6 @@ var (
 		{Name: "id", Type: field.TypeInt64, Increment: true},
 		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
 		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
-		{Name: "deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
 		{Name: "name", Type: field.TypeString, Size: 100},
 		{Name: "platform", Type: field.TypeString, Size: 50},
 		{Name: "platform_key", Type: field.TypeString, Size: 50},
@@ -793,7 +835,6 @@ var (
 		{Name: "task_status", Type: field.TypeString, Size: 30, Default: "pending"},
 		{Name: "task_message", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "default_proxy_snapshot", Type: field.TypeString, Nullable: true, Size: 2147483647},
-		{Name: "user_workbench_deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
 		{Name: "remark", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "assigned_user_id", Type: field.TypeInt64, Nullable: true},
 	}
@@ -805,7 +846,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "social_accounts_users_social_accounts",
-				Columns:    []*schema.Column{SocialAccountsColumns[28]},
+				Columns:    []*schema.Column{SocialAccountsColumns[26]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -814,50 +855,37 @@ var (
 			{
 				Name:    "socialaccount_platform",
 				Unique:  false,
-				Columns: []*schema.Column{SocialAccountsColumns[5]},
+				Columns: []*schema.Column{SocialAccountsColumns[4]},
 			},
 			{
 				Name:    "socialaccount_account_status",
 				Unique:  false,
-				Columns: []*schema.Column{SocialAccountsColumns[22]},
+				Columns: []*schema.Column{SocialAccountsColumns[21]},
 			},
 			{
 				Name:    "socialaccount_task_status",
 				Unique:  false,
-				Columns: []*schema.Column{SocialAccountsColumns[23]},
+				Columns: []*schema.Column{SocialAccountsColumns[22]},
 			},
 			{
 				Name:    "socialaccount_assigned_user_id",
 				Unique:  false,
-				Columns: []*schema.Column{SocialAccountsColumns[28]},
-			},
-			{
-				Name:    "socialaccount_assigned_user_id_user_workbench_deleted_at",
-				Unique:  false,
-				Columns: []*schema.Column{SocialAccountsColumns[28], SocialAccountsColumns[26]},
-			},
-			{
-				Name:    "socialaccount_deleted_at",
-				Unique:  false,
-				Columns: []*schema.Column{SocialAccountsColumns[3]},
+				Columns: []*schema.Column{SocialAccountsColumns[26]},
 			},
 			{
 				Name:    "socialaccount_platform_account_status",
 				Unique:  false,
-				Columns: []*schema.Column{SocialAccountsColumns[5], SocialAccountsColumns[22]},
+				Columns: []*schema.Column{SocialAccountsColumns[4], SocialAccountsColumns[21]},
 			},
 			{
-				Name:    "socialaccount_platform_user_id",
+				Name:    "idx_social_accounts_platform_user_id",
 				Unique:  false,
-				Columns: []*schema.Column{SocialAccountsColumns[10]},
+				Columns: []*schema.Column{SocialAccountsColumns[9]},
 			},
 			{
-				Name:    "socialaccount_platform_key_name_key",
+				Name:    "idx_social_accounts_platform_name_key_unique",
 				Unique:  true,
-				Columns: []*schema.Column{SocialAccountsColumns[6], SocialAccountsColumns[7]},
-				Annotation: &entsql.IndexAnnotation{
-					Where: "deleted_at IS NULL",
-				},
+				Columns: []*schema.Column{SocialAccountsColumns[5], SocialAccountsColumns[6]},
 			},
 		},
 	}
@@ -926,8 +954,8 @@ var (
 		{Name: "action", Type: field.TypeString, Size: 50},
 		{Name: "target", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "content", Type: field.TypeString, Nullable: true, Size: 2147483647},
-		{Name: "payload", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
-		{Name: "template_snapshot", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "payload", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "template_snapshot", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
 		{Name: "status", Type: field.TypeString, Size: 20, Default: "pending"},
 		{Name: "result_message", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "price", Type: field.TypeFloat64, Default: 0.1},
@@ -993,7 +1021,15 @@ var (
 				Columns: []*schema.Column{SocialTaskLogsColumns[19], SocialTaskLogsColumns[8]},
 			},
 			{
-				Name:    "socialtasklog_user_id_social_account_id_action_idempotency_key",
+				Name:    "idx_social_task_logs_one_active_per_account",
+				Unique:  true,
+				Columns: []*schema.Column{SocialTaskLogsColumns[19]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "status IN ('pending', 'running')",
+				},
+			},
+			{
+				Name:    "idx_social_task_logs_user_account_action_idem_unique",
 				Unique:  true,
 				Columns: []*schema.Column{SocialTaskLogsColumns[20], SocialTaskLogsColumns[19], SocialTaskLogsColumns[3], SocialTaskLogsColumns[17]},
 				Annotation: &entsql.IndexAnnotation{
@@ -1486,6 +1522,7 @@ var (
 		AnnouncementReadsTable,
 		AuthIdentitiesTable,
 		AuthIdentityChannelsTable,
+		GlobalProxiesTable,
 		GroupsTable,
 		IdentityAdoptionDecisionsTable,
 		PaymentAuditLogsTable,
@@ -1532,6 +1569,9 @@ func init() {
 	AuthIdentityChannelsTable.ForeignKeys[0].RefTable = AuthIdentitiesTable
 	AuthIdentityChannelsTable.Annotation = &entsql.Annotation{
 		Table: "auth_identity_channels",
+	}
+	GlobalProxiesTable.Annotation = &entsql.Annotation{
+		Table: "global_proxies",
 	}
 	GroupsTable.Annotation = &entsql.Annotation{
 		Table: "groups",

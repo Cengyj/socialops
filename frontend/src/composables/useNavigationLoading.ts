@@ -75,7 +75,7 @@ export function useNavigationLoading() {
   }
 
   /**
-   * 重置所有状态（用于测试）
+   * 重置所有状态
    */
   const resetState = (): void => {
     clearTimer()
@@ -97,7 +97,7 @@ export function useNavigationLoading() {
   // 公开的加载状态（只读）
   const isLoading = computed(() => shouldShowLoading.value)
 
-  // 内部加载状态（用于测试，不考虑防闪烁）
+  // 即时导航状态（不考虑防闪烁延迟）
   const isNavigating = readonly(_isLoading)
 
   return {
@@ -121,12 +121,4 @@ export function useNavigationLoadingState() {
     navigationLoadingInstance = useNavigationLoading()
   }
   return navigationLoadingInstance
-}
-
-// 导出重置函数（用于测试）
-export function _resetNavigationLoadingInstance(): void {
-  if (navigationLoadingInstance) {
-    navigationLoadingInstance.resetState()
-  }
-  navigationLoadingInstance = null
 }

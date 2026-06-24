@@ -610,7 +610,7 @@ func createPendingProviderConfigOrder(t *testing.T, ctx context.Context, client 
 		SetPayAmount(88).
 		SetFeeRate(0).
 		SetRechargeCode("PENDING-PROVIDER-CONFIG-" + instanceID).
-		SetOutTradeNo("sub2_pending_provider_config_" + instanceID).
+		SetOutTradeNo("socialops_pending_provider_config_" + instanceID).
 		SetPaymentType(providerPendingOrderPaymentType(instance.ProviderKey)).
 		SetPaymentTradeNo("").
 		SetOrderType(payment.OrderTypeBalance).

@@ -259,7 +259,7 @@ func TestAuthServiceRecordSuccessfulLoginBackfillsEmailIdentity(t *testing.T) {
 	require.Equal(t, user.ID, identity.UserID)
 }
 
-func TestAuthServiceLogin_DoesNotApplyEmailFirstBindDefaultsWhenBackfillingLegacyEmailIdentity(t *testing.T) {
+func TestAuthServiceLogin_DoesNotApplyEmailFirstBindDefaultsWhenBackfillingExistingEmailUserIdentity(t *testing.T) {
 	assigner := &authIdentityDefaultSubAssignerStub{}
 	svc, _, client := newAuthServiceWithEnt(t, map[string]string{
 		service.SettingKeyRegistrationEnabled:                    "true",
@@ -273,8 +273,8 @@ func TestAuthServiceLogin_DoesNotApplyEmailFirstBindDefaultsWhenBackfillingLegac
 	passwordHash, err := svc.HashPassword("password")
 	require.NoError(t, err)
 	user, err := client.User.Create().
-		SetEmail("legacy@example.com").
-		SetUsername("legacy-user").
+		SetEmail("existing-email-user@example.com").
+		SetUsername("existing-email-user").
 		SetPasswordHash(passwordHash).
 		SetBalance(1.5).
 		SetConcurrency(2).
@@ -299,7 +299,7 @@ func TestAuthServiceLogin_DoesNotApplyEmailFirstBindDefaultsWhenBackfillingLegac
 		Where(
 			authidentity.ProviderTypeEQ("email"),
 			authidentity.ProviderKeyEQ("email"),
-			authidentity.ProviderSubjectEQ("legacy@example.com"),
+			authidentity.ProviderSubjectEQ("existing-email-user@example.com"),
 		).
 		Count(ctx)
 	require.NoError(t, err)
@@ -319,7 +319,7 @@ func TestAuthServiceLogin_DoesNotApplyEmailFirstBindDefaultsWhenBackfillingLegac
 	require.Equal(t, 0, countProviderGrantRecords(t, client, user.ID, "email", "first_bind"))
 }
 
-func TestAuthServiceLogin_DoesNotApplyMergedEmailFirstBindDefaultsWhenBackfillingLegacyEmailIdentity(t *testing.T) {
+func TestAuthServiceLogin_DoesNotApplyMergedEmailFirstBindDefaultsWhenBackfillingExistingEmailUserIdentity(t *testing.T) {
 	assigner := &authIdentityDefaultSubAssignerStub{}
 	svc, _, client := newAuthServiceWithEnt(t, map[string]string{
 		service.SettingKeyRegistrationEnabled:                    "true",

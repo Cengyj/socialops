@@ -51,7 +51,7 @@ const orderFactory = (status: string) => ({
   pay_amount: 88,
   fee_rate: 0,
   payment_type: 'alipay',
-  out_trade_no: 'sub2_20260420abcd1234',
+  out_trade_no: 'socialops_20260420abcd1234',
   status,
   order_type: 'balance',
   created_at: '2026-04-20T12:00:00Z',
@@ -158,7 +158,7 @@ describe('PaymentStatusPanel', () => {
     await flushPromises()
 
     expect(pollOrderStatus).toHaveBeenCalledWith(42)
-    expect(verifyOrder).toHaveBeenCalledWith('sub2_20260420abcd1234')
+    expect(verifyOrder).toHaveBeenCalledWith('socialops_20260420abcd1234')
     expect(wrapper.text()).toContain('payment.result.success')
     expect(wrapper.emitted('success')).toHaveLength(1)
   })

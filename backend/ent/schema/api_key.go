@@ -13,7 +13,8 @@ import (
 	"entgo.io/ent/schema/index"
 )
 
-// APIKey holds the schema definition for the APIKey entity.
+// APIKey maps historical api_keys rows retained for migration and accounting
+// consistency. SocialOps no longer exposes user API key management.
 type APIKey struct {
 	ent.Schema
 }
@@ -50,71 +51,65 @@ func (APIKey) Fields() []ent.Field {
 		field.Time("last_used_at").
 			Optional().
 			Nillable().
-			Comment("Last usage time of this API key"),
+			Comment("Historical last usage time for removed user API key records"),
 		field.JSON("ip_whitelist", []string{}).
 			Optional().
-			Comment("Allowed IPs/CIDRs, e.g. [\"192.168.1.100\", \"10.0.0.0/8\"]"),
+			Comment("Historical allowed IP/CIDR list for removed user API key records"),
 		field.JSON("ip_blacklist", []string{}).
 			Optional().
-			Comment("Blocked IPs/CIDRs"),
+			Comment("Historical blocked IP/CIDR list for removed user API key records"),
 
-		// ========== Quota fields ==========
-		// Quota limit in USD (0 = unlimited)
+		// Historical quota fields retained only so existing api_keys rows can be read.
 		field.Float("quota").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).
 			Default(0).
-			Comment("Quota limit in USD for this API key (0 = unlimited)"),
-		// Used quota amount
+			Comment("Historical quota limit in USD for removed user API key records"),
 		field.Float("quota_used").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).
 			Default(0).
-			Comment("Used quota amount in USD"),
-		// Expiration time (nil = never expires)
+			Comment("Historical used quota amount in USD for removed user API key records"),
 		field.Time("expires_at").
 			Optional().
 			Nillable().
-			Comment("Expiration time for this API key (null = never expires)"),
+			Comment("Historical expiration time for removed user API key records"),
 
-		// ========== Rate limit fields ==========
-		// Rate limit configuration (0 = unlimited)
+		// Historical rate-limit fields retained only for existing api_keys rows.
 		field.Float("rate_limit_5h").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).
 			Default(0).
-			Comment("Rate limit in USD per 5 hours (0 = unlimited)"),
+			Comment("Historical USD rate limit per 5 hours for removed user API key records"),
 		field.Float("rate_limit_1d").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).
 			Default(0).
-			Comment("Rate limit in USD per day (0 = unlimited)"),
+			Comment("Historical USD rate limit per day for removed user API key records"),
 		field.Float("rate_limit_7d").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).
 			Default(0).
-			Comment("Rate limit in USD per 7 days (0 = unlimited)"),
-		// Rate limit usage tracking
+			Comment("Historical USD rate limit per 7 days for removed user API key records"),
 		field.Float("usage_5h").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).
 			Default(0).
-			Comment("Used amount in USD for the current 5h window"),
+			Comment("Historical used amount in USD for the 5h window"),
 		field.Float("usage_1d").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).
 			Default(0).
-			Comment("Used amount in USD for the current 1d window"),
+			Comment("Historical used amount in USD for the 1d window"),
 		field.Float("usage_7d").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).
 			Default(0).
-			Comment("Used amount in USD for the current 7d window"),
-		// Window start times
+			Comment("Historical used amount in USD for the 7d window"),
 		field.Time("window_5h_start").
 			Optional().
 			Nillable().
-			Comment("Start time of the current 5h rate limit window"),
+			Comment("Historical start time of the 5h rate limit window"),
 		field.Time("window_1d_start").
 			Optional().
 			Nillable().
-			Comment("Start time of the current 1d rate limit window"),
+			Comment("Historical start time of the 1d rate limit window"),
 		field.Time("window_7d_start").
 			Optional().
 			Nillable().
-			Comment("Start time of the current 7d rate limit window"),
+			Comment("Historical start time of the 7d rate limit window"),
 	}
 }
 
@@ -141,7 +136,7 @@ func (APIKey) Indexes() []ent.Index {
 		index.Fields("status"),
 		index.Fields("deleted_at"),
 		index.Fields("last_used_at"),
-		// Index for quota queries
+		// Historical quota lookup index retained for existing rows.
 		index.Fields("quota", "quota_used"),
 		index.Fields("expires_at"),
 	}

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	dbent "github.com/Wei-Shaw/socialops/ent"
-	"github.com/Wei-Shaw/socialops/ent/apikey"
 	"github.com/Wei-Shaw/socialops/ent/authidentity"
 	"github.com/Wei-Shaw/socialops/ent/authidentitychannel"
 	"github.com/Wei-Shaw/socialops/ent/identityadoptiondecision"
@@ -418,7 +417,6 @@ func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.
 				dbuser.EmailContainsFold(filters.Search),
 				dbuser.UsernameContainsFold(filters.Search),
 				dbuser.NotesContainsFold(filters.Search),
-				dbuser.HasAPIKeysWith(apikey.KeyContainsFold(filters.Search)),
 			),
 		)
 	}

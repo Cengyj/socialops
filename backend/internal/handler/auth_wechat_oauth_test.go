@@ -436,10 +436,10 @@ func TestWeChatPaymentOAuthCallbackUsesExplicitPaymentResumeSigningKeyWhenMixedK
 	handler, client := newWeChatOAuthTestHandlerWithSettings(t, false, wechatOAuthTestSettings("mp", "wx-mp-app", "wx-mp-secret", "/auth/wechat/callback"))
 	defer client.Close()
 
-	legacyKeyHex := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	totpEncryptionKeyHex := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	explicitSigningKey := "explicit-payment-resume-signing-key"
 	t.Setenv("PAYMENT_RESUME_SIGNING_KEY", explicitSigningKey)
-	handler.cfg.Totp.EncryptionKey = legacyKeyHex
+	handler.cfg.Totp.EncryptionKey = totpEncryptionKeyHex
 	handler.cfg.Totp.EncryptionKeyConfigured = true
 
 	recorder := httptest.NewRecorder()
@@ -749,7 +749,7 @@ func TestWeChatOAuthCallbackBindRejectsChannelOwnershipConflict(t *testing.T) {
 	require.Zero(t, count)
 }
 
-func TestWeChatOAuthCallbackBindRejectsLegacyProviderKeyOwnershipConflict(t *testing.T) {
+func TestWeChatOAuthCallbackBindRejectsHistoricalProviderKeyOwnershipConflict(t *testing.T) {
 	originalAccessTokenURL := wechatOAuthAccessTokenURL
 	originalUserInfoURL := wechatOAuthUserInfoURL
 	t.Cleanup(func() {
@@ -798,7 +798,7 @@ func TestWeChatOAuthCallbackBindRejectsLegacyProviderKeyOwnershipConflict(t *tes
 	_, err = client.AuthIdentity.Create().
 		SetUserID(owner.ID).
 		SetProviderType("wechat").
-		SetProviderKey(wechatOAuthLegacyProviderKey).
+		SetProviderKey(wechatOAuthHistoricalProviderKey).
 		SetProviderSubject("union-456").
 		SetMetadata(map[string]any{"unionid": "union-456"}).
 		Save(ctx)
@@ -958,12 +958,12 @@ func TestCompleteWeChatOAuthRegistrationBindsIdentityWithoutAdoptionFlags(t *tes
 		SetBrowserSessionKey("wechat-browser-no-adoption").
 		SetUpstreamIdentityClaims(map[string]any{
 			"username":               "wechat_user",
-			"suggested_display_name": "WeChat Legacy",
-			"suggested_avatar_url":   "https://cdn.example/wechat-legacy.png",
+			"suggested_display_name": "WeChat Stored",
+			"suggested_avatar_url":   "https://cdn.example/wechat-stored.png",
 			"mode":                   "open",
 			"channel":                "open",
 			"channel_app_id":         "wx-open-app",
-			"channel_subject":        "openid-legacy",
+			"channel_subject":        "openid-stored",
 		}).
 		SetExpiresAt(time.Now().UTC().Add(10 * time.Minute)).
 		Save(ctx)
@@ -1011,7 +1011,7 @@ func TestCompleteWeChatOAuthRegistrationBindsIdentityWithoutAdoptionFlags(t *tes
 	require.False(t, decision.AdoptAvatar)
 }
 
-func TestWeChatOAuthCallbackRepairsLegacyOpenIDOnlyIdentity(t *testing.T) {
+func TestWeChatOAuthCallbackRepairsStoredOpenIDOnlyIdentity(t *testing.T) {
 	originalAccessTokenURL := wechatOAuthAccessTokenURL
 	originalUserInfoURL := wechatOAuthUserInfoURL
 	t.Cleanup(func() {
@@ -1026,7 +1026,7 @@ func TestWeChatOAuthCallbackRepairsLegacyOpenIDOnlyIdentity(t *testing.T) {
 			_, _ = w.Write([]byte(`{"access_token":"wechat-access","openid":"openid-123","unionid":"union-456","scope":"snsapi_login"}`))
 		case strings.Contains(r.URL.Path, "/sns/userinfo"):
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"openid":"openid-123","unionid":"union-456","nickname":"Legacy WeChat","headimgurl":"https://cdn.example/legacy.png"}`))
+			_, _ = w.Write([]byte(`{"openid":"openid-123","unionid":"union-456","nickname":"Stored WeChat","headimgurl":"https://cdn.example/stored.png"}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -1039,17 +1039,17 @@ func TestWeChatOAuthCallbackRepairsLegacyOpenIDOnlyIdentity(t *testing.T) {
 	defer client.Close()
 
 	ctx := context.Background()
-	legacyUser, err := client.User.Create().
-		SetEmail("legacy@example.com").
-		SetUsername("legacy-user").
+	storedUser, err := client.User.Create().
+		SetEmail("stored-wechat@example.com").
+		SetUsername("stored-wechat-user").
 		SetPasswordHash("hash").
 		SetRole(service.RoleUser).
 		SetStatus(service.StatusActive).
 		Save(ctx)
 	require.NoError(t, err)
 
-	legacyIdentity, err := client.AuthIdentity.Create().
-		SetUserID(legacyUser.ID).
+	storedIdentity, err := client.AuthIdentity.Create().
+		SetUserID(storedUser.ID).
 		SetProviderType("wechat").
 		SetProviderKey(wechatOAuthProviderKey).
 		SetProviderSubject("openid-123").
@@ -1080,8 +1080,8 @@ func TestWeChatOAuthCallbackRepairsLegacyOpenIDOnlyIdentity(t *testing.T) {
 		Only(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, session.TargetUserID)
-	require.Equal(t, legacyUser.ID, *session.TargetUserID)
-	require.Equal(t, legacyUser.Email, session.ResolvedEmail)
+	require.Equal(t, storedUser.ID, *session.TargetUserID)
+	require.Equal(t, storedUser.Email, session.ResolvedEmail)
 
 	repairedIdentity, err := client.AuthIdentity.Query().
 		Where(
@@ -1091,8 +1091,8 @@ func TestWeChatOAuthCallbackRepairsLegacyOpenIDOnlyIdentity(t *testing.T) {
 		).
 		Only(ctx)
 	require.NoError(t, err)
-	require.Equal(t, legacyIdentity.ID, repairedIdentity.ID)
-	require.Equal(t, legacyUser.ID, repairedIdentity.UserID)
+	require.Equal(t, storedIdentity.ID, repairedIdentity.ID)
+	require.Equal(t, storedUser.ID, repairedIdentity.UserID)
 
 	openIDIdentityCount, err := client.AuthIdentity.Query().
 		Where(
@@ -1226,7 +1226,7 @@ func TestCompleteWeChatOAuthRegistrationReturnsPendingSessionWhenChoiceStillRequ
 	require.Nil(t, storedSession.ConsumedAt)
 }
 
-func TestWeChatOAuthCallbackRepairsLegacyProviderKeyCanonicalIdentity(t *testing.T) {
+func TestWeChatOAuthCallbackRepairsHistoricalProviderKeyCanonicalIdentity(t *testing.T) {
 	originalAccessTokenURL := wechatOAuthAccessTokenURL
 	originalUserInfoURL := wechatOAuthUserInfoURL
 	t.Cleanup(func() {
@@ -1241,7 +1241,7 @@ func TestWeChatOAuthCallbackRepairsLegacyProviderKeyCanonicalIdentity(t *testing
 			_, _ = w.Write([]byte(`{"access_token":"wechat-access","openid":"openid-123","unionid":"union-456","scope":"snsapi_login"}`))
 		case strings.Contains(r.URL.Path, "/sns/userinfo"):
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"openid":"openid-123","unionid":"union-456","nickname":"Legacy Canonical","headimgurl":"https://cdn.example/legacy-canonical.png"}`))
+			_, _ = w.Write([]byte(`{"openid":"openid-123","unionid":"union-456","nickname":"Stored Canonical","headimgurl":"https://cdn.example/stored-canonical.png"}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -1254,19 +1254,19 @@ func TestWeChatOAuthCallbackRepairsLegacyProviderKeyCanonicalIdentity(t *testing
 	defer client.Close()
 
 	ctx := context.Background()
-	legacyUser, err := client.User.Create().
-		SetEmail("legacy@example.com").
-		SetUsername("legacy-user").
+	storedUser, err := client.User.Create().
+		SetEmail("stored-canonical@example.com").
+		SetUsername("stored-canonical-user").
 		SetPasswordHash("hash").
 		SetRole(service.RoleUser).
 		SetStatus(service.StatusActive).
 		Save(ctx)
 	require.NoError(t, err)
 
-	legacyIdentity, err := client.AuthIdentity.Create().
-		SetUserID(legacyUser.ID).
+	storedIdentity, err := client.AuthIdentity.Create().
+		SetUserID(storedUser.ID).
 		SetProviderType("wechat").
-		SetProviderKey(wechatOAuthLegacyProviderKey).
+		SetProviderKey(wechatOAuthHistoricalProviderKey).
 		SetProviderSubject("union-456").
 		SetMetadata(map[string]any{"unionid": "union-456"}).
 		Save(ctx)
@@ -1295,8 +1295,8 @@ func TestWeChatOAuthCallbackRepairsLegacyProviderKeyCanonicalIdentity(t *testing
 		Only(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, session.TargetUserID)
-	require.Equal(t, legacyUser.ID, *session.TargetUserID)
-	require.Equal(t, legacyUser.Email, session.ResolvedEmail)
+	require.Equal(t, storedUser.ID, *session.TargetUserID)
+	require.Equal(t, storedUser.Email, session.ResolvedEmail)
 
 	repairedIdentity, err := client.AuthIdentity.Query().
 		Where(
@@ -1306,18 +1306,18 @@ func TestWeChatOAuthCallbackRepairsLegacyProviderKeyCanonicalIdentity(t *testing
 		).
 		Only(ctx)
 	require.NoError(t, err)
-	require.Equal(t, legacyIdentity.ID, repairedIdentity.ID)
-	require.Equal(t, legacyUser.ID, repairedIdentity.UserID)
+	require.Equal(t, storedIdentity.ID, repairedIdentity.ID)
+	require.Equal(t, storedUser.ID, repairedIdentity.UserID)
 
-	legacyIdentityCount, err := client.AuthIdentity.Query().
+	historicalProviderIdentityCount, err := client.AuthIdentity.Query().
 		Where(
 			authidentity.ProviderTypeEQ("wechat"),
-			authidentity.ProviderKeyEQ(wechatOAuthLegacyProviderKey),
+			authidentity.ProviderKeyEQ(wechatOAuthHistoricalProviderKey),
 			authidentity.ProviderSubjectEQ("union-456"),
 		).
 		Count(ctx)
 	require.NoError(t, err)
-	require.Zero(t, legacyIdentityCount)
+	require.Zero(t, historicalProviderIdentityCount)
 
 	channel, err := client.AuthIdentityChannel.Query().
 		Where(

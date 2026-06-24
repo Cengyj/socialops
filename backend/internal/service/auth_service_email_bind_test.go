@@ -132,8 +132,8 @@ func TestAuthServiceBindEmailIdentity_UpdatesEmailAndAppliesFirstBindDefaults(t 
 
 	ctx := context.Background()
 	user, err := client.User.Create().
-		SetEmail("legacy-user" + service.LinuxDoConnectSyntheticEmailDomain).
-		SetUsername("legacy-user").
+		SetEmail("synthetic-linuxdo-user" + service.LinuxDoConnectSyntheticEmailDomain).
+		SetUsername("synthetic-linuxdo-user").
 		SetPasswordHash("old-hash").
 		SetBalance(2.5).
 		SetConcurrency(1).
@@ -233,10 +233,10 @@ func TestAuthServiceBindEmailIdentity_RollsBackWhenFirstBindDefaultsFail(t *test
 	}, cache, assigner)
 
 	ctx := context.Background()
-	originalEmail := "legacy-rollback" + service.LinuxDoConnectSyntheticEmailDomain
+	originalEmail := "synthetic-rollback" + service.LinuxDoConnectSyntheticEmailDomain
 	user, err := client.User.Create().
 		SetEmail(originalEmail).
-		SetUsername("legacy-rollback").
+		SetUsername("synthetic-rollback").
 		SetPasswordHash("old-hash").
 		SetBalance(2.5).
 		SetConcurrency(1).
@@ -453,8 +453,8 @@ func TestAuthServiceBindEmailIdentity_RevokesExistingAccessAndRefreshTokens(t *t
 	refreshTokenCache := newEmailBindRefreshTokenCacheStub()
 	userRepo := newEmailBindUserRepoStub(&service.User{
 		ID:           41,
-		Email:        "legacy-user" + service.OIDCConnectSyntheticEmailDomain,
-		Username:     "legacy-user",
+		Email:        "synthetic-oidc-user" + service.OIDCConnectSyntheticEmailDomain,
+		Username:     "synthetic-oidc-user",
 		PasswordHash: "old-hash",
 		Role:         service.RoleUser,
 		Status:       service.StatusActive,
@@ -473,7 +473,7 @@ func TestAuthServiceBindEmailIdentity_RevokesExistingAccessAndRefreshTokens(t *t
 
 	oldTokenPair, err := svc.GenerateTokenPair(ctx, &service.User{
 		ID:           41,
-		Email:        "legacy-user" + service.OIDCConnectSyntheticEmailDomain,
+		Email:        "synthetic-oidc-user" + service.OIDCConnectSyntheticEmailDomain,
 		Role:         service.RoleUser,
 		Status:       service.StatusActive,
 		TokenVersion: 4,

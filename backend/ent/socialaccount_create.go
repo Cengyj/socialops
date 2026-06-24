@@ -52,20 +52,6 @@ func (_c *SocialAccountCreate) SetNillableUpdatedAt(v *time.Time) *SocialAccount
 	return _c
 }
 
-// SetDeletedAt sets the "deleted_at" field.
-func (_c *SocialAccountCreate) SetDeletedAt(v time.Time) *SocialAccountCreate {
-	_c.mutation.SetDeletedAt(v)
-	return _c
-}
-
-// SetNillableDeletedAt sets the "deleted_at" field if the given value is not nil.
-func (_c *SocialAccountCreate) SetNillableDeletedAt(v *time.Time) *SocialAccountCreate {
-	if v != nil {
-		_c.SetDeletedAt(*v)
-	}
-	return _c
-}
-
 // SetName sets the "name" field.
 func (_c *SocialAccountCreate) SetName(v string) *SocialAccountCreate {
 	_c.mutation.SetName(v)
@@ -348,20 +334,6 @@ func (_c *SocialAccountCreate) SetNillableAssignedUserID(v *int64) *SocialAccoun
 	return _c
 }
 
-// SetUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field.
-func (_c *SocialAccountCreate) SetUserWorkbenchDeletedAt(v time.Time) *SocialAccountCreate {
-	_c.mutation.SetUserWorkbenchDeletedAt(v)
-	return _c
-}
-
-// SetNillableUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field if the given value is not nil.
-func (_c *SocialAccountCreate) SetNillableUserWorkbenchDeletedAt(v *time.Time) *SocialAccountCreate {
-	if v != nil {
-		_c.SetUserWorkbenchDeletedAt(*v)
-	}
-	return _c
-}
-
 // SetRemark sets the "remark" field.
 func (_c *SocialAccountCreate) SetRemark(v string) *SocialAccountCreate {
 	_c.mutation.SetRemark(v)
@@ -614,10 +586,6 @@ func (_c *SocialAccountCreate) createSpec() (*SocialAccount, *sqlgraph.CreateSpe
 		_spec.SetField(socialaccount.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
 	}
-	if value, ok := _c.mutation.DeletedAt(); ok {
-		_spec.SetField(socialaccount.FieldDeletedAt, field.TypeTime, value)
-		_node.DeletedAt = &value
-	}
 	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(socialaccount.FieldName, field.TypeString, value)
 		_node.Name = value
@@ -705,10 +673,6 @@ func (_c *SocialAccountCreate) createSpec() (*SocialAccount, *sqlgraph.CreateSpe
 	if value, ok := _c.mutation.DefaultProxySnapshot(); ok {
 		_spec.SetField(socialaccount.FieldDefaultProxySnapshot, field.TypeString, value)
 		_node.DefaultProxySnapshot = &value
-	}
-	if value, ok := _c.mutation.UserWorkbenchDeletedAt(); ok {
-		_spec.SetField(socialaccount.FieldUserWorkbenchDeletedAt, field.TypeTime, value)
-		_node.UserWorkbenchDeletedAt = &value
 	}
 	if value, ok := _c.mutation.Remark(); ok {
 		_spec.SetField(socialaccount.FieldRemark, field.TypeString, value)
@@ -808,24 +772,6 @@ func (u *SocialAccountUpsert) SetUpdatedAt(v time.Time) *SocialAccountUpsert {
 // UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
 func (u *SocialAccountUpsert) UpdateUpdatedAt() *SocialAccountUpsert {
 	u.SetExcluded(socialaccount.FieldUpdatedAt)
-	return u
-}
-
-// SetDeletedAt sets the "deleted_at" field.
-func (u *SocialAccountUpsert) SetDeletedAt(v time.Time) *SocialAccountUpsert {
-	u.Set(socialaccount.FieldDeletedAt, v)
-	return u
-}
-
-// UpdateDeletedAt sets the "deleted_at" field to the value that was provided on create.
-func (u *SocialAccountUpsert) UpdateDeletedAt() *SocialAccountUpsert {
-	u.SetExcluded(socialaccount.FieldDeletedAt)
-	return u
-}
-
-// ClearDeletedAt clears the value of the "deleted_at" field.
-func (u *SocialAccountUpsert) ClearDeletedAt() *SocialAccountUpsert {
-	u.SetNull(socialaccount.FieldDeletedAt)
 	return u
 }
 
@@ -1195,24 +1141,6 @@ func (u *SocialAccountUpsert) ClearAssignedUserID() *SocialAccountUpsert {
 	return u
 }
 
-// SetUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field.
-func (u *SocialAccountUpsert) SetUserWorkbenchDeletedAt(v time.Time) *SocialAccountUpsert {
-	u.Set(socialaccount.FieldUserWorkbenchDeletedAt, v)
-	return u
-}
-
-// UpdateUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field to the value that was provided on create.
-func (u *SocialAccountUpsert) UpdateUserWorkbenchDeletedAt() *SocialAccountUpsert {
-	u.SetExcluded(socialaccount.FieldUserWorkbenchDeletedAt)
-	return u
-}
-
-// ClearUserWorkbenchDeletedAt clears the value of the "user_workbench_deleted_at" field.
-func (u *SocialAccountUpsert) ClearUserWorkbenchDeletedAt() *SocialAccountUpsert {
-	u.SetNull(socialaccount.FieldUserWorkbenchDeletedAt)
-	return u
-}
-
 // SetRemark sets the "remark" field.
 func (u *SocialAccountUpsert) SetRemark(v string) *SocialAccountUpsert {
 	u.Set(socialaccount.FieldRemark, v)
@@ -1287,27 +1215,6 @@ func (u *SocialAccountUpsertOne) SetUpdatedAt(v time.Time) *SocialAccountUpsertO
 func (u *SocialAccountUpsertOne) UpdateUpdatedAt() *SocialAccountUpsertOne {
 	return u.Update(func(s *SocialAccountUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// SetDeletedAt sets the "deleted_at" field.
-func (u *SocialAccountUpsertOne) SetDeletedAt(v time.Time) *SocialAccountUpsertOne {
-	return u.Update(func(s *SocialAccountUpsert) {
-		s.SetDeletedAt(v)
-	})
-}
-
-// UpdateDeletedAt sets the "deleted_at" field to the value that was provided on create.
-func (u *SocialAccountUpsertOne) UpdateDeletedAt() *SocialAccountUpsertOne {
-	return u.Update(func(s *SocialAccountUpsert) {
-		s.UpdateDeletedAt()
-	})
-}
-
-// ClearDeletedAt clears the value of the "deleted_at" field.
-func (u *SocialAccountUpsertOne) ClearDeletedAt() *SocialAccountUpsertOne {
-	return u.Update(func(s *SocialAccountUpsert) {
-		s.ClearDeletedAt()
 	})
 }
 
@@ -1738,27 +1645,6 @@ func (u *SocialAccountUpsertOne) ClearAssignedUserID() *SocialAccountUpsertOne {
 	})
 }
 
-// SetUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field.
-func (u *SocialAccountUpsertOne) SetUserWorkbenchDeletedAt(v time.Time) *SocialAccountUpsertOne {
-	return u.Update(func(s *SocialAccountUpsert) {
-		s.SetUserWorkbenchDeletedAt(v)
-	})
-}
-
-// UpdateUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field to the value that was provided on create.
-func (u *SocialAccountUpsertOne) UpdateUserWorkbenchDeletedAt() *SocialAccountUpsertOne {
-	return u.Update(func(s *SocialAccountUpsert) {
-		s.UpdateUserWorkbenchDeletedAt()
-	})
-}
-
-// ClearUserWorkbenchDeletedAt clears the value of the "user_workbench_deleted_at" field.
-func (u *SocialAccountUpsertOne) ClearUserWorkbenchDeletedAt() *SocialAccountUpsertOne {
-	return u.Update(func(s *SocialAccountUpsert) {
-		s.ClearUserWorkbenchDeletedAt()
-	})
-}
-
 // SetRemark sets the "remark" field.
 func (u *SocialAccountUpsertOne) SetRemark(v string) *SocialAccountUpsertOne {
 	return u.Update(func(s *SocialAccountUpsert) {
@@ -2002,27 +1888,6 @@ func (u *SocialAccountUpsertBulk) SetUpdatedAt(v time.Time) *SocialAccountUpsert
 func (u *SocialAccountUpsertBulk) UpdateUpdatedAt() *SocialAccountUpsertBulk {
 	return u.Update(func(s *SocialAccountUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// SetDeletedAt sets the "deleted_at" field.
-func (u *SocialAccountUpsertBulk) SetDeletedAt(v time.Time) *SocialAccountUpsertBulk {
-	return u.Update(func(s *SocialAccountUpsert) {
-		s.SetDeletedAt(v)
-	})
-}
-
-// UpdateDeletedAt sets the "deleted_at" field to the value that was provided on create.
-func (u *SocialAccountUpsertBulk) UpdateDeletedAt() *SocialAccountUpsertBulk {
-	return u.Update(func(s *SocialAccountUpsert) {
-		s.UpdateDeletedAt()
-	})
-}
-
-// ClearDeletedAt clears the value of the "deleted_at" field.
-func (u *SocialAccountUpsertBulk) ClearDeletedAt() *SocialAccountUpsertBulk {
-	return u.Update(func(s *SocialAccountUpsert) {
-		s.ClearDeletedAt()
 	})
 }
 
@@ -2450,27 +2315,6 @@ func (u *SocialAccountUpsertBulk) UpdateAssignedUserID() *SocialAccountUpsertBul
 func (u *SocialAccountUpsertBulk) ClearAssignedUserID() *SocialAccountUpsertBulk {
 	return u.Update(func(s *SocialAccountUpsert) {
 		s.ClearAssignedUserID()
-	})
-}
-
-// SetUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field.
-func (u *SocialAccountUpsertBulk) SetUserWorkbenchDeletedAt(v time.Time) *SocialAccountUpsertBulk {
-	return u.Update(func(s *SocialAccountUpsert) {
-		s.SetUserWorkbenchDeletedAt(v)
-	})
-}
-
-// UpdateUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field to the value that was provided on create.
-func (u *SocialAccountUpsertBulk) UpdateUserWorkbenchDeletedAt() *SocialAccountUpsertBulk {
-	return u.Update(func(s *SocialAccountUpsert) {
-		s.UpdateUserWorkbenchDeletedAt()
-	})
-}
-
-// ClearUserWorkbenchDeletedAt clears the value of the "user_workbench_deleted_at" field.
-func (u *SocialAccountUpsertBulk) ClearUserWorkbenchDeletedAt() *SocialAccountUpsertBulk {
-	return u.Update(func(s *SocialAccountUpsert) {
-		s.ClearUserWorkbenchDeletedAt()
 	})
 }
 

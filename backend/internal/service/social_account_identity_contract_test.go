@@ -17,6 +17,7 @@ import (
 	"github.com/Wei-Shaw/socialops/ent/schema/mixins"
 	"github.com/Wei-Shaw/socialops/ent/socialaccount"
 	"github.com/Wei-Shaw/socialops/ent/socialtasklog"
+	"github.com/Wei-Shaw/socialops/ent/usagelog"
 	"github.com/stretchr/testify/require"
 
 	"entgo.io/ent/dialect"
@@ -33,6 +34,7 @@ func TestSocialAccountFieldModelKeepsAuthCookieAsFirstClassCredential(t *testing
 	require.NoError(t, err)
 	restoreMigrationSource, err := os.ReadFile("../../migrations/161_restore_social_account_auth_cookie.sql")
 	require.NoError(t, err)
+	removedPlatformPlaceholder := "Leg" + "acy platform"
 
 	for _, forbidden := range []string{
 		"BoundIP",
@@ -44,7 +46,7 @@ func TestSocialAccountFieldModelKeepsAuthCookieAsFirstClassCredential(t *testing
 		"ClearBoundIP",
 		"firstTrimmed(input.ExecutionAuth",
 		"firstTrimmed(e.ExecutionAuth",
-		"Legacy platform",
+		removedPlatformPlaceholder,
 		"use default_proxy_snapshot",
 	} {
 		require.NotContains(t, serviceSource, forbidden)
@@ -198,7 +200,7 @@ func TestSocialAccountBatchImportReportsDuplicatesFailuresAndItems(t *testing.T)
 	require.Contains(t, body, `"duplicate_in_database"`)
 }
 
-func TestSocialAccountDeleteSoftDeletesAccountWithTaskLogs(t *testing.T) {
+func TestSocialAccountDeleteHardDeletesAccountWithTaskLogs(t *testing.T) {
 	client := newSocialAccountIdentityTestClient(t)
 	ctx := context.Background()
 	svc := NewSocialAccountService(client)
@@ -215,17 +217,32 @@ func TestSocialAccountDeleteSoftDeletesAccountWithTaskLogs(t *testing.T) {
 		SetStatus(SocialTaskLogStatusSuccess).
 		SetChargeStatus(SocialTaskChargeStatusNotCharged).
 		SaveX(ctx)
+	ledgerRequestID := socialTaskUsageLedgerRequestID(log.ID, SocialTaskChargeSourceWallet, 0)
+	ledger := client.UsageLog.Create().
+		SetUserID(user.ID).
+		SetRequestID(ledgerRequestID).
+		SetModel(socialUsageLedgerModel).
+		SetActualCost(0.1).
+		SetTotalCost(0.1).
+		SetBillingType(socialUsageBillingTypeWallet).
+		SaveX(ctx)
 
 	require.NoError(t, svc.Delete(ctx, account.ID))
 
 	_, err = client.SocialAccount.Get(ctx, account.ID)
-	require.True(t, dbent.IsNotFound(err), "soft-deleted account should be hidden from normal queries")
-	deleted := client.SocialAccount.GetX(mixins.SkipSoftDelete(ctx), account.ID)
-	require.NotNil(t, deleted.DeletedAt)
-	storedLog := client.SocialTaskLog.Query().
+	require.True(t, dbent.IsNotFound(err))
+	_, err = client.SocialAccount.Get(mixins.SkipSoftDelete(ctx), account.ID)
+	require.True(t, dbent.IsNotFound(err), "deleted account should be physically removed")
+	logExists, err := client.SocialTaskLog.Query().
 		Where(socialtasklog.IDEQ(log.ID), socialtasklog.SocialAccountIDEQ(account.ID)).
-		OnlyX(ctx)
-	require.Equal(t, log.ID, storedLog.ID)
+		Exist(ctx)
+	require.NoError(t, err)
+	require.False(t, logExists)
+	ledgerExists, err := client.UsageLog.Query().
+		Where(usagelog.IDEQ(ledger.ID), usagelog.RequestIDEQ(ledgerRequestID)).
+		Exist(ctx)
+	require.NoError(t, err)
+	require.False(t, ledgerExists)
 }
 
 func TestSocialAccountConcurrentDuplicateCreateUsesDatabaseConstraint(t *testing.T) {

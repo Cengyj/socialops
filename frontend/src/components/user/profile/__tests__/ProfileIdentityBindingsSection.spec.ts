@@ -194,7 +194,7 @@ describe('ProfileIdentityBindingsSection', () => {
     expect(wrapper.find('[data-testid="profile-binding-wechat-action"]').exists()).toBe(false)
   })
 
-  it('keeps the WeChat bind action visible when only the legacy aggregate setting is present', () => {
+  it('keeps the WeChat bind action visible when only the aggregate setting is present', () => {
     const wrapper = mount(ProfileIdentityBindingsSection, {
       global: {
         plugins: [pinia],
@@ -210,7 +210,7 @@ describe('ProfileIdentityBindingsSection', () => {
     expect(wrapper.find('[data-testid="profile-binding-wechat-action"]').exists()).toBe(true)
   })
 
-  it('starts the WeChat bind flow when only the legacy aggregate setting is present', async () => {
+  it('starts the WeChat bind flow when only the aggregate setting is present', async () => {
     const wrapper = mount(ProfileIdentityBindingsSection, {
       global: {
         plugins: [pinia],
@@ -231,7 +231,7 @@ describe('ProfileIdentityBindingsSection', () => {
     expect(locationState.current.href).toContain('redirect=%2Fprofile')
   })
 
-  it('uses explicit cached WeChat capabilities and ignores legacy prop fallbacks', () => {
+  it('uses explicit cached WeChat capabilities and ignores aggregate prop fallbacks', () => {
     const appStore = useAppStore()
     appStore.cachedPublicSettings = {
       registration_enabled: false,
@@ -299,7 +299,7 @@ describe('ProfileIdentityBindingsSection', () => {
     const appStore = useAppStore()
     const authStore = useAuthStore()
     authStore.user = createUser({
-      email: 'legacy-user@linuxdo-connect.invalid',
+      email: 'synthetic-user@linuxdo-connect.invalid',
       email_bound: false,
       auth_bindings: {
         email: { bound: false },
@@ -345,7 +345,7 @@ describe('ProfileIdentityBindingsSection', () => {
       },
       props: {
         user: createUser({
-          email: 'legacy@example.com',
+          email: 'unbound-user@example.com',
           email_bound: false,
           auth_bindings: {
             email: { bound: false },
@@ -368,7 +368,7 @@ describe('ProfileIdentityBindingsSection', () => {
       },
       props: {
         user: createUser({
-          email: 'legacy-user@linuxdo-connect.invalid',
+          email: 'synthetic-user@linuxdo-connect.invalid',
           email_bound: false,
           auth_bindings: {
             email: { bound: false },
@@ -380,7 +380,7 @@ describe('ProfileIdentityBindingsSection', () => {
       },
     })
 
-    expect(wrapper.text()).not.toContain('legacy-user@linuxdo-connect.invalid')
+    expect(wrapper.text()).not.toContain('synthetic-user@linuxdo-connect.invalid')
     expect(wrapper.get('[data-testid="profile-binding-email-status"]').text()).toBe('Not bound')
   })
 
@@ -391,7 +391,7 @@ describe('ProfileIdentityBindingsSection', () => {
       },
       props: {
         user: createUser({
-          email: 'legacy-user@wechat-connect.invalid',
+          email: 'synthetic-user@wechat-connect.invalid',
           auth_bindings: {
             email: { bound: false },
           },
@@ -402,7 +402,7 @@ describe('ProfileIdentityBindingsSection', () => {
       },
     })
 
-    expect(wrapper.text()).not.toContain('legacy-user@wechat-connect.invalid')
+    expect(wrapper.text()).not.toContain('synthetic-user@wechat-connect.invalid')
     expect(wrapper.get('[data-testid="profile-binding-email-status"]').text()).toBe('Not bound')
   })
 
@@ -507,7 +507,7 @@ describe('ProfileIdentityBindingsSection', () => {
       },
       props: {
         user: createUser({
-          email: 'legacy@example.com',
+          email: 'unbound-user@example.com',
           email_bound: false,
           auth_bindings: {
             email: { bound: false },

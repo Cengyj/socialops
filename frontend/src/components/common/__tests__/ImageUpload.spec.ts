@@ -8,7 +8,7 @@ vi.mock('vue-i18n', async () => {
   const messages: Record<string, string> = {
     'common.imageUpload.fileTooLarge': '文件过大（当前 {size}，上限 {max}）',
     'common.imageUpload.invalidImageType': '请选择图片文件',
-    'common.imageUpload.invalidMediaType': '请选择支持的媒体文件',
+    'common.imageUpload.invalidMediaType': '请选择图片文件',
     'common.imageUpload.readFailed': '读取所选文件失败',
   }
 
@@ -31,6 +31,24 @@ vi.mock('@/components/icons/Icon.vue', () => ({
 describe('ImageUpload', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('keeps long hints readable and inspectable', () => {
+    const hint = 'Upload the avatar image that should be applied during execution. SocialOps will crop and resize it to Twitter / X avatar requirements during execution.'
+    const wrapper = mount(ImageUpload, {
+      props: {
+        modelValue: '',
+        hint,
+      },
+    })
+
+    const hintNode = wrapper.get('p')
+
+    expect(hintNode.text()).toBe(hint)
+    expect(hintNode.attributes('title')).toBe(hint)
+    expect(hintNode.classes()).toContain('min-w-0')
+    expect(hintNode.classes()).toContain('break-words')
+    expect(hintNode.element.parentElement?.className).toContain('min-w-0')
   })
 
   it('localizes invalid image type errors', async () => {
@@ -78,21 +96,7 @@ describe('ImageUpload', () => {
     expect(wrapper.text()).not.toContain('File too large')
   })
 
-  it('accepts mp4 uploads in media mode and renders a video preview', async () => {
-    const originalFileReader = globalThis.FileReader
-
-    class MockFileReader {
-      result: string | ArrayBuffer | null = 'data:video/mp4;base64,QUJD'
-      onload: ((this: FileReader, ev: ProgressEvent<FileReader>) => any) | null = null
-      onerror: ((this: FileReader, ev: ProgressEvent<FileReader>) => any) | null = null
-
-      readAsDataURL(_blob: Blob) {
-        this.onload?.call(this as unknown as FileReader, new ProgressEvent('load'))
-      }
-    }
-
-    globalThis.FileReader = MockFileReader as unknown as typeof FileReader
-
+  it('rejects mp4 uploads in media mode with a localized image-only error', async () => {
     const wrapper = mount(ImageUpload, {
       props: {
         modelValue: '',
@@ -109,14 +113,11 @@ describe('ImageUpload', () => {
     await wrapper.find('input[type="file"]').trigger('change')
     await nextTick()
 
-    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['data:video/mp4;base64,QUJD'])
-    await wrapper.setProps({ modelValue: 'data:video/mp4;base64,QUJD' })
-    expect(wrapper.find('video').exists()).toBe(true)
-
-    globalThis.FileReader = originalFileReader
+    expect(wrapper.text()).toContain('请选择图片文件')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
   })
 
-  it('rejects unsupported non-image non-mp4 files in media mode with a localized error', async () => {
+  it('rejects unsupported non-image files in media mode with a localized error', async () => {
     const wrapper = mount(ImageUpload, {
       props: {
         modelValue: '',
@@ -133,7 +134,33 @@ describe('ImageUpload', () => {
     await wrapper.find('input[type="file"]').trigger('change')
     await nextTick()
 
-    expect(wrapper.text()).toContain('请选择支持的媒体文件')
-    expect(wrapper.text()).not.toContain('Please select a supported media file')
+    expect(wrapper.text()).toContain('请选择图片文件')
+    expect(wrapper.text()).not.toContain('Please choose an image file')
+  })
+
+  it('locks upload and remove controls when disabled', async () => {
+    const wrapper = mount(ImageUpload, {
+      props: {
+        modelValue: 'data:image/png;base64,QUJD',
+        disabled: true,
+      },
+    })
+    const input = wrapper.find('input[type="file"]')
+    const file = new File(['plain text'], 'note.txt', { type: 'text/plain' })
+
+    expect(input.attributes('disabled')).toBeDefined()
+    expect(wrapper.get('label').attributes('aria-disabled')).toBe('true')
+    expect(wrapper.get('button').attributes('disabled')).toBeDefined()
+
+    Object.defineProperty(input.element, 'files', {
+      configurable: true,
+      value: [file],
+    })
+    await input.trigger('change')
+    await wrapper.get('button').trigger('click')
+    await nextTick()
+
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(wrapper.text()).not.toContain('请选择图片文件')
   })
 })

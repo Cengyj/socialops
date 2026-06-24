@@ -3,12 +3,12 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"image"
 	"image/png"
-	"bytes"
 	"strings"
 	"testing"
 	"time"
@@ -25,8 +25,9 @@ func TestTaskSettingsSetDefaultRejectsInvalidStoredTemplate(t *testing.T) {
 	now := time.Now().UTC()
 	valid := &TaskTemplate{
 		ID:        "tmpl_valid",
-		Name:      "Valid login check",
-		Type:      SocialTaskActionLoginCheck,
+		Name:      "Valid follow",
+		Type:      SocialTaskActionFollow,
+		Params:    TaskTemplateParams{Targets: []string{"@valid"}},
 		IsDefault: true,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -56,7 +57,7 @@ func TestTaskSettingsSetDefaultRejectsInvalidStoredTemplate(t *testing.T) {
 	require.False(t, templates[1].IsDefault)
 }
 
-func TestTaskSettingsLoadDropsParamsUnusedByTemplateType(t *testing.T) {
+func TestTaskSettingsLoadFiltersUnsupportedTypesAndDropsParamsUnusedByTemplateType(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
 	svc := NewTaskSettingsService(client)
@@ -64,9 +65,9 @@ func TestTaskSettingsLoadDropsParamsUnusedByTemplateType(t *testing.T) {
 	now := time.Now().UTC()
 	raw, err := json.Marshal(taskTemplateDocument{Templates: []*TaskTemplate{
 		{
-			ID:   "tmpl_login",
-			Name: "Login check",
-			Type: SocialTaskActionLoginCheck,
+			ID:   "tmpl_unsupported",
+			Name: "Unsupported no-parameter action",
+			Type: "unsupported_zero_parameter_action",
 			Params: TaskTemplateParams{
 				Targets:  []string{"@stale"},
 				Contents: []string{"stale content"},
@@ -95,11 +96,9 @@ func TestTaskSettingsLoadDropsParamsUnusedByTemplateType(t *testing.T) {
 	templates, err := svc.ListTemplates(ctx, userID)
 
 	require.NoError(t, err)
-	require.Len(t, templates, 2)
+	require.Len(t, templates, 1)
 	require.Empty(t, templates[0].Params.Targets)
-	require.Empty(t, templates[0].Params.Contents)
-	require.Empty(t, templates[1].Params.Targets)
-	require.Equal(t, []string{"hello"}, templates[1].Params.Contents)
+	require.Equal(t, []string{"hello"}, templates[0].Params.Contents)
 }
 
 func TestTaskSettingsListTemplatesReturnsEmptySliceForNewUser(t *testing.T) {
@@ -115,6 +114,47 @@ func TestTaskSettingsListTemplatesReturnsEmptySliceForNewUser(t *testing.T) {
 	raw, err := json.Marshal(templates)
 	require.NoError(t, err)
 	require.Equal(t, "[]", string(raw))
+}
+
+func TestTaskSettingsApplyDefaultTemplateToTaskInputExpandsDefaultTemplate(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewTaskSettingsService(client)
+	userID := int64(45)
+
+	tmpl, err := svc.SaveTemplate(ctx, userID, &TaskTemplateInput{
+		Name: "Daily follows",
+		Type: SocialTaskActionFollow,
+		Params: TaskTemplateParams{
+			Targets: []string{" @northwind ", "@contoso"},
+		},
+		IsDefault: true,
+	})
+	require.NoError(t, err)
+
+	input := &AccountWorkbenchTaskInput{Action: " follow "}
+	err = svc.ApplyDefaultTemplateToTaskInput(ctx, userID, input)
+
+	require.NoError(t, err)
+	require.Equal(t, SocialTaskActionFollow, input.Action)
+	require.Equal(t, []string{"@northwind", "@contoso"}, input.TargetPool)
+	require.Empty(t, input.ContentPool)
+	require.Nil(t, input.Payload)
+	require.NotNil(t, input.TemplateSnapshot)
+	require.Equal(t, tmpl.ID, input.TemplateSnapshot.TemplateID)
+	require.Equal(t, "Daily follows", input.TemplateSnapshot.TemplateName)
+	require.Equal(t, SocialTaskActionFollow, input.TemplateSnapshot.TemplateType)
+	require.Equal(t, []string{"@northwind", "@contoso"}, input.TemplateSnapshot.Params.Targets)
+}
+
+func TestTaskSettingsApplyDefaultTemplateToTaskInputSkipsLoginCheckWithoutService(t *testing.T) {
+	input := &AccountWorkbenchTaskInput{Action: " login_check "}
+
+	err := (*TaskSettingsService)(nil).ApplyDefaultTemplateToTaskInput(context.Background(), 46, input)
+
+	require.NoError(t, err)
+	require.Equal(t, SocialTaskActionLoginCheck, input.Action)
+	require.Nil(t, input.TemplateSnapshot)
 }
 
 func TestTaskSettingsSaveTemplateMaterializesInlinePostMediaIntoTaskMediaAssets(t *testing.T) {

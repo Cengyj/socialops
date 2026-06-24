@@ -6,7 +6,7 @@ import {
 } from "@/api/admin/settings";
 
 describe("admin settings wechat connect helpers", () => {
-  it("normalizes legacy or noisy mode values to the backend contract", () => {
+  it("normalizes stored or noisy mode values to the backend contract", () => {
     expect(normalizeWeChatConnectMode("OPEN")).toBe("open");
     expect(normalizeWeChatConnectMode(" open_platform ")).toBe("open");
     expect(normalizeWeChatConnectMode("mp")).toBe("mp");

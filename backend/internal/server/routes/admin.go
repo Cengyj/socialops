@@ -3,7 +3,6 @@ package routes
 
 import (
 	"github.com/Wei-Shaw/socialops/internal/handler"
-	"github.com/Wei-Shaw/socialops/internal/pkg/response"
 	"github.com/Wei-Shaw/socialops/internal/server/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -24,42 +23,25 @@ func RegisterAdminRoutes(
 		registerRedeemCodeRoutes(admin, h)
 		registerPromoCodeRoutes(admin, h)
 		registerSettingsRoutes(admin, h)
-		registerDataManagementRoutes(admin, h)
 		registerBackupRoutes(admin, h)
 		registerSystemRoutes(admin, h)
 		registerSubscriptionRoutes(admin, h)
 		registerGroupRoutes(admin, h)
 		registerUserAttributeRoutes(admin, h)
-		registerAdminAPIKeyRoutes(admin, h)
-		registerRiskControlRoutes(admin)
 		registerAffiliateRoutes(admin, h)
 		registerSocialAccountAdminRoutes(admin, h)
 		registerTotalAccountAdminRoutes(admin, h)
-	}
-}
-
-func registerAdminAPIKeyRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
-	apiKeys := admin.Group("/api-keys")
-	{
-		apiKeys.PUT("/:id", h.Admin.APIKey.UpdateGroup)
+		registerGlobalProxyAdminRoutes(admin, h)
 	}
 }
 
 func registerDashboardRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	dashboard := admin.Group("/dashboard")
 	{
-		dashboard.GET("/snapshot-v2", h.Admin.Dashboard.GetSnapshotV2)
 		dashboard.GET("/stats", h.Admin.Dashboard.GetStats)
-		dashboard.GET("/realtime", h.Admin.Dashboard.GetRealtimeMetrics)
 		dashboard.GET("/trend", h.Admin.Dashboard.GetUsageTrend)
-		dashboard.GET("/groups", h.Admin.Dashboard.GetGroupStats)
-		dashboard.GET("/api-keys-trend", h.Admin.Dashboard.GetAPIKeyUsageTrend)
 		dashboard.GET("/users-trend", h.Admin.Dashboard.GetUserUsageTrend)
 		dashboard.GET("/users-ranking", h.Admin.Dashboard.GetUserSpendingRanking)
-		dashboard.POST("/users-usage", h.Admin.Dashboard.GetBatchUsersUsage)
-		dashboard.POST("/api-keys-usage", h.Admin.Dashboard.GetBatchAPIKeysUsage)
-		dashboard.GET("/user-breakdown", h.Admin.Dashboard.GetUserBreakdown)
-		dashboard.POST("/aggregation/backfill", h.Admin.Dashboard.BackfillAggregation)
 	}
 }
 
@@ -73,11 +55,8 @@ func registerUserManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		users.PUT("/:id", h.Admin.User.Update)
 		users.DELETE("/:id", h.Admin.User.Delete)
 		users.POST("/:id/balance", h.Admin.User.UpdateBalance)
-		users.GET("/:id/api-keys", h.Admin.User.GetUserAPIKeys)
 		users.GET("/:id/usage", h.Admin.User.GetUserUsage)
 		users.GET("/:id/balance-history", h.Admin.User.GetBalanceHistory)
-		users.POST("/:id/replace-group", h.Admin.User.ReplaceGroup)
-		users.GET("/:id/rpm-status", h.Admin.User.GetUserRPMStatus)
 		users.POST("/batch-concurrency", h.Admin.User.BatchUpdateConcurrency)
 
 		users.GET("/:id/attributes", h.Admin.UserAttribute.GetUserAttributes)
@@ -143,29 +122,6 @@ func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	}
 }
 
-func registerDataManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
-	dataManagement := admin.Group("/data-management")
-	{
-		dataManagement.GET("/agent/health", h.Admin.DataManagement.GetAgentHealth)
-		dataManagement.GET("/config", h.Admin.DataManagement.GetConfig)
-		dataManagement.PUT("/config", h.Admin.DataManagement.UpdateConfig)
-		dataManagement.GET("/sources/:source_type/profiles", h.Admin.DataManagement.ListSourceProfiles)
-		dataManagement.POST("/sources/:source_type/profiles", h.Admin.DataManagement.CreateSourceProfile)
-		dataManagement.PUT("/sources/:source_type/profiles/:profile_id", h.Admin.DataManagement.UpdateSourceProfile)
-		dataManagement.DELETE("/sources/:source_type/profiles/:profile_id", h.Admin.DataManagement.DeleteSourceProfile)
-		dataManagement.POST("/sources/:source_type/profiles/:profile_id/activate", h.Admin.DataManagement.SetActiveSourceProfile)
-		dataManagement.POST("/s3/test", h.Admin.DataManagement.TestS3)
-		dataManagement.GET("/s3/profiles", h.Admin.DataManagement.ListS3Profiles)
-		dataManagement.POST("/s3/profiles", h.Admin.DataManagement.CreateS3Profile)
-		dataManagement.PUT("/s3/profiles/:profile_id", h.Admin.DataManagement.UpdateS3Profile)
-		dataManagement.DELETE("/s3/profiles/:profile_id", h.Admin.DataManagement.DeleteS3Profile)
-		dataManagement.POST("/s3/profiles/:profile_id/activate", h.Admin.DataManagement.SetActiveS3Profile)
-		dataManagement.POST("/backups", h.Admin.DataManagement.CreateBackupJob)
-		dataManagement.GET("/backups", h.Admin.DataManagement.ListBackupJobs)
-		dataManagement.GET("/backups/:job_id", h.Admin.DataManagement.GetBackupJob)
-	}
-}
-
 func registerBackupRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	backup := admin.Group("/backups")
 	{
@@ -202,8 +158,6 @@ func registerSubscriptionRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		subscriptions.POST("/bulk", h.Admin.Subscription.BulkCreate)
 		subscriptions.GET("/:id", h.Admin.Subscription.GetByID)
 		subscriptions.GET("/:id/progress", h.Admin.Subscription.GetProgress)
-		subscriptions.POST("/assign", h.Admin.Subscription.Assign)
-		subscriptions.POST("/bulk-assign", h.Admin.Subscription.BulkAssign)
 		subscriptions.POST("/:id/extend", h.Admin.Subscription.Extend)
 		subscriptions.POST("/:id/reset-quota", h.Admin.Subscription.ResetQuota)
 		subscriptions.DELETE("/:id", h.Admin.Subscription.Revoke)
@@ -221,28 +175,6 @@ func registerGroupRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		groups.GET("/:id", h.Admin.Group.GetByID)
 		groups.PUT("/:id", h.Admin.Group.Update)
 		groups.DELETE("/:id", h.Admin.Group.Delete)
-	}
-}
-
-func registerRiskControlRoutes(admin *gin.RouterGroup) {
-	risk := admin.Group("/risk-control")
-	{
-		risk.GET("/status", func(c *gin.Context) {
-			response.Success(c, gin.H{
-				"enabled": false,
-				"status":  "disabled",
-				"message": "SocialOps risk control backend is not configured yet",
-			})
-		})
-		risk.GET("/logs", func(c *gin.Context) {
-			page, pageSize := response.ParsePagination(c)
-			response.Paginated(c, []gin.H{}, 0, page, pageSize)
-		})
-		risk.GET("/config", func(c *gin.Context) {
-			response.Success(c, gin.H{
-				"enabled": false,
-			})
-		})
 	}
 }
 
@@ -284,6 +216,7 @@ func registerSocialAccountAdminRoutes(admin *gin.RouterGroup, h *handler.Handler
 		sa.GET("/stats", h.Admin.AccountWorkbench.GetStats)
 		sa.GET("/export", h.Admin.AccountWorkbench.Export)
 		sa.POST("/tasks", h.Admin.AccountWorkbench.SubmitTask)
+		sa.POST("/store-workbench", h.Admin.AccountWorkbench.StoreWorkbench)
 		sa.GET("/:id", h.Admin.AccountWorkbench.GetByID)
 		sa.POST("", h.Admin.AccountWorkbench.Create)
 		sa.POST("/import", h.Admin.AccountWorkbench.Import)
@@ -297,10 +230,25 @@ func registerTotalAccountAdminRoutes(admin *gin.RouterGroup, h *handler.Handlers
 	pool := admin.Group("/total-accounts")
 	{
 		pool.GET("", h.Admin.TotalAccounts.List)
+		pool.GET("/export", h.Admin.TotalAccounts.Export)
+		pool.POST("/import", h.Admin.TotalAccounts.Import)
 		pool.POST("/batch-assign", h.Admin.TotalAccounts.BatchAssign)
 		pool.POST("/batch-reclaim", h.Admin.TotalAccounts.BatchReclaim)
 		pool.POST("/batch-delete", h.Admin.TotalAccounts.BatchDelete)
+		pool.PUT("/:id", h.Admin.TotalAccounts.Update)
 		pool.POST("/:id/assign", h.Admin.TotalAccounts.Assign)
 		pool.POST("/:id/reclaim", h.Admin.TotalAccounts.Reclaim)
+	}
+}
+
+func registerGlobalProxyAdminRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	proxies := admin.Group("/global-proxies")
+	{
+		proxies.GET("", h.Admin.GlobalProxies.List)
+		proxies.POST("", h.Admin.GlobalProxies.Create)
+		proxies.POST("/test", h.Admin.GlobalProxies.TestAll)
+		proxies.PUT("/:id", h.Admin.GlobalProxies.Update)
+		proxies.DELETE("/:id", h.Admin.GlobalProxies.Delete)
+		proxies.POST("/:id/test", h.Admin.GlobalProxies.Test)
 	}
 }

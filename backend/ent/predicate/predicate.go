@@ -21,6 +21,9 @@ type AuthIdentity func(*sql.Selector)
 // AuthIdentityChannel is the predicate function for authidentitychannel builders.
 type AuthIdentityChannel func(*sql.Selector)
 
+// GlobalProxy is the predicate function for globalproxy builders.
+type GlobalProxy func(*sql.Selector)
+
 // Group is the predicate function for group builders.
 type Group func(*sql.Selector)
 

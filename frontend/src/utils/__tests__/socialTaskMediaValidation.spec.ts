@@ -66,14 +66,14 @@ describe('socialTaskMediaValidation', () => {
     ])).toBe('source')
   })
 
-  it('allows a single executable mp4 video for post media', () => {
+  it('keeps video post media fail-closed even when the ref is executable', () => {
     expect(unsupportedSocialPostMediaKind([
       {
         source: 'library',
         storage_key: 'social-task/42/post-video.mp4',
         content_type: 'video/mp4',
       },
-    ])).toBe('')
+    ])).toBe('video')
 
     expect(socialPostMediaRefsSupported([
       {
@@ -81,7 +81,7 @@ describe('socialTaskMediaValidation', () => {
         url: 'data:video/mp4;base64,QUJD',
         content_type: 'video/mp4',
       },
-    ])).toBe(true)
+    ])).toBe(false)
   })
 
   it('keeps mixed, multiple, or unsupported video post media fail-closed', () => {
@@ -117,6 +117,6 @@ describe('socialTaskMediaValidation', () => {
         url: 'data:video/quicktime;base64,QUJD',
         content_type: 'video/quicktime',
       },
-    ])).toBe('type')
+    ])).toBe('video')
   })
 })

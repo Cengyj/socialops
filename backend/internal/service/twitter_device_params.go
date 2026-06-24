@@ -78,7 +78,7 @@ type twitterDeviceParamResponse struct {
 
 func (p *httpDeviceParamProvider) Fetch(ctx context.Context) (*twitterAuthHeaders, error) {
 	if p == nil || strings.TrimSpace(p.cfg.URL) == "" {
-		return nil, newSocialExecutionError(SocialExecutionFailureUnsupported, "twitter device fingerprint provider is not configured", nil)
+		return nil, newSocialExecutionError(SocialExecutionFailureConfiguration, "twitter device fingerprint provider is not configured", nil)
 	}
 	reqBody, err := json.Marshal(map[string]string{"collection": p.cfg.Collection})
 	if err != nil {

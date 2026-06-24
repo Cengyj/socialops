@@ -156,7 +156,7 @@ describe('ProfileInfoCard', () => {
     const wrapper = mount(ProfileInfoCard, {
       props: {
         user: createUser({
-          email: 'legacy-user@oidc-connect.invalid',
+          email: 'synthetic-user@oidc-connect.invalid',
           email_bound: false,
           auth_bindings: {
             email: { bound: false }
@@ -170,14 +170,14 @@ describe('ProfileInfoCard', () => {
       }
     })
 
-    expect(wrapper.text()).not.toContain('legacy-user@oidc-connect.invalid')
+    expect(wrapper.text()).not.toContain('synthetic-user@oidc-connect.invalid')
   })
 
-  it('does not display synthetic oauth-only emails when only legacy identity bindings mark email as unbound', () => {
+  it('does not display synthetic oauth-only emails when fallback identity bindings mark email as unbound', () => {
     const wrapper = mount(ProfileInfoCard, {
       props: {
         user: createUser({
-          email: 'legacy-user@wechat-connect.invalid',
+          email: 'synthetic-user@wechat-connect.invalid',
           identity_bindings: {
             email: { bound: false }
           }
@@ -190,7 +190,7 @@ describe('ProfileInfoCard', () => {
       }
     })
 
-    expect(wrapper.text()).not.toContain('legacy-user@wechat-connect.invalid')
+    expect(wrapper.text()).not.toContain('synthetic-user@wechat-connect.invalid')
   })
 
   it('renders the approved overview hero and two-column content shell', () => {

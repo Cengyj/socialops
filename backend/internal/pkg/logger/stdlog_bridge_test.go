@@ -95,12 +95,12 @@ func TestStdLogBridgeRoutesLevels(t *testing.T) {
 	if !strings.Contains(stderrText, "Forward request failed: timeout") {
 		t.Fatalf("stderr missing error log: %s", stderrText)
 	}
-	if !strings.Contains(stderrText, "\"legacy_stdlog\":true") {
-		t.Fatalf("stderr missing legacy_stdlog marker: %s", stderrText)
+	if !strings.Contains(stderrText, "\"stdlog_bridge\":true") {
+		t.Fatalf("stderr missing stdlog_bridge marker: %s", stderrText)
 	}
 }
 
-func TestLegacyPrintfRoutesLevels(t *testing.T) {
+func TestComponentPrintfRoutesLevels(t *testing.T) {
 	origStdout := os.Stdout
 	origStderr := os.Stderr
 	stdoutR, stdoutW, err := os.Pipe()
@@ -136,9 +136,9 @@ func TestLegacyPrintfRoutesLevels(t *testing.T) {
 		t.Fatalf("Init() error: %v", err)
 	}
 
-	LegacyPrintf("service.test", "request started")
-	LegacyPrintf("service.test", "Warning: queue full")
-	LegacyPrintf("service.test", "forward failed: timeout")
+	ComponentPrintf("service.test", "request started")
+	ComponentPrintf("service.test", "Warning: queue full")
+	ComponentPrintf("service.test", "forward failed: timeout")
 	// Skip Sync() — on Windows, fsync on pipes deadlocks (FlushFileBuffers).
 
 	_ = stdoutW.Close()
@@ -157,8 +157,8 @@ func TestLegacyPrintfRoutesLevels(t *testing.T) {
 	if !strings.Contains(stderrText, "forward failed: timeout") {
 		t.Fatalf("stderr missing error log: %s", stderrText)
 	}
-	if !strings.Contains(stderrText, "\"legacy_printf\":true") {
-		t.Fatalf("stderr missing legacy_printf marker: %s", stderrText)
+	if !strings.Contains(stderrText, "\"component_printf_bridge\":true") {
+		t.Fatalf("stderr missing component_printf_bridge marker: %s", stderrText)
 	}
 	if !strings.Contains(stderrText, "\"component\":\"service.test\"") {
 		t.Fatalf("stderr missing component field: %s", stderrText)

@@ -26,7 +26,6 @@ type User struct {
 	TotalRecharged             float64            `json:"total_recharged"`
 	RPMLimit                   int                `json:"rpm_limit"`
 
-	APIKeys       []APIKey           `json:"api_keys,omitempty"`
 	Subscriptions []UserSubscription `json:"subscriptions,omitempty"`
 }
 
@@ -36,39 +35,6 @@ type AdminUser struct {
 	Notes      string            `json:"notes"`
 	LastUsedAt *time.Time        `json:"last_used_at"`
 	GroupRates map[int64]float64 `json:"group_rates,omitempty"`
-}
-
-type APIKey struct {
-	ID          int64      `json:"id"`
-	UserID      int64      `json:"user_id"`
-	Key         string     `json:"key"`
-	Name        string     `json:"name"`
-	GroupID     *int64     `json:"group_id"`
-	Status      string     `json:"status"`
-	IPWhitelist []string   `json:"ip_whitelist"`
-	IPBlacklist []string   `json:"ip_blacklist"`
-	LastUsedAt  *time.Time `json:"last_used_at"`
-	Quota       float64    `json:"quota"`
-	QuotaUsed   float64    `json:"quota_used"`
-	ExpiresAt   *time.Time `json:"expires_at"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-
-	RateLimit5h   float64    `json:"rate_limit_5h"`
-	RateLimit1d   float64    `json:"rate_limit_1d"`
-	RateLimit7d   float64    `json:"rate_limit_7d"`
-	Usage5h       float64    `json:"usage_5h"`
-	Usage1d       float64    `json:"usage_1d"`
-	Usage7d       float64    `json:"usage_7d"`
-	Window5hStart *time.Time `json:"window_5h_start"`
-	Window1dStart *time.Time `json:"window_1d_start"`
-	Window7dStart *time.Time `json:"window_7d_start"`
-	Reset5hAt     *time.Time `json:"reset_5h_at,omitempty"`
-	Reset1dAt     *time.Time `json:"reset_1d_at,omitempty"`
-	Reset7dAt     *time.Time `json:"reset_7d_at,omitempty"`
-
-	User  *User  `json:"user,omitempty"`
-	Group *Group `json:"group,omitempty"`
 }
 
 type Group struct {
@@ -177,34 +143,6 @@ type BatchUpdateRedeemCodeFields struct {
 type BatchUpdateRedeemCodesRequest struct {
 	IDs    []int64                     `json:"ids" binding:"required,min=1"`
 	Fields BatchUpdateRedeemCodeFields `json:"fields" binding:"required"`
-}
-
-type UsageCleanupFilters struct {
-	StartTime   time.Time `json:"start_time"`
-	EndTime     time.Time `json:"end_time"`
-	UserID      *int64    `json:"user_id,omitempty"`
-	APIKeyID    *int64    `json:"api_key_id,omitempty"`
-	AccountID   *int64    `json:"account_id,omitempty"`
-	GroupID     *int64    `json:"group_id,omitempty"`
-	Model       *string   `json:"model,omitempty"`
-	RequestType *string   `json:"request_type,omitempty"`
-	Stream      *bool     `json:"stream,omitempty"`
-	BillingType *int8     `json:"billing_type,omitempty"`
-}
-
-type UsageCleanupTask struct {
-	ID           int64               `json:"id"`
-	Status       string              `json:"status"`
-	Filters      UsageCleanupFilters `json:"filters"`
-	CreatedBy    int64               `json:"created_by"`
-	DeletedRows  int64               `json:"deleted_rows"`
-	ErrorMessage *string             `json:"error_message,omitempty"`
-	CanceledBy   *int64              `json:"canceled_by,omitempty"`
-	CanceledAt   *time.Time          `json:"canceled_at,omitempty"`
-	StartedAt    *time.Time          `json:"started_at,omitempty"`
-	FinishedAt   *time.Time          `json:"finished_at,omitempty"`
-	CreatedAt    time.Time           `json:"created_at"`
-	UpdatedAt    time.Time           `json:"updated_at"`
 }
 
 type Setting struct {

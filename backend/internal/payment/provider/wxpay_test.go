@@ -340,7 +340,7 @@ func TestBuildWxpayResultURLPreservesResumeToken(t *testing.T) {
 	t.Parallel()
 
 	resultURL, err := buildWxpayResultURL("https://app.example.com/payment/result?order_id=42&resume_token=resume-42&status=success", payment.CreatePaymentRequest{
-		OrderID:     "sub2_42",
+		OrderID:     "socialops_42",
 		PaymentType: payment.TypeWxpay,
 	})
 	if err != nil {
@@ -361,8 +361,8 @@ func TestBuildWxpayResultURLPreservesResumeToken(t *testing.T) {
 	if query.Get("order_id") != "42" {
 		t.Fatalf("order_id = %q, want %q", query.Get("order_id"), "42")
 	}
-	if query.Get("out_trade_no") != "sub2_42" {
-		t.Fatalf("out_trade_no = %q, want %q", query.Get("out_trade_no"), "sub2_42")
+	if query.Get("out_trade_no") != "socialops_42" {
+		t.Fatalf("out_trade_no = %q, want %q", query.Get("out_trade_no"), "socialops_42")
 	}
 }
 
@@ -515,7 +515,7 @@ func TestCreatePaymentWithOpenIDReturnsJSAPIResult(t *testing.T) {
 	}
 
 	resp, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
-		OrderID:     "sub2_88",
+		OrderID:     "socialops_88",
 		Amount:      "66.88",
 		PaymentType: payment.TypeWxpay,
 		NotifyURL:   "https://merchant.example/payment/notify",
@@ -617,7 +617,7 @@ func TestCreatePaymentMobileH5IncludesConfiguredSceneInfo(t *testing.T) {
 	}
 
 	resp, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
-		OrderID:     "sub2_99",
+		OrderID:     "socialops_99",
 		Amount:      "66.88",
 		PaymentType: payment.TypeWxpay,
 		Subject:     "Balance Recharge",
@@ -680,7 +680,7 @@ func TestCreatePaymentMobileH5ReturnsNoAuthErrorWithoutNativeFallback(t *testing
 	}
 
 	resp, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
-		OrderID:     "sub2_100",
+		OrderID:     "socialops_100",
 		Amount:      "66.88",
 		PaymentType: payment.TypeWxpay,
 		Subject:     "Balance Recharge",

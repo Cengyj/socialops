@@ -135,7 +135,7 @@ func TestCalculatePayAmountForCurrency(t *testing.T) {
 			expected: "12.469",
 		},
 		{
-			name:     "stripe legacy zero decimal currency displays whole unit",
+			name:     "stripe special zero decimal currency displays whole unit",
 			amount:   100,
 			feeRate:  2.5,
 			currency: "ISK",

@@ -5,6 +5,7 @@ import { nextTick } from 'vue'
 
 import AnnouncementPopup from '../AnnouncementPopup.vue'
 import { useAnnouncementStore } from '@/stores/announcements'
+import { i18n } from '@/i18n'
 
 vi.mock('@/api', () => ({
   announcementsAPI: {
@@ -27,6 +28,17 @@ describe('AnnouncementPopup', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    i18n.global.setLocaleMessage('en', {
+      common: {
+        time: {
+          never: () => 'Never',
+          justNow: () => 'Just now',
+          minutesAgo: ({ named }: { named: (key: string) => unknown }) => `${named('n')}m ago`,
+          hoursAgo: ({ named }: { named: (key: string) => unknown }) => `${named('n')}h ago`,
+          daysAgo: ({ named }: { named: (key: string) => unknown }) => `${named('n')}d ago`,
+        },
+      },
+    })
     document.body.style.overflow = ''
   })
 

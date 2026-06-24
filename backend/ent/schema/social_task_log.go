@@ -41,7 +41,7 @@ func (SocialTaskLog) Fields() []ent.Field {
 		// 任务信息
 		field.String("action").
 			MaxLen(50).
-			Comment("Billable social action: login_check / follow / message / post / like / retweet"),
+			Comment("Social task action: login / login_check / follow / post / like / retweet / update_profile / update_avatar / update_banner"),
 		field.Text("target").
 			Optional().
 			Nillable().
@@ -49,13 +49,13 @@ func (SocialTaskLog) Fields() []ent.Field {
 		field.Text("content").
 			Optional().
 			Nillable().
-			Comment("操作内容（如私信内容、推文内容等）"),
+			Comment("操作内容（如发帖内容等）"),
 		field.JSON("payload", domain.SocialTaskPayload{}).
-			Optional().
+			Default(func() domain.SocialTaskPayload { return domain.SocialTaskPayload{} }).
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}).
 			Comment("Structured execution payload snapshot"),
 		field.JSON("template_snapshot", domain.SocialTaskTemplateSnapshot{}).
-			Optional().
+			Default(func() domain.SocialTaskTemplateSnapshot { return domain.SocialTaskTemplateSnapshot{} }).
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}).
 			Comment("Saved task template snapshot resolved at submission time"),
 
@@ -134,7 +134,12 @@ func (SocialTaskLog) Indexes() []ent.Index {
 		index.Fields("status"),
 		index.Fields("user_id", "action"),
 		index.Fields("social_account_id", "status"),
+		index.Fields("social_account_id").
+			StorageKey("idx_social_task_logs_one_active_per_account").
+			Unique().
+			Annotations(entsql.IndexWhere("status IN ('pending', 'running')")),
 		index.Fields("user_id", "social_account_id", "action", "idempotency_key").
+			StorageKey("idx_social_task_logs_user_account_action_idem_unique").
 			Unique().
 			Annotations(entsql.IndexWhere("idempotency_key IS NOT NULL")),
 		index.Fields("charge_status"),

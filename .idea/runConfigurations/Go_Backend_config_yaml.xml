@@ -1,0 +1,19 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Go Backend (backend/config.yaml)" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="socialops" />
+    <working_directory value="$PROJECT_DIR$/backend" />
+    <kind value="PACKAGE" />
+    <package value="github.com/Wei-Shaw/socialops/cmd/server" />
+    <directory value="$PROJECT_DIR$/backend/cmd/server" />
+    <filePath value="" />
+    <envs>
+      <env name="DATA_DIR" value="$PROJECT_DIR$/backend" />
+      <env name="SERVER_MODE" value="debug" />
+      <env name="TZ" value="Asia/Shanghai" />
+      <env name="GOTOOLCHAIN" value="auto" />
+    </envs>
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

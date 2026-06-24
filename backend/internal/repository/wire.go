@@ -20,7 +20,6 @@ func ProvideGitHubReleaseClient(cfg *config.Config) service.GitHubReleaseClient 
 // ProviderSet is the Wire provider set for all repositories
 var ProviderSet = wire.NewSet(
 	NewUserRepository,
-	NewAPIKeyRepository,
 	NewRedeemCodeRepository,
 	NewPromoCodeRepository,
 	NewAnnouncementRepository,
@@ -33,12 +32,10 @@ var ProviderSet = wire.NewSet(
 	NewUserGroupRateRepository,
 	NewAffiliateRepository,
 	NewIdempotencyRepository,
-	NewUsageCleanupRepository,
 	NewUsageLogRepository,
 
 	// Cache implementations
 	NewBillingCache,
-	NewAPIKeyCache,
 	NewEmailCache,
 	NewRedeemCache,
 	NewUpdateCache,
@@ -47,6 +44,7 @@ var ProviderSet = wire.NewSet(
 
 	// Encryptors
 	NewAESEncryptor,
+	NewTwitterExecutionAuthEncryptor,
 
 	// Backup infrastructure
 	NewPgDumper,

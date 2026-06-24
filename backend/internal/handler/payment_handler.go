@@ -23,9 +23,8 @@ type PaymentHandler struct {
 	configService  *service.PaymentConfigService
 }
 
-// NewPaymentHandler creates a user-facing payment handler. The variadic tail is
-// kept for old tests that passed the removed channel service.
-func NewPaymentHandler(paymentService *service.PaymentService, configService *service.PaymentConfigService, _ ...any) *PaymentHandler {
+// NewPaymentHandler creates a user-facing payment handler.
+func NewPaymentHandler(paymentService *service.PaymentService, configService *service.PaymentConfigService) *PaymentHandler {
 	return &PaymentHandler{paymentService: paymentService, configService: configService}
 }
 
@@ -46,10 +45,6 @@ func (h *PaymentHandler) GetPlans(c *gin.Context) {
 	}
 	groupInfo := h.configService.GetGroupInfoMap(c.Request.Context(), plans)
 	response.Success(c, dto.AvailableSubscriptionPlansFromEnt(plans, groupInfo))
-}
-
-func (h *PaymentHandler) GetChannels(c *gin.Context) {
-	response.Success(c, []any{})
 }
 
 func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {

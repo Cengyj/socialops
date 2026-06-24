@@ -50,7 +50,7 @@ describe('task settings api', () => {
       type: 'post',
       params: {
         contents: ['hello world'],
-        quote_post_url: 'https://x.com/openai/status/1',
+        quote_post_url: 'https://x.com/northwind/status/1',
         media: [{ source: 'inline', url: 'data:image/png;base64,QUJD', content_type: 'image/png', file_name: 'post-image-1.png' }],
       },
       is_default: false,
@@ -79,7 +79,7 @@ describe('task settings api', () => {
       type: 'post',
       params: {
         contents: ['hello world'],
-        quote_post_url: 'https://x.com/openai/status/1',
+        quote_post_url: 'https://x.com/northwind/status/1',
         media: [{ source: 'inline', url: 'data:image/png;base64,QUJD', content_type: 'image/png', file_name: 'post-image-1.png' }],
       },
       is_default: false,
@@ -102,7 +102,7 @@ describe('task settings api', () => {
       type: 'post',
       params: {
         contents: ['hello world'],
-        quote_post_url: 'https://x.com/openai/status/1',
+        quote_post_url: 'https://x.com/northwind/status/1',
         media: [{ source: 'inline', url: 'data:image/png;base64,QUJD', content_type: 'image/png', file_name: 'post-image-1.png' }],
       },
       is_default: false,

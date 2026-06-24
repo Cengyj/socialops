@@ -44,8 +44,8 @@ function airwallexSnapshot(overrides: Partial<PaymentRecoverySnapshot> = {}): Pa
     qrCode: '',
     expiresAt: '2099-01-01T00:10:00.000Z',
     paymentType: 'airwallex',
-    payUrl: '/payment/airwallex?order_id=101&out_trade_no=sub2_awx_101&resume_token=resume-awx',
-    outTradeNo: 'sub2_awx_101',
+    payUrl: '/payment/airwallex?order_id=101&out_trade_no=socialops_awx_101&resume_token=resume-awx',
+    outTradeNo: 'socialops_awx_101',
     clientSecret: 'awx_client_secret',
     intentId: 'int_awx_101',
     currency: 'CNY',
@@ -87,7 +87,7 @@ describe('AirwallexPaymentView', () => {
   it('从本地恢复快照读取支付参数，避免在 URL 中暴露 client_secret', async () => {
     routeState.query = {
       order_id: '101',
-      out_trade_no: 'sub2_awx_101',
+      out_trade_no: 'socialops_awx_101',
       resume_token: 'resume-awx',
     }
     window.localStorage.setItem(
@@ -114,7 +114,7 @@ describe('AirwallexPaymentView', () => {
     const checkoutOptions = redirectToCheckout.mock.calls[0][0]
     const successUrl = new URL(checkoutOptions.successUrl)
     expect(successUrl.searchParams.get('order_id')).toBe('101')
-    expect(successUrl.searchParams.get('out_trade_no')).toBe('sub2_awx_101')
+    expect(successUrl.searchParams.get('out_trade_no')).toBe('socialops_awx_101')
     expect(successUrl.searchParams.get('resume_token')).toBe('resume-awx')
   })
 

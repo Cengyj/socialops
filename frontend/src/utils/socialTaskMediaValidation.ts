@@ -34,25 +34,13 @@ export function inferSocialTaskMediaContentType(item?: SocialTaskMediaRef | null
 }
 
 export function unsupportedSocialPostMediaKind(items?: SocialTaskMediaRef[] | null): UnsupportedSocialPostMediaKind {
-  let imageCount = 0
-  let mp4VideoCount = 0
-
   for (const item of items ?? []) {
     if (!socialTaskMediaRefExecutable(item)) return 'source'
     const contentType = inferSocialTaskMediaContentType(item)
-    if (contentType === 'video/mp4') {
-      mp4VideoCount += 1
-      continue
-    }
-    if (contentType.startsWith('video/')) return 'type'
+    if (contentType.startsWith('video/')) return 'video'
     if (!contentType || !contentType.startsWith('image/')) return 'type'
-    imageCount += 1
   }
 
-  if (mp4VideoCount > 0) {
-    if (mp4VideoCount > 1) return 'video'
-    if (imageCount > 0) return 'video'
-  }
   return ''
 }
 

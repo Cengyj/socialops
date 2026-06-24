@@ -40,6 +40,9 @@ services:
       - JWT_SECRET=${JWT_SECRET:-}
       - TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY:-}
       - TZ=${TZ:-Asia/Shanghai}
+      - TWITTER_LOGIN_DEVICE_PARAMS_URL=${TWITTER_LOGIN_DEVICE_PARAMS_URL:-}
+      - TWITTER_LOGIN_DEVICE_PARAMS_COLLECTION=${TWITTER_LOGIN_DEVICE_PARAMS_COLLECTION:-twitter_parameter}
+      - TWITTER_LOGIN_EMAIL_CODE_URL=${TWITTER_LOGIN_EMAIL_CODE_URL:-}
     depends_on:
       postgres:
         condition: service_healthy

@@ -37,6 +37,7 @@ func TestRegisterUserRoutesKeepsStaticUsageRoutesReachable(t *testing.T) {
 	requireRouteRegistered(t, router, "GET", "/api/v1/usage/dashboard/trend")
 	requireRouteRegistered(t, router, "GET", "/api/v1/usage/:id")
 	requireRouteRegistered(t, router, "GET", "/api/v1/usage/:id/media")
+	requireRouteNotRegistered(t, router, "POST", "/api/v1/usage/dashboard/api-keys-usage")
 }
 
 func TestRegisterUserRoutesKeepsTaskHistoryOnUsageProjection(t *testing.T) {
@@ -55,8 +56,76 @@ func TestRegisterUserRoutesKeepsTaskHistoryOnUsageProjection(t *testing.T) {
 
 	requireRouteNotRegistered(t, router, "POST", "/api/v1/accounts/tasks/estimate")
 	requireRouteRegistered(t, router, "POST", "/api/v1/accounts/tasks")
+	requireRouteRegistered(t, router, "GET", "/api/v1/accounts/tasks")
 	requireRouteRegistered(t, router, "GET", "/api/v1/usage")
-	requireRouteNotRegistered(t, router, "GET", "/api/v1/accounts/tasks")
+}
+
+func TestRegisterUserRoutesDoesNotExposeSingleAccountImport(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	v1 := router.Group("/api/v1")
+
+	RegisterUserRoutes(
+		v1,
+		newUserRoutesTestHandlers(),
+		middleware.JWTAuthMiddleware(func(c *gin.Context) {
+			c.Next()
+		}),
+		nil,
+	)
+
+	requireRouteRegistered(t, router, "POST", "/api/v1/accounts/batch-import")
+	requireRouteNotRegistered(t, router, "POST", "/api/v1/accounts/import")
+}
+
+func TestRegisterUserRoutesDoesNotExposeRemovedAPIKeyRoutes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	v1 := router.Group("/api/v1")
+
+	RegisterUserRoutes(
+		v1,
+		newUserRoutesTestHandlers(),
+		middleware.JWTAuthMiddleware(func(c *gin.Context) {
+			c.Next()
+		}),
+		nil,
+	)
+
+	tests := []struct {
+		method string
+		path   string
+	}{
+		{method: "GET", path: "/api/v1/keys"},
+		{method: "GET", path: "/api/v1/keys/:id"},
+		{method: "POST", path: "/api/v1/keys"},
+		{method: "PUT", path: "/api/v1/keys/:id"},
+		{method: "DELETE", path: "/api/v1/keys/:id"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
+			requireRouteNotRegistered(t, router, tt.method, tt.path)
+		})
+	}
+}
+
+func TestRegisterUserRoutesDoesNotExposeRemovedPlanRoutes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	v1 := router.Group("/api/v1")
+
+	RegisterUserRoutes(
+		v1,
+		newUserRoutesTestHandlers(),
+		middleware.JWTAuthMiddleware(func(c *gin.Context) {
+			c.Next()
+		}),
+		nil,
+	)
+
+	requireRouteNotRegistered(t, router, "GET", "/api/v1/plans")
+	requireRouteNotRegistered(t, router, "GET", "/api/v1/my-plan")
 }
 
 func TestRegisterUserRoutesMatchesStaticUsageRoutesBeforeIDParam(t *testing.T) {
@@ -75,12 +144,30 @@ func TestRegisterUserRoutesMatchesStaticUsageRoutesBeforeIDParam(t *testing.T) {
 	)
 
 	tests := []struct {
-		path string
-		want string
+		path        string
+		want        string
+		notContains []string
 	}{
-		{path: "/api/v1/usage/stats", want: `"total_requests":11`},
-		{path: "/api/v1/usage/dashboard/stats", want: `"today_requests":3`},
-		{path: "/api/v1/usage/dashboard/trend", want: `"2026-06-01"`},
+		{path: "/api/v1/usage/stats", want: `"total_operations":11`},
+		{
+			path: "/api/v1/usage/dashboard/stats",
+			want: `"today_operations":3`,
+			notContains: []string{
+				`"today_requests"`,
+				`"total_requests"`,
+				`"total_tokens"`,
+				`"rpm"`,
+			},
+		},
+		{
+			path: "/api/v1/usage/dashboard/trend",
+			want: `"operations":2`,
+			notContains: []string{
+				`"requests"`,
+				`"actual_cost"`,
+				`"total_tokens"`,
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -93,6 +180,9 @@ func TestRegisterUserRoutesMatchesStaticUsageRoutesBeforeIDParam(t *testing.T) {
 			require.Equal(t, http.StatusOK, rec.Code)
 			require.Contains(t, rec.Body.String(), tt.want)
 			require.NotContains(t, rec.Body.String(), "Invalid usage ID")
+			for _, forbidden := range tt.notContains {
+				require.NotContains(t, rec.Body.String(), forbidden)
+			}
 		})
 	}
 }
@@ -100,7 +190,6 @@ func TestRegisterUserRoutesMatchesStaticUsageRoutesBeforeIDParam(t *testing.T) {
 func newUserRoutesTestHandlers() *handler.Handlers {
 	return &handler.Handlers{
 		User:             &handler.UserHandler{},
-		APIKey:           &handler.APIKeyHandler{},
 		Usage:            &handler.UsageHandler{},
 		Redeem:           &handler.RedeemHandler{},
 		Subscription:     &handler.SubscriptionHandler{},
@@ -108,7 +197,6 @@ func newUserRoutesTestHandlers() *handler.Handlers {
 		AccountWorkbench: &handler.AccountWorkbenchHandler{},
 		Proxy:            &handler.ProxyHandler{},
 		TaskSettings:     &handler.TaskSettingsHandler{},
-		Plan:             &handler.PlanHandler{},
 		Totp:             &handler.TotpHandler{},
 	}
 }
@@ -144,7 +232,7 @@ func TestRegisterUserRoutesExposesUserScopedProxiesAndTaskSettings(t *testing.T)
 
 func newUserRoutesTestHandlersWithUsageRepo(repo service.UsageLogRepository) *handler.Handlers {
 	h := newUserRoutesTestHandlers()
-	h.Usage = handler.NewUsageHandler(service.NewUsageService(repo, nil), nil)
+	h.Usage = handler.NewUsageHandler(service.NewUsageService(repo))
 	return h
 }
 
@@ -174,7 +262,7 @@ func (s *usageRouteRepoStub) ListWithFilters(context.Context, pagination.Paginat
 }
 
 func (s *usageRouteRepoStub) GetStatsWithFilters(context.Context, usagestats.UsageLogFilters) (*usagestats.UsageStats, error) {
-	return &usagestats.UsageStats{TotalRequests: 11}, nil
+	return &usagestats.UsageStats{TotalOperations: 11, SuccessCount: 8, FailedCount: 3, TotalCharged: 4.2}, nil
 }
 
 func (s *usageRouteRepoStub) GetByID(context.Context, int64, int64) (*service.UsageLog, error) {
@@ -182,9 +270,9 @@ func (s *usageRouteRepoStub) GetByID(context.Context, int64, int64) (*service.Us
 }
 
 func (s *usageRouteRepoStub) GetUserDashboardStats(context.Context, int64) (*usagestats.UserDashboardStats, error) {
-	return &usagestats.UserDashboardStats{TotalRequests: 7, TodayRequests: 3}, nil
+	return &usagestats.UserDashboardStats{TotalOperations: 7, TodayOperations: 3}, nil
 }
 
 func (s *usageRouteRepoStub) GetUserUsageTrendByUserID(context.Context, int64, time.Time, time.Time, string) ([]usagestats.TrendDataPoint, error) {
-	return []usagestats.TrendDataPoint{{Date: "2026-06-01", Requests: 2}}, nil
+	return []usagestats.TrendDataPoint{{Date: "2026-06-01", Operations: 2}}, nil
 }

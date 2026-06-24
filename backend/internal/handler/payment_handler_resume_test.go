@@ -75,7 +75,7 @@ func TestApplyWeChatPaymentResumeClaimsRejectsPaymentTypeMismatch(t *testing.T) 
 	}
 }
 
-func TestVerifyOrderPublicReturnsLegacyOrderState(t *testing.T) {
+func TestVerifyOrderPublicReturnsProviderReturnOrderState(t *testing.T) {
 	t.Parallel()
 
 	gin.SetMode(gin.TestMode)
@@ -106,7 +106,7 @@ func TestVerifyOrderPublicReturnsLegacyOrderState(t *testing.T) {
 		SetPayAmount(90.64).
 		SetFeeRate(0.03).
 		SetRechargeCode("PUBLIC-VERIFY").
-		SetOutTradeNo("legacy-order-no").
+		SetOutTradeNo("provider-return-order-no").
 		SetPaymentType(payment.TypeAlipay).
 		SetPaymentTradeNo("trade-public-verify").
 		SetOrderType(payment.OrderTypeBalance).
@@ -119,14 +119,14 @@ func TestVerifyOrderPublicReturnsLegacyOrderState(t *testing.T) {
 	require.NoError(t, err)
 
 	paymentSvc := service.NewPaymentService(client, payment.NewRegistry(), nil, nil, nil, nil, nil, nil, nil)
-	h := NewPaymentHandler(paymentSvc, nil, nil)
+	h := NewPaymentHandler(paymentSvc, nil)
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(
 		http.MethodPost,
 		"/api/v1/payment/public/orders/verify",
-		bytes.NewBufferString(`{"out_trade_no":"legacy-order-no"}`),
+		bytes.NewBufferString(`{"out_trade_no":"provider-return-order-no"}`),
 	)
 	ctx.Request.Header.Set("Content-Type", "application/json")
 
@@ -154,7 +154,7 @@ func TestVerifyOrderPublicReturnsLegacyOrderState(t *testing.T) {
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, 0, resp.Code)
 	require.Equal(t, order.ID, resp.Data.ID)
-	require.Equal(t, "legacy-order-no", resp.Data.OutTradeNo)
+	require.Equal(t, "provider-return-order-no", resp.Data.OutTradeNo)
 	require.Equal(t, 90.64, resp.Data.PayAmount)
 	require.Equal(t, 0.03, resp.Data.FeeRate)
 	require.Equal(t, "HKD", resp.Data.Currency)
@@ -220,7 +220,7 @@ func TestResolveOrderPublicByResumeTokenReturnsFrontendContractFields(t *testing
 
 	configSvc := service.NewPaymentConfigService(client, nil, []byte("0123456789abcdef0123456789abcdef"))
 	paymentSvc := service.NewPaymentService(client, payment.NewRegistry(), nil, nil, nil, configSvc, nil, nil, nil)
-	h := NewPaymentHandler(paymentSvc, nil, nil)
+	h := NewPaymentHandler(paymentSvc, nil)
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -308,7 +308,7 @@ func TestResolveOrderPublicByResumeTokenReturnsBadRequestForMismatchedToken(t *t
 
 	configSvc := service.NewPaymentConfigService(client, nil, []byte("0123456789abcdef0123456789abcdef"))
 	paymentSvc := service.NewPaymentService(client, payment.NewRegistry(), nil, nil, nil, configSvc, nil, nil, nil)
-	h := NewPaymentHandler(paymentSvc, nil, nil)
+	h := NewPaymentHandler(paymentSvc, nil)
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -348,7 +348,7 @@ func TestVerifyOrderPublicRejectsBlankOutTradeNo(t *testing.T) {
 	t.Cleanup(func() { _ = client.Close() })
 
 	paymentSvc := service.NewPaymentService(client, payment.NewRegistry(), nil, nil, nil, nil, nil, nil, nil)
-	h := NewPaymentHandler(paymentSvc, nil, nil)
+	h := NewPaymentHandler(paymentSvc, nil)
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)

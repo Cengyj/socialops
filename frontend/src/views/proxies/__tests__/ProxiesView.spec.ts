@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ProxiesView from '../ProxiesView.vue'
 
-const { listProxies } = vi.hoisted(() => ({
+const { listProxies, testAllProxies } = vi.hoisted(() => ({
   listProxies: vi.fn(),
+  testAllProxies: vi.fn(),
 }))
 
 vi.mock('@/api/proxies', () => ({
@@ -15,7 +16,7 @@ vi.mock('@/api/proxies', () => ({
     update: vi.fn(),
     delete: vi.fn(),
     test: vi.fn(),
-    testAll: vi.fn(),
+    testAll: testAllProxies,
   },
 }))
 
@@ -38,11 +39,13 @@ vi.mock('vue-i18n', async () => {
     'common.cancel': 'Cancel',
     'common.confirm': 'Confirm',
     'common.refresh': 'Refresh',
+    'common.retry': 'Retry',
     'common.edit': 'Edit',
     'common.delete': 'Delete',
     'common.clear': 'Clear',
     'common.saving': 'Saving',
     'common.processing': 'Processing',
+    'proxies.failedToLoad': 'Failed to load proxies',
     'proxies.addProxy': 'Add proxy',
     'proxies.editTitle': 'Edit proxy',
     'proxies.searchPlaceholder': 'Search proxies',
@@ -64,6 +67,7 @@ vi.mock('vue-i18n', async () => {
     'proxies.status.unknown': 'Unknown',
     'proxies.types.residential': 'Residential',
     'proxies.types.static': 'Static',
+    'proxies.types.dynamic': 'Dynamic',
     'proxies.types.mobile': 'Mobile',
     'proxies.types.datacenter': 'Datacenter',
     'proxies.columns.name': 'Name',
@@ -102,7 +106,7 @@ function mountView() {
           template: '<div><slot v-if="data.length === 0 && !loading" name="empty" /></div>',
         },
         Icon: true,
-        SearchInput: { props: ['modelValue', 'placeholder'], template: '<input :placeholder="placeholder" :value="modelValue" />' },
+        SearchInput: { props: ['modelValue', 'placeholder'], template: '<input :placeholder="placeholder" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
         Select: { props: ['modelValue', 'options'], template: '<select :value="modelValue"><option v-for="option in options" :key="option.value" :value="option.value">{{ option.label }}</option></select>' },
       },
     },
@@ -121,7 +125,7 @@ function mountViewWithRealDialog() {
           template: '<div><slot v-if="data.length === 0 && !loading" name="empty" /></div>',
         },
         Icon: true,
-        SearchInput: { props: ['modelValue', 'placeholder'], template: '<input :placeholder="placeholder" :value="modelValue" />' },
+        SearchInput: { props: ['modelValue', 'placeholder'], template: '<input :placeholder="placeholder" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
         Select: { props: ['modelValue', 'options'], template: '<select :value="modelValue"><option v-for="option in options" :key="option.value" :value="option.value">{{ option.label }}</option></select>' },
       },
     },
@@ -164,6 +168,7 @@ describe('ProxiesView', () => {
     document.body.innerHTML = ''
     vi.unstubAllGlobals()
     listProxies.mockReset()
+    testAllProxies.mockReset()
     listProxies.mockResolvedValue({
       items: [],
       total: 0,
@@ -171,6 +176,35 @@ describe('ProxiesView', () => {
       page_size: 200,
       pages: 1,
     })
+    testAllProxies.mockResolvedValue([])
+  })
+
+  it('keeps proxy load errors readable in the existing retry panel', async () => {
+    listProxies.mockRejectedValue({})
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Failed to load proxies')
+    expect(wrapper.text().match(/Failed to load proxies/g)).toHaveLength(1)
+    expect(wrapper.find('p[title="Failed to load proxies"]').exists()).toBe(false)
+    const retryButton = wrapper.get('button[aria-label="Retry"]')
+    expect(retryButton.attributes('title')).toBe('Retry')
+    expect(retryButton.classes()).toEqual(expect.arrayContaining(['min-w-0', 'max-w-full', 'shrink-0', 'justify-center']))
+    expect(retryButton.get('span').classes()).toEqual(expect.arrayContaining(['min-w-0', 'truncate']))
+
+    listProxies.mockResolvedValueOnce({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 200,
+      pages: 1,
+    })
+    await retryButton.trigger('click')
+    await flushPromises()
+
+    expect(listProxies).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('p[title="Failed to load proxies"]').exists()).toBe(false)
   })
 
   it('opens the create proxy dialog from the toolbar action', async () => {
@@ -219,5 +253,62 @@ describe('ProxiesView', () => {
     expect(dialog).not.toBeNull()
     expect(dialog?.textContent).toContain('Add proxy')
     expect(document.body.querySelector('#proxy-name')).not.toBeNull()
+  })
+
+  it('keeps the test-all action available when filters currently match no rows', async () => {
+    listProxies
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 7,
+            user_id: 10,
+            name: 'Tokyo proxy',
+            ip_type: 'residential',
+            endpoint: 'http://proxy.example.com:8080',
+            status: 'unknown',
+            latency_ms: null,
+            last_check_at: null,
+            remark: null,
+            created_at: '2026-06-06T00:00:00Z',
+            updated_at: '2026-06-06T01:00:00Z',
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 200,
+        pages: 1,
+      })
+      .mockResolvedValueOnce({
+        items: [],
+        total: 0,
+        page: 1,
+        page_size: 200,
+        pages: 1,
+      })
+      .mockResolvedValueOnce({
+        items: [],
+        total: 0,
+        page: 1,
+        page_size: 200,
+        pages: 1,
+      })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const searchInput = wrapper.find('input[placeholder="Search proxies"]')
+    await searchInput.setValue('no-match')
+    await new Promise(resolve => setTimeout(resolve, 300))
+    await flushPromises()
+
+    const testSelectedButton = wrapper.findAll('button').find(button => button.text().includes('Test selected'))
+    const testAllButton = wrapper.findAll('button').find(button => button.text().includes('Test all'))
+    expect(testSelectedButton?.attributes('disabled')).toBeDefined()
+    expect(testAllButton?.attributes('disabled')).toBeUndefined()
+
+    await testAllButton?.trigger('click')
+    await flushPromises()
+
+    expect(testAllProxies).toHaveBeenCalledTimes(1)
   })
 })

@@ -81,7 +81,7 @@ func TestExchangePendingOAuthCompletionPreviewThenFinalizeAppliesAdoptionDecisio
 
 	userEntity, err := client.User.Create().
 		SetEmail("linuxdo-123@linuxdo-connect.invalid").
-		SetUsername("legacy-name").
+		SetUsername("existing-name").
 		SetPasswordHash("hash").
 		SetRole(service.RoleUser).
 		SetStatus(service.StatusActive).
@@ -129,7 +129,7 @@ func TestExchangePendingOAuthCompletionPreviewThenFinalizeAppliesAdoptionDecisio
 
 	storedUser, err := client.User.Get(ctx, userEntity.ID)
 	require.NoError(t, err)
-	require.Equal(t, "legacy-name", storedUser.Username)
+	require.Equal(t, "existing-name", storedUser.Username)
 
 	previewSession, err := client.PendingAuthSession.Query().
 		Where(pendingauthsession.IDEQ(session.ID)).
@@ -193,7 +193,7 @@ func TestExchangePendingOAuthCompletionSkipsInvalidAvatarAdoptionWithoutBlocking
 
 	userEntity, err := client.User.Create().
 		SetEmail("invalid-avatar@example.com").
-		SetUsername("legacy-name").
+		SetUsername("existing-name").
 		SetPasswordHash("hash").
 		SetRole(service.RoleUser).
 		SetStatus(service.StatusActive).
@@ -265,7 +265,7 @@ func TestExchangePendingOAuthCompletionBindCurrentUserPreviewThenFinalizeBindsId
 
 	userEntity, err := client.User.Create().
 		SetEmail("bind-target@example.com").
-		SetUsername("legacy-name").
+		SetUsername("existing-name").
 		SetPasswordHash("hash").
 		SetRole(service.RoleUser).
 		SetStatus(service.StatusActive).
@@ -342,7 +342,7 @@ func TestExchangePendingOAuthCompletionBindCurrentUserPreviewThenFinalizeBindsId
 
 	storedUser, err := client.User.Get(ctx, userEntity.ID)
 	require.NoError(t, err)
-	require.Equal(t, "legacy-name", storedUser.Username)
+	require.Equal(t, "existing-name", storedUser.Username)
 
 	identity, err := client.AuthIdentity.Query().
 		Where(
@@ -469,7 +469,7 @@ func TestExchangePendingOAuthCompletionLoginFalseFalseBindsIdentityWithoutAdopti
 
 	userEntity, err := client.User.Create().
 		SetEmail("login-false@example.com").
-		SetUsername("legacy-name").
+		SetUsername("existing-name").
 		SetPasswordHash("hash").
 		SetRole(service.RoleUser).
 		SetStatus(service.StatusActive).
@@ -543,7 +543,7 @@ func TestExchangePendingOAuthCompletionLoginReassignsExistingDecisionIdentityRef
 
 	userEntity, err := client.User.Create().
 		SetEmail("login-reassign@example.com").
-		SetUsername("legacy-name").
+		SetUsername("existing-name").
 		SetPasswordHash("hash").
 		SetRole(service.RoleUser).
 		SetStatus(service.StatusActive).
@@ -651,7 +651,7 @@ func TestExchangePendingOAuthCompletionLoginWithoutDecisionStillBindsIdentity(t 
 
 	userEntity, err := client.User.Create().
 		SetEmail("login-nodecision@example.com").
-		SetUsername("legacy-name").
+		SetUsername("existing-name").
 		SetPasswordHash("hash").
 		SetRole(service.RoleUser).
 		SetStatus(service.StatusActive).
@@ -746,8 +746,8 @@ func TestExchangePendingOAuthCompletionExistingLoginWithSuggestedProfileSkipsAdo
 		}).
 		SetLocalFlowState(map[string]any{
 			oauthCompletionResponseKey: map[string]any{
-				"access_token":  "legacy-access-token",
-				"refresh_token": "legacy-refresh-token",
+				"access_token":  "stored-access-token",
+				"refresh_token": "stored-refresh-token",
 				"expires_in":    float64(3600),
 				"token_type":    "Bearer",
 				"redirect":      "/dashboard",
@@ -771,8 +771,8 @@ func TestExchangePendingOAuthCompletionExistingLoginWithSuggestedProfileSkipsAdo
 	payload := decodeJSONResponseData(t, recorder)
 	require.NotEmpty(t, payload["access_token"])
 	require.NotEmpty(t, payload["refresh_token"])
-	require.NotEqual(t, "legacy-access-token", payload["access_token"])
-	require.NotEqual(t, "legacy-refresh-token", payload["refresh_token"])
+	require.NotEqual(t, "stored-access-token", payload["access_token"])
+	require.NotEqual(t, "stored-refresh-token", payload["refresh_token"])
 	require.Equal(t, "/dashboard", payload["redirect"])
 	require.Equal(t, "Existing Login Example", payload["suggested_display_name"])
 	require.Equal(t, "https://cdn.example/existing-login.png", payload["suggested_avatar_url"])
@@ -909,10 +909,10 @@ func TestExchangePendingOAuthCompletionRejectsDisabledTargetUser(t *testing.T) {
 	require.Nil(t, storedSession.ConsumedAt)
 }
 
-func TestNormalizePendingOAuthCompletionResponseScrubsLegacyTokenPayload(t *testing.T) {
+func TestNormalizePendingOAuthCompletionResponseScrubsStoredTokenPayload(t *testing.T) {
 	payload := normalizePendingOAuthCompletionResponse(map[string]any{
-		"access_token":  "legacy-access-token",
-		"refresh_token": "legacy-refresh-token",
+		"access_token":  "stored-access-token",
+		"refresh_token": "stored-refresh-token",
 		"expires_in":    float64(3600),
 		"token_type":    "Bearer",
 		"redirect":      "/dashboard",
@@ -1123,7 +1123,7 @@ func TestCreateOIDCOAuthAccountExistingEmailReturnsChoicePendingSessionState(t *
 	require.Zero(t, identityCount)
 }
 
-func TestCreateOIDCOAuthAccountExistingEmailNormalizesLegacySpacingAndCase(t *testing.T) {
+func TestCreateOIDCOAuthAccountExistingEmailNormalizesStoredSpacingAndCase(t *testing.T) {
 	handler, client := newOAuthPendingFlowTestHandlerWithEmailVerification(t, false, "owner@example.com", "135790")
 	ctx := context.Background()
 
@@ -1836,7 +1836,7 @@ func TestBindOIDCOAuthLoginAppliesFirstBindGrantOnce(t *testing.T) {
 	require.Equal(t, 1, countProviderGrantRecords(t, client, existingUser.ID, "oidc", "first_bind"))
 }
 
-func TestResolvePendingOAuthTargetUserIDNormalizesLegacySpacingAndCase(t *testing.T) {
+func TestResolvePendingOAuthTargetUserIDNormalizesStoredSpacingAndCase(t *testing.T) {
 	handler, client := newOAuthPendingFlowTestHandler(t, false)
 	_ = handler
 	ctx := context.Background()
@@ -2234,7 +2234,7 @@ CREATE TABLE IF NOT EXISTS user_affiliates (
 		options.defaultSubAssigner,
 		affiliateService,
 	)
-	userSvc := service.NewUserService(userRepo, nil, nil, nil)
+	userSvc := service.NewUserService(userRepo, nil, nil)
 	var totpSvc *service.TotpService
 	if options.totpCache != nil || options.totpEncryptor != nil {
 		totpCache := options.totpCache

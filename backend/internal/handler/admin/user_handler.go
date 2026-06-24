@@ -68,6 +68,11 @@ type UpdateBalanceRequest struct {
 	Notes     string  `json:"notes"`
 }
 
+type adminUserUsageStatsResponse struct {
+	TotalOperations int64   `json:"total_operations"`
+	TotalCharged    float64 `json:"total_charged"`
+}
+
 type BindUserAuthIdentityRequest struct {
 	ProviderType    string                              `json:"provider_type"`
 	ProviderKey     string                              `json:"provider_key"`
@@ -341,32 +346,6 @@ func (h *UserHandler) UpdateBalance(c *gin.Context) {
 	})
 }
 
-// GetUserAPIKeys handles getting user's API keys
-// GET /api/v1/admin/users/:id/api-keys
-func (h *UserHandler) GetUserAPIKeys(c *gin.Context) {
-	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "Invalid user ID")
-		return
-	}
-
-	page, pageSize := response.ParsePagination(c)
-	sortBy := c.DefaultQuery("sort_by", "created_at")
-	sortOrder := c.DefaultQuery("sort_order", "desc")
-
-	keys, total, err := h.adminService.GetUserAPIKeys(c.Request.Context(), userID, page, pageSize, sortBy, sortOrder)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-
-	out := make([]dto.APIKey, 0, len(keys))
-	for i := range keys {
-		out = append(out, *dto.APIKeyFromService(&keys[i]))
-	}
-	response.Paginated(c, out, total, page, pageSize)
-}
-
 // GetUserUsage handles getting user's usage statistics
 // GET /api/v1/admin/users/:id/usage
 func (h *UserHandler) GetUserUsage(c *gin.Context) {
@@ -376,15 +355,23 @@ func (h *UserHandler) GetUserUsage(c *gin.Context) {
 		return
 	}
 
-	period := c.DefaultQuery("period", "month")
-
-	stats, err := h.adminService.GetUserUsageStats(c.Request.Context(), userID, period)
+	stats, err := h.adminService.GetUserUsageStats(c.Request.Context(), userID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
 
-	response.Success(c, stats)
+	response.Success(c, adminUserUsageStatsResponseFromService(stats))
+}
+
+func adminUserUsageStatsResponseFromService(stats *service.AdminUserUsageStats) adminUserUsageStatsResponse {
+	if stats == nil {
+		return adminUserUsageStatsResponse{}
+	}
+	return adminUserUsageStatsResponse{
+		TotalOperations: stats.TotalOperations,
+		TotalCharged:    stats.TotalCharged,
+	}
 }
 
 // GetBalanceHistory handles getting user's balance/concurrency change history
@@ -426,56 +413,6 @@ func (h *UserHandler) GetBalanceHistory(c *gin.Context) {
 		"pages":           pages,
 		"total_recharged": totalRecharged,
 	})
-}
-
-// ReplaceGroupRequest represents the request to replace a user's exclusive group
-type ReplaceGroupRequest struct {
-	OldGroupID int64 `json:"old_group_id" binding:"required,gt=0"`
-	NewGroupID int64 `json:"new_group_id" binding:"required,gt=0"`
-}
-
-// ReplaceGroup handles replacing a user's exclusive group
-// POST /api/v1/admin/users/:id/replace-group
-func (h *UserHandler) ReplaceGroup(c *gin.Context) {
-	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "Invalid user ID")
-		return
-	}
-
-	var req ReplaceGroupRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
-		return
-	}
-
-	result, err := h.adminService.ReplaceUserGroup(c.Request.Context(), userID, req.OldGroupID, req.NewGroupID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-
-	response.Success(c, gin.H{
-		"migrated_keys": result.MigratedKeys,
-	})
-}
-
-// GetUserRPMStatus 返回指定用户当前分钟的 RPM 用量
-// GET /api/v1/admin/users/:id/rpm-status
-func (h *UserHandler) GetUserRPMStatus(c *gin.Context) {
-	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "Invalid user ID")
-		return
-	}
-
-	status, err := h.adminService.GetUserRPMStatus(c.Request.Context(), userID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-
-	response.Success(c, status)
 }
 
 // BatchUpdateConcurrency 批量修改用户并发数

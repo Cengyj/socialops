@@ -200,9 +200,13 @@ docker compose up -d
 | `ADMIN_EMAIL` | No | `admin@socialops.local` | Admin email |
 | `ADMIN_PASSWORD` | No | *(auto-generated)* | Admin password |
 | `TZ` | No | `Asia/Shanghai` | Timezone |
+| `TWITTER_LOGIN_DEVICE_PARAMS_URL` | No | - | Device fingerprint API for Twitter/X account login |
+| `TWITTER_LOGIN_EMAIL_CODE_URL` | No | - | Email verification-code API for Twitter/X account login |
 See `.env.example` for all available options.
 
 > **Note:** The `docker-deploy.sh` script automatically generates `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, and `POSTGRES_PASSWORD` for you.
+
+> **Twitter/X login:** the account workbench `login` action intentionally fails closed with "登录依赖服务未配置，本次未扣费" until the Twitter/X login helper service URLs are configured through `.env` or `config.yaml`.
 
 ### Easy Migration (Local Directory Version)
 

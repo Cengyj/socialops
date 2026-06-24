@@ -24,6 +24,8 @@ type Tx struct {
 	AuthIdentity *AuthIdentityClient
 	// AuthIdentityChannel is the client for interacting with the AuthIdentityChannel builders.
 	AuthIdentityChannel *AuthIdentityChannelClient
+	// GlobalProxy is the client for interacting with the GlobalProxy builders.
+	GlobalProxy *GlobalProxyClient
 	// Group is the client for interacting with the Group builders.
 	Group *GroupClient
 	// IdentityAdoptionDecision is the client for interacting with the IdentityAdoptionDecision builders.
@@ -204,6 +206,7 @@ func (tx *Tx) init() {
 	tx.AnnouncementRead = NewAnnouncementReadClient(tx.config)
 	tx.AuthIdentity = NewAuthIdentityClient(tx.config)
 	tx.AuthIdentityChannel = NewAuthIdentityChannelClient(tx.config)
+	tx.GlobalProxy = NewGlobalProxyClient(tx.config)
 	tx.Group = NewGroupClient(tx.config)
 	tx.IdentityAdoptionDecision = NewIdentityAdoptionDecisionClient(tx.config)
 	tx.PaymentAuditLog = NewPaymentAuditLogClient(tx.config)

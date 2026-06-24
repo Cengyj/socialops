@@ -98,7 +98,7 @@ func (s *AuthService) loginOrRegisterVerifiedEmailOAuth(
 				}
 				created = true
 			} else {
-				logger.LegacyPrintf("service.auth", "[Auth] Database error during %s oauth login: %v", providerType, err)
+				logger.ComponentPrintf("service.auth", "[Auth] Database error during %s oauth login: %v", providerType, err)
 				return nil, nil, ErrServiceUnavailable
 			}
 		}
@@ -124,12 +124,12 @@ func (s *AuthService) loginOrRegisterVerifiedEmailOAuth(
 	if user.Username == "" && strings.TrimSpace(input.Username) != "" {
 		user.Username = strings.TrimSpace(input.Username)
 		if err := s.userRepo.Update(ctx, user); err != nil {
-			logger.LegacyPrintf("service.auth", "[Auth] Failed to update username after %s oauth login: %v", providerType, err)
+			logger.ComponentPrintf("service.auth", "[Auth] Failed to update username after %s oauth login: %v", providerType, err)
 		}
 	}
 	if !created {
 		if err := s.ApplyProviderDefaultSettingsOnFirstBind(ctx, user.ID, providerType); err != nil {
-			logger.LegacyPrintf("service.auth", "[Auth] Failed to apply %s first bind defaults: %v", providerType, err)
+			logger.ComponentPrintf("service.auth", "[Auth] Failed to apply %s first bind defaults: %v", providerType, err)
 		}
 	}
 	s.RecordSuccessfulLogin(ctx, user.ID)

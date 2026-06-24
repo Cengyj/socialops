@@ -119,6 +119,7 @@ func (User) Fields() []ent.Field {
 
 func (User) Edges() []ent.Edge {
 	return []ent.Edge{
+		// Historical api_keys rows remain only for migration/accounting consistency.
 		edge.To("api_keys", APIKey.Type),
 		edge.To("redeem_codes", RedeemCode.Type),
 		edge.To("subscriptions", UserSubscription.Type),

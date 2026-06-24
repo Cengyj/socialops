@@ -94,8 +94,7 @@ export function useOnboardingTour(options: OnboardingOptions) {
   const startTour = async (startIndex = 0) => {
     // 动态获取当前用户角色和步骤
     const isAdmin = userStore.user?.role === 'admin'
-    const isSimpleMode = userStore.isSimpleMode
-    const steps = isAdmin ? getAdminSteps(t, isSimpleMode) : getUserSteps(t)
+    const steps = isAdmin ? getAdminSteps(t) : getUserSteps(t)
 
     // 确保 DOM 就绪
     await nextTick()
@@ -151,6 +150,13 @@ export function useOnboardingTour(options: OnboardingOptions) {
         }
       },
       onPrevClick: () => {
+        if ((driverInstance?.getActiveIndex() ?? 0) <= 0) {
+          markAsSeen()
+          driverInstance?.destroy()
+          onboardingStore.setDriverInstance(null)
+          return
+        }
+
         driverInstance?.movePrevious()
       },
       onCloseClick: () => {
@@ -256,6 +262,7 @@ export function useOnboardingTour(options: OnboardingOptions) {
           // 3. 状态更新
           const isLastStep = state.activeIndex === (config.steps?.length ?? 0) - 1
           const activeNextBtn = nextButton || footerEl.querySelector(`.${CLASS_NEXT_BTN}`)
+          const activePrevBtn = previousButton || footerEl.querySelector(`.${CLASS_PREV_BTN}`)
 
           if (activeNextBtn) {
              if (isLastStep) {
@@ -263,6 +270,23 @@ export function useOnboardingTour(options: OnboardingOptions) {
              } else {
                activeNextBtn.classList.remove(CLASS_DONE_BTN)
              }
+          }
+
+          if ((state.activeIndex ?? 0) <= 0 && activePrevBtn instanceof HTMLButtonElement) {
+            activePrevBtn.disabled = false
+            activePrevBtn.removeAttribute('disabled')
+            activePrevBtn.removeAttribute('aria-disabled')
+            activePrevBtn.classList.remove('driver-popover-btn-disabled')
+            if (!activePrevBtn.dataset.skipBound) {
+              activePrevBtn.dataset.skipBound = 'true'
+              activePrevBtn.addEventListener('click', (event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                markAsSeen()
+                driverInstance?.destroy()
+                onboardingStore.setDriverInstance(null)
+              }, { capture: true })
+            }
           }
         } catch (e) {
           console.error('Onboarding Tour Render Error:', e)

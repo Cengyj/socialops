@@ -9,7 +9,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Wei-Shaw/socialops/internal/config"
 	"github.com/Wei-Shaw/socialops/internal/pkg/logger"
 	"golang.org/x/sync/singleflight"
 )
@@ -21,7 +20,6 @@ const (
 	cacheWriteSetSubscription
 	cacheWriteUpdateSubscriptionUsage
 	cacheWriteDeductBalance
-	cacheWriteUpdateRateLimitUsage
 )
 
 const (
@@ -35,7 +33,6 @@ type cacheWriteTask struct {
 	kind             cacheWriteKind
 	userID           int64
 	groupID          int64
-	apiKeyID         int64
 	balance          float64
 	amount           float64
 	subscriptionData *SubscriptionCacheData
@@ -56,11 +53,6 @@ type BillingCacheService struct {
 func NewBillingCacheService(
 	cache BillingCache,
 	userRepo UserRepository,
-	_ UserSubscriptionRepository,
-	_ APIKeyRepository,
-	_ any,
-	_ UserGroupRateRepository,
-	_ *config.Config,
 ) *BillingCacheService {
 	svc := &BillingCacheService{
 		cache:    cache,
@@ -141,26 +133,22 @@ func (s *BillingCacheService) runCacheWrite(ctx context.Context, task cacheWrite
 	switch task.kind {
 	case cacheWriteSetBalance:
 		if err := s.cache.SetUserBalance(ctx, task.userID, task.balance); err != nil {
-			logger.LegacyPrintf("service.billing_cache", "set balance cache failed for user %d: %v", task.userID, err)
+			logger.ComponentPrintf("service.billing_cache", "set balance cache failed for user %d: %v", task.userID, err)
 		}
 	case cacheWriteSetSubscription:
 		if task.subscriptionData == nil {
 			return
 		}
 		if err := s.cache.SetSubscriptionCache(ctx, task.userID, task.groupID, task.subscriptionData); err != nil {
-			logger.LegacyPrintf("service.billing_cache", "set subscription cache failed for user %d group %d: %v", task.userID, task.groupID, err)
+			logger.ComponentPrintf("service.billing_cache", "set subscription cache failed for user %d group %d: %v", task.userID, task.groupID, err)
 		}
 	case cacheWriteUpdateSubscriptionUsage:
 		if err := s.cache.UpdateSubscriptionUsage(ctx, task.userID, task.groupID, task.amount); err != nil {
-			logger.LegacyPrintf("service.billing_cache", "update subscription cache failed for user %d group %d: %v", task.userID, task.groupID, err)
+			logger.ComponentPrintf("service.billing_cache", "update subscription cache failed for user %d group %d: %v", task.userID, task.groupID, err)
 		}
 	case cacheWriteDeductBalance:
 		if err := s.cache.DeductUserBalance(ctx, task.userID, task.amount); err != nil {
-			logger.LegacyPrintf("service.billing_cache", "deduct balance cache failed for user %d: %v", task.userID, err)
-		}
-	case cacheWriteUpdateRateLimitUsage:
-		if err := s.cache.UpdateAPIKeyRateLimitUsage(ctx, task.apiKeyID, task.amount); err != nil {
-			logger.LegacyPrintf("service.billing_cache", "update api key rate limit cache failed for key %d: %v", task.apiKeyID, err)
+			logger.ComponentPrintf("service.billing_cache", "deduct balance cache failed for user %d: %v", task.userID, err)
 		}
 	}
 }
@@ -239,11 +227,4 @@ func (s *BillingCacheService) InvalidateSubscription(ctx context.Context, userID
 		return nil
 	}
 	return s.cache.InvalidateSubscriptionCache(ctx, userID, groupID)
-}
-
-func (s *BillingCacheService) InvalidateAPIKeyRateLimit(ctx context.Context, keyID int64) error {
-	if s == nil || s.cache == nil {
-		return nil
-	}
-	return s.cache.InvalidateAPIKeyRateLimit(ctx, keyID)
 }

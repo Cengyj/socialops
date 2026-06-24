@@ -357,28 +357,28 @@ onMounted(async () => {
     orderId = routeOrderId
   }
 
-  const hasLegacyFallbackContext = readRouteQueryString('trade_status').trim() !== ''
-  const shouldUsePublicOutTradeNo = outTradeNo !== '' && (hasLegacyFallbackContext || routeOrderId > 0 || orderId > 0)
+  const hasProviderReturnStatusContext = readRouteQueryString('trade_status').trim() !== ''
+  const shouldUsePublicOutTradeNo = outTradeNo !== '' && (hasProviderReturnStatusContext || routeOrderId > 0 || orderId > 0)
 
   if (!order.value && orderId && (!resumeToken || routeOrderId > 0)) {
     try {
       setResolvedOrder(await paymentStore.pollOrderStatus(orderId))
     } catch (_err: unknown) {
-      // Order lookup failed, will try legacy fallback below when possible.
+      // Order lookup failed, will try public out_trade_no recovery below when possible.
     }
   }
 
   if (!order.value && shouldUsePublicOutTradeNo && (!resumeToken || resumeTokenLookupFailed)) {
-    const legacyOrder = await resolveOrderFromOutTradeNo(outTradeNo)
-    if (legacyOrder) {
-      setResolvedOrder(legacyOrder)
+    const publicOutTradeNoOrder = await resolveOrderFromOutTradeNo(outTradeNo)
+    if (publicOutTradeNoOrder) {
+      setResolvedOrder(publicOutTradeNoOrder)
       if (!orderId) {
-        orderId = legacyOrder.id
+        orderId = publicOutTradeNoOrder.id
       }
     }
   }
 
-  if (!order.value && !orderId && outTradeNo && hasLegacyFallbackContext) {
+  if (!order.value && !orderId && outTradeNo && hasProviderReturnStatusContext) {
     returnInfo.value = {
       outTradeNo,
       money: String(route.query.money || ''),
@@ -399,7 +399,7 @@ onMounted(async () => {
       try {
         return await paymentStore.pollOrderStatus(orderId)
       } catch (_err: unknown) {
-        // Fall through to legacy public verification when order polling is unavailable.
+        // Fall through to public out_trade_no verification when order polling is unavailable.
       }
     }
 

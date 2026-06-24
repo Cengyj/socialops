@@ -13,7 +13,6 @@ func ProvideAdminHandlers(
 	userHandler *admin.UserHandler,
 	groupHandler *admin.GroupHandler,
 	announcementHandler *admin.AnnouncementHandler,
-	dataManagementHandler *admin.DataManagementHandler,
 	backupHandler *admin.BackupHandler,
 	redeemHandler *admin.RedeemHandler,
 	promoHandler *admin.PromoHandler,
@@ -21,18 +20,17 @@ func ProvideAdminHandlers(
 	systemHandler *admin.SystemHandler,
 	subscriptionHandler *admin.SubscriptionHandler,
 	userAttributeHandler *admin.UserAttributeHandler,
-	apiKeyHandler *admin.AdminAPIKeyHandler,
 	paymentHandler *admin.PaymentHandler,
 	affiliateHandler *admin.AffiliateHandler,
 	accountWorkbenchAdminHandler *admin.AccountWorkbenchAdminHandler,
 	totalAccountsHandler *admin.TotalAccountsHandler,
+	globalProxyHandler *admin.GlobalProxyHandler,
 ) *AdminHandlers {
 	return &AdminHandlers{
 		Dashboard:        dashboardHandler,
 		User:             userHandler,
 		Group:            groupHandler,
 		Announcement:     announcementHandler,
-		DataManagement:   dataManagementHandler,
 		Backup:           backupHandler,
 		Redeem:           redeemHandler,
 		Promo:            promoHandler,
@@ -40,11 +38,11 @@ func ProvideAdminHandlers(
 		System:           systemHandler,
 		Subscription:     subscriptionHandler,
 		UserAttribute:    userAttributeHandler,
-		APIKey:           apiKeyHandler,
 		Payment:          paymentHandler,
 		Affiliate:        affiliateHandler,
 		AccountWorkbench: accountWorkbenchAdminHandler,
 		TotalAccounts:    totalAccountsHandler,
+		GlobalProxies:    globalProxyHandler,
 	}
 }
 
@@ -67,8 +65,7 @@ func ProvideAdminSettingHandler(settingService *service.SettingService, emailSer
 	return h
 }
 
-// ProvidePaymentHandler avoids exposing NewPaymentHandler's optional legacy
-// variadic argument to Wire.
+// ProvidePaymentHandler wires the user-facing payment handler.
 func ProvidePaymentHandler(paymentService *service.PaymentService, configService *service.PaymentConfigService) *PaymentHandler {
 	return NewPaymentHandler(paymentService, configService)
 }
@@ -82,7 +79,6 @@ func ProvideAccountWorkbenchAdminHandler(svc *service.SocialAccountService, ipSv
 func ProvideHandlers(
 	authHandler *AuthHandler,
 	userHandler *UserHandler,
-	apiKeyHandler *APIKeyHandler,
 	usageHandler *UsageHandler,
 	redeemHandler *RedeemHandler,
 	subscriptionHandler *SubscriptionHandler,
@@ -95,12 +91,10 @@ func ProvideHandlers(
 	accountWorkbenchHandler *AccountWorkbenchHandler,
 	proxyHandler *ProxyHandler,
 	taskSettingsHandler *TaskSettingsHandler,
-	planHandler *PlanHandler,
 ) *Handlers {
 	return &Handlers{
 		Auth:             authHandler,
 		User:             userHandler,
-		APIKey:           apiKeyHandler,
 		Usage:            usageHandler,
 		Redeem:           redeemHandler,
 		Subscription:     subscriptionHandler,
@@ -113,7 +107,6 @@ func ProvideHandlers(
 		AccountWorkbench: accountWorkbenchHandler,
 		Proxy:            proxyHandler,
 		TaskSettings:     taskSettingsHandler,
-		Plan:             planHandler,
 	}
 }
 
@@ -122,7 +115,6 @@ var ProviderSet = wire.NewSet(
 	// Top-level handlers
 	NewAuthHandler,
 	NewUserHandler,
-	NewAPIKeyHandler,
 	NewUsageHandler,
 	NewRedeemHandler,
 	NewSubscriptionHandler,
@@ -131,17 +123,15 @@ var ProviderSet = wire.NewSet(
 	ProvideSettingHandler,
 	ProvidePaymentHandler,
 	NewPaymentWebhookHandler,
-	NewAccountWorkbenchHandler,
+	NewAccountWorkbenchHandlerWithGlobalProxies,
 	NewProxyHandler,
 	NewTaskSettingsHandler,
-	NewPlanHandler,
 
 	// Admin handlers
 	admin.NewDashboardHandler,
 	admin.NewUserHandler,
 	admin.NewGroupHandler,
 	admin.NewAnnouncementHandler,
-	admin.NewDataManagementHandler,
 	admin.NewBackupHandler,
 	admin.NewRedeemHandler,
 	admin.NewPromoHandler,
@@ -149,11 +139,11 @@ var ProviderSet = wire.NewSet(
 	ProvideSystemHandler,
 	admin.NewSubscriptionHandler,
 	admin.NewUserAttributeHandler,
-	admin.NewAdminAPIKeyHandler,
 	admin.NewPaymentHandler,
 	admin.NewAffiliateHandler,
 	ProvideAccountWorkbenchAdminHandler,
 	admin.NewTotalAccountsHandler,
+	admin.NewGlobalProxyHandler,
 
 	// AdminHandlers and Handlers constructors
 	ProvideAdminHandlers,

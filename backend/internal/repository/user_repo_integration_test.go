@@ -127,9 +127,9 @@ func (s *UserRepoSuite) TestGetByEmail() {
 }
 
 func (s *UserRepoSuite) TestGetByEmail_NormalizesSpacingAndCaseOnPostgres() {
-	user := s.mustCreateUser(&service.User{Email: " Legacy@Example.com "})
+	user := s.mustCreateUser(&service.User{Email: " Stored@Example.com "})
 
-	got, err := s.repo.GetByEmail(s.ctx, "  legacy@example.com  ")
+	got, err := s.repo.GetByEmail(s.ctx, "  stored@example.com  ")
 	s.Require().NoError(err, "GetByEmail normalized lookup")
 	s.Require().Equal(user.ID, got.ID)
 }
@@ -140,9 +140,9 @@ func (s *UserRepoSuite) TestGetByEmail_NotFound() {
 }
 
 func (s *UserRepoSuite) TestExistsByEmail_NormalizesSpacingAndCaseOnPostgres() {
-	s.mustCreateUser(&service.User{Email: " Legacy@Example.com "})
+	s.mustCreateUser(&service.User{Email: " Stored@Example.com "})
 
-	exists, err := s.repo.ExistsByEmail(s.ctx, "  LEGACY@example.com  ")
+	exists, err := s.repo.ExistsByEmail(s.ctx, "  STORED@example.com  ")
 	s.Require().NoError(err, "ExistsByEmail normalized lookup")
 	s.Require().True(exists)
 }

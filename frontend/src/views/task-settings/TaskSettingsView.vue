@@ -1,127 +1,32 @@
 <template>
   <AppLayout>
     <div class="space-y-5">
-      <div v-if="loadError" class="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-950/30">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p class="text-sm font-medium text-red-700 dark:text-red-300">{{ t('taskSettings.failedToLoad') }}</p>
-            <p class="mt-1 text-sm text-red-600 dark:text-red-300/80">{{ loadError }}</p>
-          </div>
-          <button type="button" class="btn btn-secondary shrink-0" @click="loadTemplates">{{ t('common.retry') }}</button>
-        </div>
-      </div>
+      <LoadErrorBanner
+        v-if="loadError"
+        :title="t('taskSettings.failedToLoad')"
+        :message="loadError"
+        :retry-label="t('common.retry')"
+        @retry="loadTemplates"
+      />
 
-      <section class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:border-dark-700 dark:bg-dark-800">
-        <div class="flex gap-2 overflow-x-auto">
-          <button
-            v-for="meta in taskTypeCards"
-            :key="meta.type"
-            type="button"
-            :data-testid="`task-type-${meta.type}`"
-            :class="[
-              'min-w-[170px] rounded-lg border px-3 py-3 text-left transition-colors',
-              activeType === meta.type
-                ? 'border-primary-300 bg-primary-50 text-primary-900 dark:border-primary-800 dark:bg-primary-900/20 dark:text-primary-100'
-                : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 dark:border-dark-700 dark:hover:border-dark-600 dark:hover:bg-dark-700/60'
-            ]"
-            @click="chooseType(meta.type)"
-          >
-            <span class="flex items-center gap-2">
-              <span :class="['flex h-8 w-8 items-center justify-center rounded-lg', meta.tone]">
-                <Icon :name="meta.icon" size="sm" />
-              </span>
-              <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ meta.label }}</span>
-            </span>
-            <span class="mt-2 block text-xs leading-5 text-gray-500 dark:text-dark-400">{{ meta.requirement }}</span>
-          </button>
-        </div>
-      </section>
+      <TaskTypeSelector :active-type="activeType" :cards="taskTypeCards" @select="chooseType" />
 
-      <section data-testid="template-stats" class="grid gap-2 sm:grid-cols-3">
-        <div
-          v-for="stat in templateStats"
-          :key="stat.label"
-          :data-testid="stat.testId"
-          class="rounded-lg border border-gray-200 bg-white px-3 py-2.5 shadow-sm dark:border-dark-700 dark:bg-dark-800"
-        >
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0">
-              <div class="truncate text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ stat.label }}</div>
-              <div class="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">{{ stat.meta }}</div>
-            </div>
-            <div class="shrink-0 text-lg font-semibold leading-6 text-gray-900 dark:text-white">{{ stat.value }}</div>
-          </div>
-        </div>
-      </section>
+      <TemplateStatsGrid :stats="templateStats" />
 
-      <div class="grid items-start gap-4 xl:grid-cols-[320px_minmax(0,1fr)_320px]">
-        <section class="min-w-0 rounded-lg border border-gray-200 bg-white shadow-sm dark:border-dark-700 dark:bg-dark-800">
-          <div class="border-b border-gray-100 p-4 dark:border-dark-700">
-            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('taskSettings.savedConfigs.title') }}</h3>
-            <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-dark-400">{{ t('taskSettings.savedConfigs.description', { type: taskTypeLabel(activeType) }) }}</p>
-          </div>
-
-          <div v-if="loading" class="space-y-2 p-4">
-            <div class="skeleton h-14 w-full"></div>
-            <div class="skeleton h-20 w-full"></div>
-            <div class="skeleton h-20 w-full"></div>
-          </div>
-          <div v-else-if="templates.length === 0" class="p-4">
-            <div class="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500 dark:border-dark-700 dark:bg-dark-900/50 dark:text-dark-400">
-              <p class="font-medium text-gray-800 dark:text-white">{{ t('taskSettings.empty.title') }}</p>
-              <p class="mt-1 leading-6">{{ t('taskSettings.empty.description') }}</p>
-              <button type="button" class="btn btn-primary btn-sm mt-3 w-full justify-center" @click="newTemplate">
-                <Icon name="plus" size="sm" />
-                <span>{{ t('taskSettings.newTemplate') }}</span>
-              </button>
-            </div>
-          </div>
-          <div v-else-if="orderedTemplates.length === 0" class="p-4">
-            <div data-testid="active-type-empty-state" class="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500 dark:border-dark-700 dark:bg-dark-900/50 dark:text-dark-400">
-              <p class="font-medium text-gray-800 dark:text-white">{{ t('taskSettings.savedConfigs.emptyTitle') }}</p>
-              <p class="mt-1 leading-6">{{ t('taskSettings.savedConfigs.emptyDescription', { type: taskTypeLabel(activeType) }) }}</p>
-              <button type="button" class="btn btn-secondary btn-sm mt-3 w-full justify-center" @click="newTemplate">
-                <Icon name="plus" size="sm" />
-                <span>{{ t('taskSettings.savedConfigs.newForType', { type: taskTypeLabel(activeType) }) }}</span>
-              </button>
-            </div>
-          </div>
-          <div v-else class="space-y-2 p-3">
-            <button
-              v-for="template in orderedTemplates"
-              :key="template.id"
-              type="button"
-              data-template-card="saved"
-              :data-testid="`saved-template-card-${template.id}`"
-              :class="[
-                'w-full rounded-lg border p-3 text-left transition-colors',
-                selectedTemplateId === template.id
-                  ? 'border-primary-300 bg-primary-50 dark:border-primary-800 dark:bg-primary-900/20'
-                  : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 dark:border-dark-700 dark:bg-dark-800 dark:hover:border-dark-600 dark:hover:bg-dark-700/60'
-              ]"
-              @click="selectTemplate(template)"
-            >
-              <span class="flex min-w-0 items-start justify-between gap-3">
-                <span class="min-w-0">
-                  <span class="block truncate text-sm font-semibold text-gray-900 dark:text-white">{{ template.name }}</span>
-                  <span class="mt-1 flex flex-wrap items-center gap-1.5">
-                    <span :class="['badge', taskTypeBadgeClass(template.type)]">{{ taskTypeLabel(template.type) }}</span>
-                    <span :class="['badge', isTemplateUsable(template) ? 'badge-success' : 'badge-warning']">
-                      {{ templateParameterStateLabel(template) }}
-                    </span>
-                    <span v-if="template.is_default" class="badge badge-primary">{{ t('taskSettings.defaultBadge') }}</span>
-                  </span>
-                </span>
-                <Icon name="chevronRight" size="sm" class="mt-1 shrink-0 text-gray-400" />
-              </span>
-            </button>
-
-            <button type="button" class="btn btn-secondary btn-sm mt-3 w-full justify-center" @click="newTemplate">
-              <Icon name="plus" size="sm" />
-              <span>{{ t('taskSettings.savedConfigs.newForType', { type: taskTypeLabel(activeType) }) }}</span>
-            </button>
-          </div>
-        </section>
+      <div class="grid items-start gap-4 2xl:grid-cols-[320px_minmax(0,1fr)_320px]">
+        <SavedTemplateList
+          :active-type-label="taskTypeLabel(activeType)"
+          :is-template-usable="isTemplateUsable"
+          :loading="loading"
+          :selected-template-id="selectedTemplateId"
+          :task-type-badge-class="taskTypeBadgeClass"
+          :task-type-label="taskTypeLabel"
+          :template-parameter-state-label="templateParameterStateLabel"
+          :templates="orderedTemplates"
+          :total-template-count="templates.length"
+          @new-template="newTemplate"
+          @select="selectTemplate"
+        />
 
         <section class="min-w-0 rounded-lg border border-gray-200 bg-white shadow-sm dark:border-dark-700 dark:bg-dark-800">
           <div class="border-b border-gray-100 p-4 dark:border-dark-700">
@@ -136,53 +41,34 @@
                 </div>
                 <p class="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-dark-400">{{ activeTypeDescription }}</p>
               </div>
-              <div data-testid="editor-template-actions" class="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  class="btn btn-primary btn-sm"
-                  data-testid="save-template-button"
-                  :disabled="!canSave || saving"
-                  :title="saveDisabledReason || undefined"
-                  @click="saveTemplate"
-                >
-                  {{ saving ? t('common.saving') : t('taskSettings.save') }}
-                </button>
-                <button v-if="activePoolKind" type="button" class="btn btn-secondary btn-sm" data-testid="validation-button" :disabled="saving" @click="validateCurrent">{{ t('taskSettings.validate') }}</button>
-                <button
-                  type="button"
-                  class="btn btn-secondary btn-sm"
-                  data-testid="copy-template-button"
-                  :disabled="!selectedTemplateId || saving"
-                  @click="copyCurrentTemplate"
-                >
-                  <Icon name="copy" size="sm" />
-                  <span>{{ t('taskSettings.copy') }}</span>
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-secondary btn-sm"
-                  data-testid="set-default-button"
-                  :disabled="!selectedTemplateId || saving || form.isDefault"
-                  @click="setDefault"
-                >
-                  <Icon name="checkCircle" size="sm" />
-                  <span>{{ t('taskSettings.setDefault') }}</span>
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-secondary btn-sm text-red-600 hover:border-red-200 hover:bg-red-50 dark:text-red-300 dark:hover:border-red-900/60 dark:hover:bg-red-950/30"
-                  data-testid="delete-template-button"
-                  :disabled="!selectedTemplateId || saving"
-                  @click="deleteCurrentTemplate"
-                >
-                  <Icon name="trash" size="sm" />
-                  <span>{{ t('common.delete') }}</span>
-                </button>
-              </div>
+              <TemplateEditorActions
+                :can-save="canSave"
+                :has-selected-template="!!selectedTemplateId"
+                :is-default="form.isDefault"
+                :operation="templateOperation"
+                :save-disabled-reason="saveDisabledReason"
+                :saving="saving"
+                @copy="copyCurrentTemplate"
+                @delete="deleteCurrentTemplate"
+                @save="saveTemplate"
+                @set-default="setDefault"
+                @validate="validateCurrent"
+              />
             </div>
           </div>
 
           <div class="space-y-5 p-4 lg:p-5">
+            <div
+              v-if="editorOperationError"
+              class="min-w-0 break-words rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"
+              role="alert"
+              aria-live="assertive"
+              aria-atomic="true"
+              :title="editorOperationError"
+            >
+              {{ editorOperationError }}
+            </div>
+
             <div class="grid gap-4 md:grid-cols-[minmax(0,1fr)_240px]">
               <div>
                 <label class="input-label" for="template-name">{{ t('taskSettings.form.name') }}</label>
@@ -209,25 +95,25 @@
               <div class="flex flex-col gap-3 border-b border-gray-100 p-4 dark:border-dark-700 md:flex-row md:items-start md:justify-between">
                 <div>
                   <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ activeValueLabel }}</h3>
-                  <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-dark-400">{{ activeValueHelp }}</p>
+                  <p class="mt-1 min-w-0 break-words text-xs leading-5 text-gray-500 dark:text-dark-400" :title="activeValueHelp">{{ activeValueHelp }}</p>
                 </div>
-                <div class="flex flex-wrap gap-2">
-                  <input ref="fileInputRef" type="file" class="hidden" accept=".txt,text/plain,.csv,text/csv" @change="handleFileImport" />
-                  <button type="button" class="btn btn-secondary btn-sm" data-testid="import-button" @click="fileInputRef?.click()">
+                <div class="flex min-w-0 flex-wrap gap-2">
+                  <input ref="fileInputRef" type="file" class="hidden" accept=".txt,text/plain,.csv,text/csv" :disabled="saving" @change="handleFileImport" />
+                  <button type="button" class="btn btn-secondary btn-sm h-10 min-w-0 max-w-full justify-center" data-testid="import-button" :aria-label="importButtonTitle" :title="importButtonTitle" :disabled="saving" @click="fileInputRef?.click()">
                     <Icon name="upload" size="sm" />
-                    <span>{{ t('taskSettings.importFile') }}</span>
+                    <span class="min-w-0 truncate">{{ t('taskSettings.importFile') }}</span>
                   </button>
-                  <button type="button" class="btn btn-secondary btn-sm" data-testid="view-all-button" :disabled="activeValues.length === 0" @click="viewAllDialogOpen = true">
+                  <button type="button" class="btn btn-secondary btn-sm h-10 min-w-0 max-w-full justify-center" data-testid="view-all-button" :aria-label="viewAllButtonTitle" :title="viewAllButtonTitle" :disabled="saving || activeValues.length === 0" @click="viewAllDialogOpen = true">
                     <Icon name="eye" size="sm" />
-                    <span>{{ t('taskSettings.viewAll') }}</span>
+                    <span class="min-w-0 truncate">{{ t('taskSettings.viewAll') }}</span>
                   </button>
-                  <button type="button" class="btn btn-secondary btn-sm" data-testid="dedupe-button" :disabled="poolAnalysis.duplicateCount === 0" @click="dedupeValues">
+                  <button type="button" class="btn btn-secondary btn-sm h-10 min-w-0 max-w-full justify-center" data-testid="dedupe-button" :aria-label="dedupeButtonTitle" :title="dedupeButtonTitle" :disabled="saving || poolAnalysis.duplicateCount === 0" @click="dedupeValues">
                     <Icon name="sparkles" size="sm" />
-                    <span>{{ t('taskSettings.dedupe') }}</span>
+                    <span class="min-w-0 truncate">{{ t('taskSettings.dedupe') }}</span>
                   </button>
-                  <button type="button" class="btn btn-secondary btn-sm" data-testid="clear-pool-button" :disabled="activeValues.length === 0" @click="clearValues">
+                  <button type="button" class="btn btn-secondary btn-sm h-10 min-w-0 max-w-full justify-center" data-testid="clear-pool-button" :aria-label="clearPoolButtonTitle" :title="clearPoolButtonTitle" :disabled="saving || !canClearActiveValues" @click="clearValues">
                     <Icon name="x" size="sm" />
-                    <span>{{ t('taskSettings.clearValues') }}</span>
+                    <span class="min-w-0 truncate">{{ t('taskSettings.clearValues') }}</span>
                   </button>
                 </div>
               </div>
@@ -241,63 +127,18 @@
                   @input="resetValidationResult"
                 ></textarea>
 
-                <div class="space-y-3">
-                  <div class="grid grid-cols-2 gap-2">
-                    <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-700" data-testid="pool-valid">
-                      <p class="text-xs text-gray-500 dark:text-dark-400">{{ t('taskSettings.pool.valid') }}</p>
-                      <p class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ poolAnalysis.validCount }}</p>
-                    </div>
-                    <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-700" data-testid="pool-empty-lines">
-                      <p class="text-xs text-gray-500 dark:text-dark-400">{{ t('taskSettings.pool.emptyLines') }}</p>
-                      <p class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ poolAnalysis.emptyLineCount }}</p>
-                    </div>
-                    <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-700" data-testid="pool-duplicates">
-                      <p class="text-xs text-gray-500 dark:text-dark-400">{{ t('taskSettings.pool.duplicates') }}</p>
-                      <p class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ poolAnalysis.duplicateCount }}</p>
-                    </div>
-                    <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-700" data-testid="pool-too-long">
-                      <p class="text-xs text-gray-500 dark:text-dark-400">{{ t('taskSettings.pool.tooLong') }}</p>
-                      <p class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ poolAnalysis.tooLongCount }}</p>
-                    </div>
-                    <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-700">
-                      <p class="text-xs text-gray-500 dark:text-dark-400">{{ t('taskSettings.pool.remaining') }}</p>
-                      <p class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ poolAnalysis.remaining }}</p>
-                    </div>
-                  </div>
-
-                  <div
-                    data-testid="pool-capacity"
-                    :class="[
-                      'rounded-lg border p-3 text-sm',
-                      poolAnalysis.overCapacity
-                        ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300'
-                        : 'border-gray-200 bg-gray-50 text-gray-600 dark:border-dark-700 dark:bg-dark-900/50 dark:text-dark-300'
-                    ]"
-                  >
-                    {{ poolCapacityMessage }}
-                  </div>
-
-                  <div
-                    v-if="poolAnalysis.emptyLineCount > 0"
-                    data-testid="pool-empty-lines-hint"
-                    class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200"
-                  >
-                    {{ t('taskSettings.pool.emptyLinesHint', { count: poolAnalysis.emptyLineCount }) }}
-                  </div>
-                  <div v-if="poolAnalysis.tooLongCount > 0" class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
-                    {{ t('taskSettings.pool.tooLongHint', { max: MAX_TEMPLATE_VALUE_LENGTH }) }}
-                  </div>
-                  <div v-else-if="poolAnalysis.duplicateCount > 0" class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-300">
-                    {{ t('taskSettings.pool.duplicateHint', { count: poolAnalysis.duplicateCount }) }}
-                  </div>
-                </div>
+                <TemplatePoolAnalysisPanel
+                  :analysis="poolAnalysis"
+                  :capacity-message="poolCapacityMessage"
+                  :max-value-length="MAX_TEMPLATE_VALUE_LENGTH"
+                />
               </div>
             </div>
 
             <div v-if="form.type === 'post'" class="rounded-lg border border-gray-200 dark:border-dark-700">
               <div class="border-b border-gray-100 p-4 dark:border-dark-700">
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('taskSettings.media.postEnhancementsTitle') }}</h3>
-                <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-dark-400">{{ t('taskSettings.media.postImagesHint') }}</p>
+                <p class="mt-1 min-w-0 break-words text-xs leading-5 text-gray-500 dark:text-dark-400" :title="t('taskSettings.media.postImagesHint')">{{ t('taskSettings.media.postImagesHint') }}</p>
               </div>
 
               <div class="space-y-5 p-4">
@@ -315,8 +156,8 @@
                 </div>
 
                 <div class="space-y-3">
-                  <div class="flex flex-wrap items-start justify-between gap-3">
-                    <div>
+                  <div class="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-0">
                       <h4 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('taskSettings.media.postImages') }}</h4>
                       <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-dark-400">
                         {{ t('taskSettings.media.postImageCount', { count: postMediaCount, max: MAX_POST_MEDIA_ITEMS }) }}
@@ -324,13 +165,15 @@
                     </div>
                     <button
                       type="button"
-                      class="btn btn-secondary btn-sm"
+                      class="btn btn-secondary btn-sm h-10 min-w-0 max-w-full justify-center"
                       data-testid="add-post-media-button"
+                      :aria-label="addPostMediaButtonTitle"
+                      :title="addPostMediaButtonTitle"
                       :disabled="!canAddPostMedia"
                       @click="addPostMedia"
                     >
                       <Icon name="plus" size="sm" />
-                      <span>{{ t('taskSettings.media.addPostImage') }}</span>
+                      <span class="min-w-0 truncate">{{ t('taskSettings.media.addPostImage') }}</span>
                     </button>
                   </div>
 
@@ -349,15 +192,19 @@
                       :data-testid="`post-media-item-${index}`"
                       class="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-900/50"
                     >
-                      <div class="mb-3 flex items-center justify-between gap-3">
-                        <div class="text-sm font-medium text-gray-900 dark:text-white">{{ t('taskSettings.media.postImageItem', { index: index + 1 }) }}</div>
+                      <div class="mb-3 flex min-w-0 items-center justify-between gap-3">
+                        <div class="min-w-0 break-words text-sm font-medium text-gray-900 dark:text-white" :title="t('taskSettings.media.postImageItem', { index: index + 1 })">{{ t('taskSettings.media.postImageItem', { index: index + 1 }) }}</div>
                         <button
                           type="button"
-                          class="btn btn-secondary btn-sm text-red-600 hover:border-red-200 hover:bg-red-50 dark:text-red-300 dark:hover:border-red-900/60 dark:hover:bg-red-950/30"
+                          class="btn btn-secondary btn-sm h-10 min-w-0 max-w-full justify-center text-red-600 hover:border-red-200 hover:bg-red-50 dark:text-red-300 dark:hover:border-red-900/60 dark:hover:bg-red-950/30"
+                          :data-testid="`remove-post-media-button-${index}`"
+                          :aria-label="removePostMediaButtonTitle"
+                          :title="removePostMediaButtonTitle"
+                          :disabled="saving"
                           @click="removePostMedia(index)"
                         >
                           <Icon name="trash" size="sm" />
-                          <span>{{ t('taskSettings.media.removePostImage') }}</span>
+                          <span class="min-w-0 truncate">{{ t('taskSettings.media.removePostImage') }}</span>
                         </button>
                       </div>
                       <ImageUpload
@@ -366,9 +213,11 @@
                         :preview-src="storedMediaPreviewURLs.post[index] || media.url || ''"
                         :preview-content-type="media.content_type || ''"
                         :has-value="hasMediaRef(media)"
+                        :max-size="MAX_TASK_MEDIA_UPLOAD_BYTES"
                         :upload-label="t('taskSettings.media.uploadPostImage')"
                         :remove-label="t('taskSettings.media.removePostImage')"
                         :hint="t('taskSettings.media.postImagesHint')"
+                        :disabled="saving"
                         @update:model-value="(value) => updatePostMedia(index, value)"
                       />
                     </div>
@@ -380,7 +229,7 @@
             <div v-else-if="form.type === 'update_profile'" class="rounded-lg border border-gray-200 dark:border-dark-700">
               <div class="border-b border-gray-100 p-4 dark:border-dark-700">
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('taskSettings.profile.title') }}</h3>
-                <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-dark-400">{{ activeValueHelp }}</p>
+                <p class="mt-1 min-w-0 break-words text-xs leading-5 text-gray-500 dark:text-dark-400" :title="activeValueHelp">{{ activeValueHelp }}</p>
               </div>
 
               <div class="grid gap-4 p-4 md:grid-cols-2">
@@ -449,7 +298,7 @@
             <div v-else-if="form.type === 'update_avatar'" data-testid="avatar-editor" class="rounded-lg border border-gray-200 dark:border-dark-700">
               <div class="border-b border-gray-100 p-4 dark:border-dark-700">
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('taskSettings.media.avatarTitle') }}</h3>
-                <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-dark-400">{{ t('taskSettings.media.avatarHint') }}</p>
+                <p class="mt-1 min-w-0 break-words text-xs leading-5 text-gray-500 dark:text-dark-400" :title="t('taskSettings.media.avatarHint')">{{ t('taskSettings.media.avatarHint') }}</p>
               </div>
 
               <div class="p-4">
@@ -457,9 +306,11 @@
                   :model-value="form.avatar.url || ''"
                   :preview-src="storedMediaPreviewURLs.avatar || form.avatar.url || ''"
                   :has-value="hasMediaRef(form.avatar)"
+                  :max-size="MAX_TASK_MEDIA_UPLOAD_BYTES"
                   :upload-label="t('taskSettings.media.uploadAvatar')"
                   :remove-label="t('taskSettings.media.removeAvatar')"
                   :hint="t('taskSettings.media.avatarHint')"
+                  :disabled="saving"
                   @update:model-value="updateAvatarMedia"
                 />
               </div>
@@ -468,7 +319,7 @@
             <div v-else-if="form.type === 'update_banner'" data-testid="banner-editor" class="rounded-lg border border-gray-200 dark:border-dark-700">
               <div class="border-b border-gray-100 p-4 dark:border-dark-700">
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('taskSettings.media.bannerTitle') }}</h3>
-                <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-dark-400">{{ t('taskSettings.media.bannerHint') }}</p>
+                <p class="mt-1 min-w-0 break-words text-xs leading-5 text-gray-500 dark:text-dark-400" :title="t('taskSettings.media.bannerHint')">{{ t('taskSettings.media.bannerHint') }}</p>
               </div>
 
               <div class="p-4">
@@ -476,9 +327,11 @@
                   :model-value="form.banner.url || ''"
                   :preview-src="storedMediaPreviewURLs.banner || form.banner.url || ''"
                   :has-value="hasMediaRef(form.banner)"
+                  :max-size="MAX_TASK_MEDIA_UPLOAD_BYTES"
                   :upload-label="t('taskSettings.media.uploadBanner')"
                   :remove-label="t('taskSettings.media.removeBanner')"
                   :hint="t('taskSettings.media.bannerHint')"
+                  :disabled="saving"
                   @update:model-value="updateBannerMedia"
                 />
               </div>
@@ -486,52 +339,11 @@
           </div>
         </section>
 
-        <aside class="min-w-0 space-y-4">
-          <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-dark-700 dark:bg-dark-800">
-            <div class="text-xs font-medium uppercase text-gray-500 dark:text-dark-400">{{ t('taskSettings.summary.title') }}</div>
-            <div class="mt-3 space-y-3 text-sm">
-              <div class="flex justify-between gap-3">
-                <span class="text-gray-500 dark:text-dark-400">{{ t('taskSettings.summary.type') }}</span>
-                <span class="font-medium text-gray-900 dark:text-white">{{ taskTypeLabel(form.type) }}</span>
-              </div>
-              <div v-if="activePoolKind" class="flex justify-between gap-3">
-                <span class="text-gray-500 dark:text-dark-400">{{ activePoolKind === 'targets' ? t('taskSettings.summary.targets') : t('taskSettings.summary.contents') }}</span>
-                <span class="font-medium text-gray-900 dark:text-white">{{ activeValues.length }}</span>
-              </div>
-              <div v-for="row in structuredSummaryRows" :key="row.label" class="flex justify-between gap-3">
-                <span class="text-gray-500 dark:text-dark-400">{{ row.label }}</span>
-                <span class="font-medium text-gray-900 dark:text-white">{{ row.value }}</span>
-              </div>
-              <div v-if="!activePoolKind && structuredSummaryRows.length === 0" class="flex justify-between gap-3">
-                <span class="text-gray-500 dark:text-dark-400">{{ t('taskSettings.summary.params') }}</span>
-                <span class="font-medium text-gray-900 dark:text-white">{{ t('taskSettings.counts.none') }}</span>
-              </div>
-              <div class="flex justify-between gap-3">
-                <span class="text-gray-500 dark:text-dark-400">{{ t('taskSettings.summary.default') }}</span>
-                <span class="font-medium text-gray-900 dark:text-white">{{ form.isDefault ? t('common.yes') : t('common.no') }}</span>
-              </div>
-            </div>
-          </section>
-
-          <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-dark-700 dark:bg-dark-800">
-            <div v-if="validationResult" :class="['rounded-lg border p-3 text-sm', validationResult.valid ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300' : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300']">
-              <div class="font-medium">{{ validationResult.valid ? t('taskSettings.validation.valid') : t('taskSettings.validation.invalid') }}</div>
-              <ul v-if="validationResult.errors.length > 0" class="mt-2 list-disc space-y-1 pl-5">
-                <li v-for="error in validationResult.errors" :key="error">{{ error }}</li>
-              </ul>
-            </div>
-            <div v-else-if="saveDisabledReason" class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-300">
-              {{ saveDisabledReason }}
-            </div>
-            <div v-else class="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300">
-              {{ t('taskSettings.validation.valid') }}
-            </div>
-
-            <div class="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm leading-6 text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
-              {{ t('taskSettings.summary.executionHint') }}
-            </div>
-          </section>
-        </aside>
+        <TemplateSummaryPanel
+          :rows="templateSummaryRows"
+          :save-disabled-reason="saveDisabledReason"
+          :validation-result="validationResult"
+        />
       </div>
     </div>
 
@@ -540,26 +352,50 @@
         {{ t('taskSettings.pool.empty') }}
       </div>
       <div v-else class="max-h-[520px] divide-y divide-gray-100 overflow-auto rounded-lg border border-gray-200 dark:divide-dark-700 dark:border-dark-700">
-        <div v-for="(value, index) in activeValues" :key="`${index}-${value}`" class="grid grid-cols-[64px_minmax(0,1fr)] gap-3 px-3 py-2 text-sm">
+        <div v-for="(value, index) in activeValues" :key="`${index}-${value}`" class="grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-3 px-3 py-2 text-sm">
           <span class="text-gray-500 dark:text-dark-400">#{{ index + 1 }}</span>
-          <span class="break-all font-medium text-gray-900 dark:text-white">{{ value }}</span>
+          <span class="min-w-0 break-all font-medium text-gray-900 dark:text-white" :title="value">{{ value }}</span>
         </div>
       </div>
       <template #footer>
-        <button type="button" class="btn btn-primary" @click="viewAllDialogOpen = false">{{ t('common.close') }}</button>
+        <button
+          type="button"
+          class="btn btn-primary min-w-0 max-w-full justify-center"
+          :aria-label="t('common.close')"
+          :title="t('common.close')"
+          @click="viewAllDialogOpen = false"
+        >
+          <span class="min-w-0 truncate">{{ t('common.close') }}</span>
+        </button>
       </template>
     </BaseDialog>
 
     <BaseDialog :show="deleteDialogOpen" :title="t('taskSettings.deleteDialog.title')" @close="closeDeleteDialog">
       <div v-if="templateToDelete" class="space-y-3">
-        <p class="text-sm text-gray-600 dark:text-gray-300">{{ t('taskSettings.deleteDialog.description', { name: templateToDelete.name }) }}</p>
-        <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-200">
-          {{ t('taskSettings.deleteDialog.warning') }}
+        <p class="min-w-0 break-words text-sm text-gray-600 dark:text-gray-300" :title="deleteDialogDescription">{{ deleteDialogDescription }}</p>
+        <div
+          class="min-w-0 break-words rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-200"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          :title="deleteDialogWarning"
+        >
+          {{ deleteDialogWarning }}
+        </div>
+        <div
+          v-if="deleteDialogError"
+          class="min-w-0 break-words rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+          :title="deleteDialogError"
+        >
+          {{ deleteDialogError }}
         </div>
         <dl class="grid gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm dark:border-dark-700 dark:bg-dark-900/50">
           <div class="flex min-w-0 justify-between gap-3">
             <dt class="text-gray-500 dark:text-dark-400">{{ t('taskSettings.form.name') }}</dt>
-            <dd class="min-w-0 truncate text-gray-900 dark:text-white">{{ templateToDelete.name }}</dd>
+            <dd class="min-w-0 break-all text-right text-gray-900 sm:truncate dark:text-white" :title="templateToDelete.name">{{ templateToDelete.name }}</dd>
           </div>
           <div class="flex min-w-0 justify-between gap-3">
             <dt class="text-gray-500 dark:text-dark-400">{{ t('taskSettings.summary.type') }}</dt>
@@ -572,9 +408,25 @@
         </dl>
       </div>
       <template #footer>
-        <button type="button" class="btn btn-secondary" :disabled="saving" @click="closeDeleteDialog">{{ t('common.cancel') }}</button>
-        <button type="button" class="btn btn-danger" :disabled="saving" @click="confirmDeleteTemplate">
-          {{ saving ? t('common.processing') : t('common.delete') }}
+        <button
+          type="button"
+          class="btn btn-secondary min-w-0 max-w-full justify-center"
+          :aria-label="deleteDialogCancelButtonTitle"
+          :title="deleteDialogCancelButtonTitle"
+          :disabled="saving"
+          @click="closeDeleteDialog"
+        >
+          <span class="min-w-0 truncate">{{ t('common.cancel') }}</span>
+        </button>
+        <button
+          type="button"
+          class="btn btn-danger min-w-0 max-w-full justify-center"
+          :aria-label="deleteDialogConfirmButtonTitle"
+          :title="deleteDialogConfirmButtonTitle"
+          :disabled="saving"
+          @click="confirmDeleteTemplate"
+        >
+          <span class="min-w-0 truncate">{{ deleteDialogConfirmButtonTitle }}</span>
         </button>
       </template>
     </BaseDialog>
@@ -586,8 +438,27 @@ import { computed, onBeforeUnmount, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import LoadErrorBanner from '@/components/common/LoadErrorBanner.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ImageUpload from '@/components/common/ImageUpload.vue'
+import SavedTemplateList from './components/SavedTemplateList.vue'
+import TemplateEditorActions from './components/TemplateEditorActions.vue'
+import TemplatePoolAnalysisPanel from './components/TemplatePoolAnalysisPanel.vue'
+import TemplateSummaryPanel, { type TemplateSummaryRow } from './components/TemplateSummaryPanel.vue'
+import TaskTypeSelector from './components/TaskTypeSelector.vue'
+import TemplateStatsGrid from './components/TemplateStatsGrid.vue'
+import {
+  parameterPoolClearButtonTitle as buildParameterPoolClearButtonTitle,
+  parameterPoolDedupeButtonTitle as buildParameterPoolDedupeButtonTitle,
+  parameterPoolImportButtonTitle as buildParameterPoolImportButtonTitle,
+  parameterPoolViewAllButtonTitle as buildParameterPoolViewAllButtonTitle,
+} from './parameterPoolActionTitles'
+import {
+  templateDeleteCancelButtonTitle as buildTemplateDeleteCancelButtonTitle,
+  templateDeleteConfirmButtonTitle as buildTemplateDeleteConfirmButtonTitle,
+  templateEditorAddPostMediaButtonTitle as buildAddPostMediaButtonTitle,
+  templateEditorRemovePostMediaButtonTitle as buildRemovePostMediaButtonTitle,
+} from './templateEditorActionTitles'
 import taskSettingsAPI from '@/api/taskSettings'
 import type {
   SocialProfileUpdateParams,
@@ -600,40 +471,79 @@ import type {
 import { useAppStore } from '@/stores/app'
 import { extractSafeApiErrorMessage } from '@/utils/apiError'
 import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
-import { socialPostMediaRefsSupported, socialTaskMediaRefExecutable, unsupportedSocialPostMediaKind } from '@/utils/socialTaskMediaValidation'
+import { createObjectURLSafe, revokeObjectURLSafe } from '@/utils/browser'
+import {
+  cloneMediaRef,
+  cloneMediaRefs,
+  hasMediaRef,
+  normalizeMediaRef,
+  normalizeMediaRefs,
+  updateInlineMediaRef,
+} from './taskMedia'
+import {
+  MAX_TEMPLATE_POOL_VALUES,
+  MAX_TEMPLATE_VALUE_LENGTH,
+  analyzeTemplatePool,
+  countIgnoredEmptyValues,
+  normalizeTemplatePoolValues,
+  splitContentValues,
+  splitTargetValues,
+  type TemplatePoolAnalysis,
+} from './templatePool'
+import {
+  TASK_SETTINGS_MAX_POST_MEDIA_ITEMS,
+  TASK_SETTINGS_PARAMETER_TASK_TYPES,
+  TASK_SETTINGS_TARGET_TYPES,
+  countProfileFields,
+  isTaskTemplateUsable as isTemplateUsable,
+  resolveTaskTemplateSaveDisabledReason,
+  type ParameterTaskTemplateType,
+} from './templateReadiness'
+import { createTaskSettingsErrorMessages } from './taskSettingsErrorMessages'
 
-type ParameterTaskTemplateType = Extract<
-  TaskTemplateType,
-  'login' | 'follow' | 'like' | 'retweet' | 'post' | 'update_profile' | 'update_avatar' | 'update_banner'
->
 type ParameterTaskTemplate = TaskTemplate & { type: ParameterTaskTemplateType }
 type IconName = 'checkCircle' | 'userPlus' | 'sync' | 'chatBubble' | 'edit' | 'userCircle' | 'grid'
+type TemplateOperation = 'validate' | 'save' | 'copy' | 'default' | 'delete'
+type TaskSettingsOperationErrorScope =
+  | 'task_settings.validate'
+  | 'task_settings.save'
+  | 'task_settings.copy'
+  | 'task_settings.default'
+  | 'task_settings.delete'
 
 const { t } = useI18n()
 const appStore = useAppStore()
 
-const MAX_TEMPLATE_POOL_VALUES = 500
-const MAX_TEMPLATE_VALUE_LENGTH = 2048
-const MAX_POST_MEDIA_ITEMS = 4
-const TASK_TYPES: ParameterTaskTemplateType[] = ['login', 'follow', 'like', 'retweet', 'post', 'update_profile', 'update_avatar', 'update_banner']
-const targetTypes = new Set<ParameterTaskTemplateType>(['follow', 'like', 'retweet'])
+const MAX_POST_MEDIA_ITEMS = TASK_SETTINGS_MAX_POST_MEDIA_ITEMS
+const MAX_TASK_MEDIA_UPLOAD_BYTES = 2 * 1024 * 1024
+const TASK_TYPES = TASK_SETTINGS_PARAMETER_TASK_TYPES
+const targetTypes = TASK_SETTINGS_TARGET_TYPES
 
 const templates = ref<ParameterTaskTemplate[]>([])
 const selectedTemplateId = ref('')
 const activeType = ref<ParameterTaskTemplateType>('follow')
 const loading = ref(false)
-const saving = ref(false)
+const templateOperation = ref<TemplateOperation | null>(null)
+const saving = computed(() => templateOperation.value !== null)
+const deleteDialogCancelButtonTitle = computed(() => buildTemplateDeleteCancelButtonTitle(t, { saving: saving.value }))
+const deleteDialogConfirmButtonTitle = computed(() => buildTemplateDeleteConfirmButtonTitle(t, { deleting: templateOperation.value === 'delete' }))
 const loadError = ref('')
 const validationResult = ref<TaskTemplateValidationResult | null>(null)
+const editorOperationError = ref('')
 const viewAllDialogOpen = ref(false)
 const deleteDialogOpen = ref(false)
 const templateToDelete = ref<ParameterTaskTemplate | null>(null)
+const deleteDialogError = ref('')
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const storedMediaPreviewURLs = reactive({
   avatar: '',
   banner: '',
   post: [] as string[],
 })
+let latestTemplateLoadRequestID = 0
+let storedMediaPreviewRequestID = 0
+let latestValidationRequestID = 0
+let editorContextRevision = 0
 
 const form = reactive({
   id: '',
@@ -704,6 +614,32 @@ const structuredSummaryRows = computed(() => {
       return []
   }
 })
+const templateSummaryRows = computed<TemplateSummaryRow[]>(() => {
+  const rows: TemplateSummaryRow[] = [
+    { key: 'type', label: t('taskSettings.summary.type'), value: taskTypeLabel(form.type) },
+  ]
+  if (activePoolKind.value) {
+    rows.push({
+      key: activePoolKind.value,
+      label: activePoolKind.value === 'targets' ? t('taskSettings.summary.targets') : t('taskSettings.summary.contents'),
+      value: activeValues.value.length,
+    })
+  }
+  rows.push(...structuredSummaryRows.value.map((row, index) => ({
+    key: `structured-${index}-${row.label}`,
+    label: row.label,
+    value: row.value,
+  })))
+  if (!activePoolKind.value && structuredSummaryRows.value.length === 0) {
+    rows.push({ key: 'params', label: t('taskSettings.summary.params'), value: t('taskSettings.counts.none') })
+  }
+  rows.push({
+    key: 'default',
+    label: t('taskSettings.summary.default'),
+    value: form.isDefault ? t('common.yes') : t('common.no'),
+  })
+  return rows
+})
 
 const activeTypeDescription = computed(() => t(`taskSettings.typeDescriptions.${form.type}`))
 const activeValueLabel = computed(() => {
@@ -715,7 +651,7 @@ const activeValueHelp = computed(() => t(`taskSettings.typeRequirements.${form.t
 const activeValuePlaceholder = computed(() => {
   if (form.type === 'post') return t('taskSettings.form.contentsPlaceholder')
   if (form.type === 'follow') return t('taskSettings.form.followTargetsPlaceholder')
-  return t('taskSettings.form.tweetTargetsPlaceholder')
+  return t('taskSettings.form.postTargetsPlaceholder')
 })
 const taskTypeCards = computed(() => TASK_TYPES.map(type => ({
   type,
@@ -746,7 +682,7 @@ const templateStats = computed(() => [
   },
 ])
 const poolEmptyLineCount = computed(() => countIgnoredEmptyValues(activeValuesText.value, activePoolKind.value))
-const poolAnalysis = computed(() => analyzePool(activeValues.value, poolEmptyLineCount.value))
+const poolAnalysis = computed<TemplatePoolAnalysis>(() => analyzeTemplatePool(activeValues.value, poolEmptyLineCount.value))
 const poolCapacityMessage = computed(() => {
   if (poolAnalysis.value.overCapacity) return t('taskSettings.validation.tooManyValues', { max: MAX_TEMPLATE_POOL_VALUES })
   return t('taskSettings.pool.capacityHint', { count: activeValues.value.length, max: MAX_TEMPLATE_POOL_VALUES })
@@ -754,56 +690,83 @@ const poolCapacityMessage = computed(() => {
 const defaultImpactText = computed(() => t('taskSettings.defaultImpact', { type: taskTypeLabel(form.type) }))
 const canAddPostMedia = computed(() => {
   const media = normalizeMediaRefs(form.postMedia, 'post-image')
-  const hasVideo = media.some(item => String(item.content_type || '').trim().toLowerCase() === 'video/mp4')
-  if (hasVideo) return false
-  return media.length < MAX_POST_MEDIA_ITEMS
+  return !saving.value && media.length < MAX_POST_MEDIA_ITEMS
 })
-const saveDisabledReason = computed(() => {
-  if (form.name.trim() === '') return t('taskSettings.validation.nameRequired')
-  if (targetTypes.has(form.type) && targetValues.value.length === 0) return t('taskSettings.validation.targetsRequired')
-  if (form.type === 'post' && contentValues.value.length === 0 && postMediaCount.value === 0) {
-    return t('taskSettings.validation.postConfigurationRequired')
-  }
-  if (form.type === 'post') {
-    const unsupportedMediaKind = unsupportedSocialPostMediaKind(normalizeMediaRefs(form.postMedia, 'post-image'))
-    if (unsupportedMediaKind === 'video') return t('taskSettings.validation.postVideoUnavailable')
-    if (unsupportedMediaKind === 'source') return t('taskSettings.validation.mediaSourceUnsupported')
-    if (unsupportedMediaKind === 'type') return t('taskSettings.validation.postMediaTypeUnsupported')
-  }
-  if (form.type === 'update_profile' && profileFieldCount.value === 0) return t('taskSettings.validation.profileRequired')
-  if (form.type === 'update_avatar' && !hasMediaRef(form.avatar)) return t('taskSettings.validation.avatarRequired')
-  if (form.type === 'update_banner' && !hasMediaRef(form.banner)) return t('taskSettings.validation.bannerRequired')
-  if (form.type === 'update_avatar' && !socialTaskMediaRefExecutable(form.avatar)) return t('taskSettings.validation.mediaSourceUnsupported')
-  if (form.type === 'update_banner' && !socialTaskMediaRefExecutable(form.banner)) return t('taskSettings.validation.mediaSourceUnsupported')
-  if (activeValues.value.length > MAX_TEMPLATE_POOL_VALUES) return t('taskSettings.validation.tooManyValues', { max: MAX_TEMPLATE_POOL_VALUES })
-  if (activeValues.value.some(value => Array.from(value).length > MAX_TEMPLATE_VALUE_LENGTH)) return t('taskSettings.validation.valueTooLong', { max: MAX_TEMPLATE_VALUE_LENGTH })
-  return ''
-})
+const addPostMediaButtonTitle = computed(() => buildAddPostMediaButtonTitle(t, {
+  saving: saving.value,
+  mediaCount: postMediaCount.value,
+  maxMediaItems: MAX_POST_MEDIA_ITEMS,
+}))
+const removePostMediaButtonTitle = computed(() => buildRemovePostMediaButtonTitle(t, { saving: saving.value }))
+const saveDisabledReason = computed(() => resolveTaskTemplateSaveDisabledReason({
+  name: form.name,
+  type: form.type,
+  targetValues: targetValues.value,
+  contentValues: contentValues.value,
+  postMedia: form.postMedia,
+  profile: buildProfileParams(),
+  avatar: form.avatar,
+  banner: form.banner,
+}, t))
 const canSave = computed(() => !saveDisabledReason.value)
 const currentTemplateReady = computed(() => !saveDisabledReason.value)
+const canClearActiveValues = computed(() => activeValuesText.value.length > 0)
+const importButtonTitle = computed(() => buildParameterPoolImportButtonTitle(t, { saving: saving.value }))
+const viewAllButtonTitle = computed(() => buildParameterPoolViewAllButtonTitle(t, {
+  saving: saving.value,
+  valueCount: activeValues.value.length,
+}))
+const dedupeButtonTitle = computed(() => buildParameterPoolDedupeButtonTitle(t, {
+  saving: saving.value,
+  duplicateCount: poolAnalysis.value.duplicateCount,
+}))
+const clearPoolButtonTitle = computed(() => buildParameterPoolClearButtonTitle(t, {
+  saving: saving.value,
+  canClear: canClearActiveValues.value,
+}))
+const deleteDialogDescription = computed(() => templateToDelete.value
+  ? t('taskSettings.deleteDialog.description', { name: templateToDelete.value.name })
+  : ''
+)
+const deleteDialogWarning = computed(() => t('taskSettings.deleteDialog.warning'))
+const taskSettingsErrorMessages = computed(() => createTaskSettingsErrorMessages(t))
 
 void loadTemplates()
 onBeforeUnmount(() => clearStoredMediaPreviewURLs())
 
-async function loadTemplates() {
+async function loadTemplates(options: { syncEditor?: boolean } = {}) {
+  const syncEditor = options.syncEditor ?? true
+  const requestID = ++latestTemplateLoadRequestID
+  const loadEditorRevision = editorContextRevision
   loading.value = true
   loadError.value = ''
   try {
     const loadedTemplates = await taskSettingsAPI.listTemplates()
-    templates.value = Array.isArray(loadedTemplates) ? loadedTemplates.filter(isParameterTaskTemplate) : []
-    const selected = templates.value.find(template => template.id === selectedTemplateId.value)
-    if (selected) {
-      selectTemplate(selected)
-    } else {
-      selectBestTemplateForType(activeType.value)
+    if (!isLatestTemplateLoadRequest(requestID)) return
+    templates.value = Array.isArray(loadedTemplates) ? loadedTemplates.filter(isParameterTaskTemplate).map(normalizeParameterTaskTemplate) : []
+    syncDeleteDialogFromTemplates()
+    if (syncEditor && editorContextRevision === loadEditorRevision) {
+      const selected = templates.value.find(template => template.id === selectedTemplateId.value)
+      if (selected) {
+        selectTemplate(selected, false)
+      } else {
+        selectBestTemplateForType(activeType.value)
+      }
     }
   } catch (error) {
+    if (!isLatestTemplateLoadRequest(requestID)) return
     recordClientDiagnostic('task_settings.load', error)
-    loadError.value = extractSafeApiErrorMessage(error, t('taskSettings.failedToLoad'))
+    loadError.value = extractSafeApiErrorMessage(error, t('taskSettings.failedToLoad'), taskSettingsErrorMessages.value)
     appStore.showError(loadError.value)
   } finally {
-    loading.value = false
+    if (isLatestTemplateLoadRequest(requestID)) {
+      loading.value = false
+    }
   }
+}
+
+function isLatestTemplateLoadRequest(requestID: number) {
+  return requestID === latestTemplateLoadRequestID
 }
 
 function chooseType(type: ParameterTaskTemplateType) {
@@ -816,37 +779,64 @@ function selectBestTemplateForType(type: ParameterTaskTemplateType) {
   const candidates = templates.value.filter(template => template.type === type)
   const next = candidates.find(template => template.is_default) ?? candidates[0]
   if (next) {
-    selectTemplate(next)
+    selectTemplate(next, false)
   } else {
     resetFormForType(type)
   }
 }
 
-function selectTemplate(template: TaskTemplate) {
+function selectTemplate(template: TaskTemplate, trackUserContext = true) {
+  if (trackUserContext) markEditorContextChanged()
   if (!isParameterTaskTemplate(template)) {
     selectBestTemplateForType(activeType.value)
     return
   }
-  clearStoredMediaPreviewURLs()
-  selectedTemplateId.value = template.id
-  activeType.value = template.type
-  form.id = template.id
-  form.name = template.name
-  form.type = template.type
-  form.targetsText = targetTypes.has(template.type) ? (template.params.targets ?? []).join('\n') : ''
-  form.contentsText = template.type === 'post' ? (template.params.contents ?? []).join('\n') : ''
-  form.quotePostURL = template.type === 'post' ? String(template.params.quote_post_url ?? '').trim() : ''
-  form.postMedia = template.type === 'post' ? cloneMediaRefs(template.params.media) : []
-  form.profileDisplayName = template.type === 'update_profile' ? String(template.params.profile?.display_name ?? '').trim() : ''
-  form.profileScreenName = template.type === 'update_profile' ? String(template.params.profile?.screen_name ?? '').trim() : ''
-  form.profileDescription = template.type === 'update_profile' ? String(template.params.profile?.description ?? '').trim() : ''
-  form.profileLocation = template.type === 'update_profile' ? String(template.params.profile?.location ?? '').trim() : ''
-  form.profileURL = template.type === 'update_profile' ? String(template.params.profile?.url ?? '').trim() : ''
-  form.avatar = template.type === 'update_avatar' ? cloneMediaRef(template.params.avatar) : {}
-  form.banner = template.type === 'update_banner' ? cloneMediaRef(template.params.banner) : {}
-  form.isDefault = template.is_default
-  validationResult.value = null
-  void loadStoredMediaPreviewsForForm()
+  const safeTemplate = normalizeParameterTaskTemplate(template)
+  const previewRequestID = clearStoredMediaPreviewURLs()
+  selectedTemplateId.value = safeTemplate.id
+  activeType.value = safeTemplate.type
+  form.id = safeTemplate.id
+  form.name = safeTemplate.name
+  form.type = safeTemplate.type
+  form.targetsText = targetTypes.has(safeTemplate.type) ? normalizeTemplatePoolValues(safeTemplate.params.targets).join('\n') : ''
+  form.contentsText = safeTemplate.type === 'post' ? normalizeTemplatePoolValues(safeTemplate.params.contents).join('\n') : ''
+  form.quotePostURL = safeTemplate.type === 'post' ? String(safeTemplate.params.quote_post_url ?? '').trim() : ''
+  form.postMedia = safeTemplate.type === 'post' ? cloneMediaRefs(safeTemplate.params.media) : []
+  form.profileDisplayName = safeTemplate.type === 'update_profile' ? String(safeTemplate.params.profile?.display_name ?? '').trim() : ''
+  form.profileScreenName = safeTemplate.type === 'update_profile' ? String(safeTemplate.params.profile?.screen_name ?? '').trim() : ''
+  form.profileDescription = safeTemplate.type === 'update_profile' ? String(safeTemplate.params.profile?.description ?? '').trim() : ''
+  form.profileLocation = safeTemplate.type === 'update_profile' ? String(safeTemplate.params.profile?.location ?? '').trim() : ''
+  form.profileURL = safeTemplate.type === 'update_profile' ? String(safeTemplate.params.profile?.url ?? '').trim() : ''
+  form.avatar = safeTemplate.type === 'update_avatar' ? cloneMediaRef(safeTemplate.params.avatar) : {}
+  form.banner = safeTemplate.type === 'update_banner' ? cloneMediaRef(safeTemplate.params.banner) : {}
+  form.isDefault = safeTemplate.is_default
+  clearValidationResult()
+  void loadStoredMediaPreviewsForForm(previewRequestID)
+}
+
+async function refreshTemplatesAndSelect(template: TaskTemplate, editorRevision: number) {
+  const shouldSyncEditor = editorContextRevision === editorRevision
+  const localTemplate = upsertTemplateIntoLocalState(template)
+  await loadTemplates({ syncEditor: shouldSyncEditor })
+  if (editorContextRevision !== editorRevision) return
+  const refreshed = templates.value.find(item => item.id === template.id)
+  selectTemplate(refreshed ?? localTemplate ?? template, false)
+}
+
+function upsertTemplateIntoLocalState(template: TaskTemplate) {
+  if (!isParameterTaskTemplate(template)) return null
+  const safeTemplate = normalizeParameterTaskTemplate(template)
+  templates.value = templates.value.map(item => {
+    if (item.id === safeTemplate.id) return safeTemplate
+    if (safeTemplate.is_default && item.type === safeTemplate.type) {
+      return { ...item, is_default: false }
+    }
+    return item
+  })
+  if (!templates.value.some(item => item.id === safeTemplate.id)) {
+    templates.value = [safeTemplate, ...templates.value]
+  }
+  return safeTemplate
 }
 
 function resetFormForType(type: ParameterTaskTemplateType) {
@@ -868,69 +858,107 @@ function resetFormForType(type: ParameterTaskTemplateType) {
   form.avatar = {}
   form.banner = {}
   form.isDefault = templates.value.filter(template => template.type === type).length === 0
-  validationResult.value = null
+  clearValidationResult()
 }
 
 function newTemplate() {
+  markEditorContextChanged()
   resetFormForType(activeType.value)
 }
 
 async function validateCurrent() {
+  if (saving.value) return
+  const requestID = ++latestValidationRequestID
+  validationResult.value = null
+  await runTemplateOperation('validate', async () => {
+    try {
+      const result = await taskSettingsAPI.validateTemplate(buildInput())
+      if (!isLatestValidationRequest(requestID)) return
+      validationResult.value = result
+      if (result.valid) {
+        appStore.showSuccess(t('taskSettings.validation.valid'))
+      } else {
+        appStore.showWarning(t('taskSettings.validation.invalid'))
+      }
+    } catch (error) {
+      if (!isLatestValidationRequest(requestID)) return
+      showTaskSettingsEditorOperationError('task_settings.validate', error, t('taskSettings.validation.failed'))
+    }
+  })
+}
+
+function isLatestValidationRequest(requestID: number) {
+  return requestID === latestValidationRequestID
+}
+
+function showTaskSettingsOperationError(scope: TaskSettingsOperationErrorScope, error: unknown, fallback: string) {
+  recordClientDiagnostic(scope, error)
+  const message = extractSafeApiErrorMessage(error, fallback, taskSettingsErrorMessages.value)
+  appStore.showError(message)
+  return message
+}
+
+function showTaskSettingsEditorOperationError(scope: TaskSettingsOperationErrorScope, error: unknown, fallback: string) {
+  const message = showTaskSettingsOperationError(scope, error, fallback)
+  editorOperationError.value = message
+  return message
+}
+
+async function runTemplateOperation(operation: TemplateOperation, action: () => Promise<void>) {
+  if (saving.value) return
+  templateOperation.value = operation
+  if (operation !== 'delete') {
+    editorOperationError.value = ''
+  }
   try {
-    validationResult.value = await taskSettingsAPI.validateTemplate(buildInput())
-    appStore.showSuccess(validationResult.value.valid ? t('taskSettings.validation.valid') : t('taskSettings.validation.invalid'))
-  } catch (error) {
-    recordClientDiagnostic('task_settings.validate', error)
-    appStore.showError(extractSafeApiErrorMessage(error, t('taskSettings.validation.failed')))
+    await action()
+  } finally {
+    templateOperation.value = null
   }
 }
 
 async function saveTemplate() {
   if (!canSave.value || saving.value) return
-  saving.value = true
-  try {
-    const result = await taskSettingsAPI.saveTemplate(buildInput())
-    appStore.showSuccess(t('taskSettings.saved'))
-    await loadTemplates()
-    selectTemplate(result)
-  } catch (error) {
-    recordClientDiagnostic('task_settings.save', error)
-    appStore.showError(extractSafeApiErrorMessage(error, t('taskSettings.saveFailed')))
-  } finally {
-    saving.value = false
-  }
+  const editorRevision = editorContextRevision
+  await runTemplateOperation('save', async () => {
+    try {
+      const result = await taskSettingsAPI.saveTemplate(buildInput())
+      appStore.showSuccess(t('taskSettings.saved'))
+      await refreshTemplatesAndSelect(result, editorRevision)
+    } catch (error) {
+      showTaskSettingsEditorOperationError('task_settings.save', error, t('taskSettings.saveFailed'))
+    }
+  })
 }
 
 async function copyCurrentTemplate() {
   if (!selectedTemplateId.value || saving.value) return
-  saving.value = true
-  try {
-    const result = await taskSettingsAPI.copyTemplate(selectedTemplateId.value)
-    appStore.showSuccess(t('taskSettings.copied'))
-    await loadTemplates()
-    selectTemplate(result)
-  } catch (error) {
-    recordClientDiagnostic('task_settings.copy', error)
-    appStore.showError(extractSafeApiErrorMessage(error, t('taskSettings.copyFailed')))
-  } finally {
-    saving.value = false
-  }
+  const templateId = selectedTemplateId.value
+  const editorRevision = editorContextRevision
+  await runTemplateOperation('copy', async () => {
+    try {
+      const result = await taskSettingsAPI.copyTemplate(templateId)
+      appStore.showSuccess(t('taskSettings.copied'))
+      await refreshTemplatesAndSelect(result, editorRevision)
+    } catch (error) {
+      showTaskSettingsEditorOperationError('task_settings.copy', error, t('taskSettings.copyFailed'))
+    }
+  })
 }
 
 async function setDefault() {
   if (!selectedTemplateId.value || saving.value) return
-  saving.value = true
-  try {
-    const result = await taskSettingsAPI.setDefaultTemplate(selectedTemplateId.value)
-    appStore.showSuccess(t('taskSettings.defaultSaved'))
-    await loadTemplates()
-    selectTemplate(result)
-  } catch (error) {
-    recordClientDiagnostic('task_settings.default', error)
-    appStore.showError(extractSafeApiErrorMessage(error, t('taskSettings.defaultFailed')))
-  } finally {
-    saving.value = false
-  }
+  const templateId = selectedTemplateId.value
+  const editorRevision = editorContextRevision
+  await runTemplateOperation('default', async () => {
+    try {
+      const result = await taskSettingsAPI.setDefaultTemplate(templateId)
+      appStore.showSuccess(t('taskSettings.defaultSaved'))
+      await refreshTemplatesAndSelect(result, editorRevision)
+    } catch (error) {
+      showTaskSettingsEditorOperationError('task_settings.default', error, t('taskSettings.defaultFailed'))
+    }
+  })
 }
 
 async function deleteCurrentTemplate() {
@@ -945,6 +973,7 @@ async function deleteCurrentTemplate() {
     created_at: '',
     updated_at: '',
   }
+  deleteDialogError.value = ''
   deleteDialogOpen.value = true
 }
 
@@ -952,52 +981,88 @@ function closeDeleteDialog() {
   if (saving.value) return
   deleteDialogOpen.value = false
   templateToDelete.value = null
+  deleteDialogError.value = ''
+}
+
+function syncDeleteDialogFromTemplates() {
+  if (!deleteDialogOpen.value || !templateToDelete.value || templateOperation.value === 'delete') return
+  const updated = templates.value.find(template => template.id === templateToDelete.value?.id)
+  if (updated) {
+    templateToDelete.value = updated
+  } else {
+    closeDeleteDialog()
+  }
 }
 
 async function confirmDeleteTemplate() {
   if (saving.value || !templateToDelete.value) return
   const template = templateToDelete.value
-  saving.value = true
-  try {
-    await taskSettingsAPI.deleteTemplate(template.id)
-    appStore.showSuccess(t('taskSettings.deleted'))
-    deleteDialogOpen.value = false
-    templateToDelete.value = null
-    await loadTemplates()
-  } catch (error) {
-    recordClientDiagnostic('task_settings.delete', error)
-    appStore.showError(extractSafeApiErrorMessage(error, t('taskSettings.deleteFailed')))
-  } finally {
-    saving.value = false
+  deleteDialogError.value = ''
+  await runTemplateOperation('delete', async () => {
+    try {
+      await taskSettingsAPI.deleteTemplate(template.id)
+      appStore.showSuccess(t('taskSettings.deleted'))
+      deleteDialogOpen.value = false
+      templateToDelete.value = null
+      deleteDialogError.value = ''
+      removeDeletedTemplateFromLocalState(template)
+      await loadTemplates()
+    } catch (error) {
+      deleteDialogError.value = showTaskSettingsOperationError('task_settings.delete', error, t('taskSettings.deleteFailed'))
+    }
+  })
+}
+
+function removeDeletedTemplateFromLocalState(template: ParameterTaskTemplate) {
+  templates.value = templates.value.filter(item => item.id !== template.id)
+  if (selectedTemplateId.value === template.id) {
+    selectBestTemplateForType(template.type)
   }
 }
 
 async function handleFileImport(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
-  if (!file || !activePoolKind.value) return
+  const importPoolKind = activePoolKind.value
+  const importType = form.type
+  const importTemplateId = selectedTemplateId.value
+  if (saving.value || !file || !importPoolKind) {
+    input.value = ''
+    return
+  }
+  editorOperationError.value = ''
   try {
     const text = await file.text()
-    const imported = activePoolKind.value === 'targets' ? splitTargetValues(text) : splitContentValues(text)
+    if (saving.value || activePoolKind.value !== importPoolKind || form.type !== importType || selectedTemplateId.value !== importTemplateId) return
+    const imported = importPoolKind === 'targets' ? splitTargetValues(text) : splitContentValues(text)
+    if (imported.length === 0) {
+      appStore.showWarning(t('taskSettings.importEmpty'))
+      return
+    }
     activeValuesText.value = [activeValuesText.value.trim(), imported.join('\n')].filter(Boolean).join('\n')
     resetValidationResult()
     appStore.showSuccess(t('taskSettings.imported', { count: imported.length }))
   } catch (error) {
     recordClientDiagnostic('task_settings.import_file', error)
-    appStore.showError(t('taskSettings.importFailed'))
+    editorOperationError.value = t('taskSettings.importFailed')
+    appStore.showError(editorOperationError.value)
   } finally {
     input.value = ''
   }
 }
 
 function clearValues() {
+  if (saving.value) return
+  if (!canClearActiveValues.value) return
   activeValuesText.value = ''
   resetValidationResult()
 }
 
 function dedupeValues() {
+  if (saving.value) return
   const before = activeValues.value.length
   const deduped = Array.from(new Set(activeValues.value))
+  if (deduped.length === before) return
   activeValuesText.value = deduped.join('\n')
   resetValidationResult()
   appStore.showSuccess(t('taskSettings.deduped', { count: before - deduped.length }))
@@ -1005,12 +1070,15 @@ function dedupeValues() {
 
 function addPostMedia() {
   if (!canAddPostMedia.value) return
+  invalidateStoredMediaPreviewRequests()
   form.postMedia.push({})
   storedMediaPreviewURLs.post.push('')
   resetValidationResult()
 }
 
 function removePostMedia(index: number) {
+  if (saving.value) return
+  invalidateStoredMediaPreviewRequests()
   revokeStoredMediaPreviewURL('post', index)
   form.postMedia.splice(index, 1)
   storedMediaPreviewURLs.post.splice(index, 1)
@@ -1018,31 +1086,44 @@ function removePostMedia(index: number) {
 }
 
 function updatePostMedia(index: number, value: string) {
+  if (saving.value) return
+  invalidateStoredMediaPreviewRequests()
   const next = updateInlineMediaRef(form.postMedia[index], value, `post-image-${index + 1}`)
   revokeStoredMediaPreviewURL('post', index)
   form.postMedia[index] = next
   storedMediaPreviewURLs.post[index] = ''
-  if (String(next.content_type || '').trim().toLowerCase() === 'video/mp4') {
-    form.postMedia = [next]
-    storedMediaPreviewURLs.post = ['']
-  }
   resetValidationResult()
 }
 
 async function updateAvatarMedia(value: string) {
+  if (saving.value) return
+  invalidateStoredMediaPreviewRequests()
   revokeStoredMediaPreviewURL('avatar')
   form.avatar = await updateInlineMediaRefWithDimensions(form.avatar, value, 'avatar-image')
   resetValidationResult()
 }
 
 async function updateBannerMedia(value: string) {
+  if (saving.value) return
+  invalidateStoredMediaPreviewRequests()
   revokeStoredMediaPreviewURL('banner')
   form.banner = await updateInlineMediaRefWithDimensions(form.banner, value, 'banner-image')
   resetValidationResult()
 }
 
 function resetValidationResult() {
+  markEditorContextChanged()
+  clearValidationResult()
+}
+
+function clearValidationResult() {
+  latestValidationRequestID += 1
   validationResult.value = null
+  editorOperationError.value = ''
+}
+
+function markEditorContextChanged() {
+  editorContextRevision += 1
 }
 
 function buildTemplateParams(): TaskTemplateInput['params'] {
@@ -1092,76 +1173,37 @@ function buildProfileParams(): SocialProfileUpdateParams | undefined {
   return countProfileFields(profile) > 0 ? profile : undefined
 }
 
-function splitTargetValues(value: string): string[] {
-  return value
-    .split(/\r?\n|,/)
-    .map(item => item.trim())
-    .filter(Boolean)
-}
-
-function splitContentValues(value: string): string[] {
-  return value
-    .split(/\r?\n/)
-    .map(item => item.trim())
-    .filter(Boolean)
-}
-
-function countIgnoredEmptyValues(value: string, kind: 'targets' | 'contents' | null) {
-  if (!value || !kind) return 0
-  const parts = kind === 'targets' ? value.split(/\r?\n|,/) : value.split(/\r?\n/)
-  return parts.filter(item => item.trim() === '').length
-}
-
-function analyzePool(values: string[], emptyLineCount = 0) {
-  const seen = new Set<string>()
-  let duplicateCount = 0
-  let tooLongCount = 0
-  for (const value of values) {
-    if (seen.has(value)) duplicateCount += 1
-    seen.add(value)
-    if (Array.from(value).length > MAX_TEMPLATE_VALUE_LENGTH) tooLongCount += 1
-  }
-  return {
-    validCount: values.length - tooLongCount,
-    emptyLineCount,
-    duplicateCount,
-    tooLongCount,
-    remaining: Math.max(0, MAX_TEMPLATE_POOL_VALUES - values.length),
-    overCapacity: values.length > MAX_TEMPLATE_POOL_VALUES,
-  }
-}
-
-function countProfileFields(profile?: SocialProfileUpdateParams) {
-  if (!profile) return 0
-  return [
-    profile.display_name,
-    profile.screen_name,
-    profile.description,
-    profile.location,
-    profile.url,
-  ].filter(value => String(value || '').trim() !== '').length
-}
-
-function cloneMediaRef(item?: SocialTaskMediaRef | null): SocialTaskMediaRef {
-  return item ? { ...item } : {}
-}
-
-function cloneMediaRefs(items?: SocialTaskMediaRef[] | null): SocialTaskMediaRef[] {
-  return Array.isArray(items) ? items.map(item => cloneMediaRef(item)) : []
-}
-
-async function loadStoredMediaPreviewsForForm() {
+async function loadStoredMediaPreviewsForForm(requestID = storedMediaPreviewRequestID) {
   if (form.type === 'update_avatar') {
-    storedMediaPreviewURLs.avatar = await resolveStoredMediaPreviewURL(form.avatar)
+    const url = await resolveStoredMediaPreviewURL(form.avatar)
+    if (!isCurrentStoredMediaPreviewRequest(requestID)) {
+      revokeObjectURLSafe(url)
+      return
+    }
+    storedMediaPreviewURLs.avatar = url
     return
   }
   if (form.type === 'update_banner') {
-    storedMediaPreviewURLs.banner = await resolveStoredMediaPreviewURL(form.banner)
+    const url = await resolveStoredMediaPreviewURL(form.banner)
+    if (!isCurrentStoredMediaPreviewRequest(requestID)) {
+      revokeObjectURLSafe(url)
+      return
+    }
+    storedMediaPreviewURLs.banner = url
     return
   }
   if (form.type === 'post') {
-    storedMediaPreviewURLs.post = await Promise.all(form.postMedia.map(item => resolveStoredMediaPreviewURL(item)))
+    const urls = await Promise.all(form.postMedia.map(item => resolveStoredMediaPreviewURL(item)))
+    if (!isCurrentStoredMediaPreviewRequest(requestID)) {
+      urls.forEach(url => revokeObjectURLSafe(url))
+      return
+    }
+    storedMediaPreviewURLs.post = urls
   }
+}
+
+function isCurrentStoredMediaPreviewRequest(requestID: number) {
+  return requestID === storedMediaPreviewRequestID
 }
 
 async function resolveStoredMediaPreviewURL(item?: SocialTaskMediaRef | null) {
@@ -1171,24 +1213,10 @@ async function resolveStoredMediaPreviewURL(item?: SocialTaskMediaRef | null) {
   try {
     const blob = await taskSettingsAPI.previewMedia(storageKey)
     return createObjectURLSafe(blob)
-  } catch {
+  } catch (error) {
+    recordClientDiagnostic('task_settings.preview_media', error)
     return ''
   }
-}
-
-function createObjectURLSafe(blob: Blob) {
-  const fn = globalThis.URL && typeof globalThis.URL.createObjectURL === 'function'
-    ? globalThis.URL.createObjectURL.bind(globalThis.URL)
-    : null
-  return fn ? fn(blob) : ''
-}
-
-function revokeObjectURLSafe(url: string) {
-  if (!url) return
-  const fn = globalThis.URL && typeof globalThis.URL.revokeObjectURL === 'function'
-    ? globalThis.URL.revokeObjectURL.bind(globalThis.URL)
-    : null
-  if (fn) fn(url)
 }
 
 function revokeStoredMediaPreviewURL(kind: 'avatar' | 'banner' | 'post', index?: number) {
@@ -1204,24 +1232,18 @@ function revokeStoredMediaPreviewURL(kind: 'avatar' | 'banner' | 'post', index?:
   storedMediaPreviewURLs[kind] = ''
 }
 
+function invalidateStoredMediaPreviewRequests() {
+  storedMediaPreviewRequestID += 1
+  return storedMediaPreviewRequestID
+}
+
 function clearStoredMediaPreviewURLs() {
+  invalidateStoredMediaPreviewRequests()
   revokeStoredMediaPreviewURL('avatar')
   revokeStoredMediaPreviewURL('banner')
   storedMediaPreviewURLs.post.forEach(url => revokeObjectURLSafe(url))
   storedMediaPreviewURLs.post = []
-}
-
-function updateInlineMediaRef(current: SocialTaskMediaRef | undefined, value: string, fallbackBaseName: string): SocialTaskMediaRef {
-  const trimmed = String(value || '').trim()
-  if (trimmed === '') return {}
-  const contentType = inferDataURLContentType(trimmed) || String(current?.content_type || '').trim()
-  const fileName = String(current?.file_name || '').trim() || `${fallbackBaseName}${fileExtensionForContentType(contentType)}`
-  return {
-    source: 'inline',
-    url: trimmed,
-    content_type: contentType,
-    file_name: fileName,
-  }
+  return storedMediaPreviewRequestID
 }
 
 async function updateInlineMediaRefWithDimensions(current: SocialTaskMediaRef | undefined, value: string, fallbackBaseName: string): Promise<SocialTaskMediaRef> {
@@ -1234,61 +1256,6 @@ async function updateInlineMediaRefWithDimensions(current: SocialTaskMediaRef | 
     width: dimensions.width,
     height: dimensions.height,
   }
-}
-
-function normalizeMediaRefs(items: SocialTaskMediaRef[], fallbackBaseName: string) {
-  return items
-    .map((item, index) => normalizeMediaRef(item, `${fallbackBaseName}-${index + 1}`))
-    .filter((item): item is SocialTaskMediaRef => !!item)
-}
-
-function normalizeMediaRef(item: SocialTaskMediaRef | undefined, fallbackBaseName: string): SocialTaskMediaRef | undefined {
-  if (!item) return undefined
-  let source = String(item.source || '').trim()
-  const storageKey = String(item.storage_key || '').trim()
-  const url = String(item.url || '').trim()
-  let contentType = String(item.content_type || '').trim()
-  const sha256 = String(item.sha256 || '').trim()
-  const byteSize = Number(item.byte_size || 0) || undefined
-  const width = Number(item.width || 0) || undefined
-  const height = Number(item.height || 0) || undefined
-
-  if (!contentType && url.startsWith('data:')) {
-    contentType = inferDataURLContentType(url)
-  }
-  if (!source && url.startsWith('data:')) {
-    source = 'inline'
-  }
-  const fileName = String(item.file_name || '').trim() || (contentType ? `${fallbackBaseName}${fileExtensionForContentType(contentType)}` : '')
-
-  const normalized: SocialTaskMediaRef = {}
-  if (source) normalized.source = source
-  if (storageKey) normalized.storage_key = storageKey
-  if (url) normalized.url = url
-  if (contentType) normalized.content_type = contentType
-  if (fileName) normalized.file_name = fileName
-  if (sha256) normalized.sha256 = sha256
-  if (byteSize) normalized.byte_size = byteSize
-  if (width) normalized.width = width
-  if (height) normalized.height = height
-
-  if (!normalized.file_name && normalized.content_type) {
-    normalized.file_name = `${fallbackBaseName}${fileExtensionForContentType(normalized.content_type)}`
-  }
-  if (!hasMediaRef(normalized)) return undefined
-  return normalized
-}
-
-function hasMediaRef(item?: SocialTaskMediaRef | null) {
-  if (!item) return false
-  return [
-    item.source,
-    item.storage_key,
-    item.url,
-    item.content_type,
-    item.file_name,
-    item.sha256,
-  ].some(value => String(value || '').trim() !== '')
 }
 
 function readInlineImageDimensions(value: string): Promise<{ width: number; height: number } | null> {
@@ -1311,30 +1278,6 @@ function readInlineImageDimensions(value: string): Promise<{ width: number; heig
   })
 }
 
-function inferDataURLContentType(value: string) {
-  if (!value.startsWith('data:')) return ''
-  const meta = value.slice(5, value.indexOf(',') > 0 ? value.indexOf(',') : undefined)
-  return meta.replace(/;base64$/i, '').trim()
-}
-
-function fileExtensionForContentType(contentType: string) {
-  switch (String(contentType || '').toLowerCase()) {
-    case 'video/mp4':
-      return '.mp4'
-    case 'image/jpeg':
-    case 'image/jpg':
-      return '.jpg'
-    case 'image/gif':
-      return '.gif'
-    case 'image/webp':
-      return '.webp'
-    case 'image/png':
-      return '.png'
-    default:
-      return '.png'
-  }
-}
-
 function templateParameterSummary(template: ParameterTaskTemplate): { label: string; count: string | number } {
   if (targetTypes.has(template.type)) {
     return { label: t('taskSettings.summary.targets'), count: (template.params.targets ?? []).length }
@@ -1352,34 +1295,6 @@ function templateParameterSummary(template: ParameterTaskTemplate): { label: str
   return { label: '', count: '' }
 }
 
-function isTemplateUsable(template: ParameterTaskTemplate) {
-  if (targetTypes.has(template.type)) {
-    const values = template.params.targets ?? []
-    return values.length > 0 && templatePoolValuesValid(values)
-  }
-  if (template.type === 'post') {
-    const values = template.params.contents ?? []
-    const media = normalizeMediaRefs(template.params.media ?? [], 'post-image')
-    return (values.length > 0 || media.length > 0) && templatePoolValuesValid(values) && socialPostMediaRefsSupported(media)
-  }
-  if (template.type === 'update_profile') {
-    return countProfileFields(template.params.profile) > 0
-  }
-  if (template.type === 'update_avatar') {
-    return socialTaskMediaRefExecutable(template.params.avatar)
-  }
-  if (template.type === 'update_banner') {
-    return socialTaskMediaRefExecutable(template.params.banner)
-  }
-  return false
-}
-
-function templatePoolValuesValid(values?: string[]) {
-  const normalized = (values ?? []).map(value => value.trim()).filter(Boolean)
-  if (normalized.length > MAX_TEMPLATE_POOL_VALUES) return false
-  return normalized.every(value => Array.from(value).length <= MAX_TEMPLATE_VALUE_LENGTH)
-}
-
 function templateParameterStateLabel(template: ParameterTaskTemplate) {
   return isTemplateUsable(template)
     ? t('taskSettings.savedConfigs.readyState')
@@ -1387,7 +1302,10 @@ function templateParameterStateLabel(template: ParameterTaskTemplate) {
 }
 
 function taskTypeLabel(type: TaskTemplateType | string) {
-  return t(`taskSettings.types.${type}`, type)
+  const normalized = normalizeTaskTemplateType(type)
+  if (normalized) return t(`taskSettings.types.${normalized}`, normalized)
+  const fallback = String(type ?? '').trim()
+  return fallback || '-'
 }
 
 function taskTypeIcon(type: ParameterTaskTemplateType): IconName {
@@ -1415,7 +1333,30 @@ function taskTypeBadgeClass(type: ParameterTaskTemplateType) {
   return 'badge-gray'
 }
 
-function isParameterTaskTemplate(template: TaskTemplate): template is ParameterTaskTemplate {
-  return (TASK_TYPES as TaskTemplateType[]).includes(template.type)
+function normalizeParameterTaskTemplate(template: ParameterTaskTemplate): ParameterTaskTemplate {
+  const type = normalizeTaskTemplateType(template.type) ?? template.type
+  return {
+    ...template,
+    name: String(template.name ?? '').trim(),
+    type,
+    params: isTemplateParamsObject(template.params) ? template.params : {},
+  }
+}
+
+function isTemplateParamsObject(value: unknown): value is TaskTemplate['params'] {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isParameterTaskTemplate(template: unknown): template is ParameterTaskTemplate {
+  return !!template
+    && typeof template === 'object'
+    && normalizeTaskTemplateType((template as Partial<TaskTemplate>).type) !== null
+}
+
+function normalizeTaskTemplateType(value: unknown): ParameterTaskTemplateType | null {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  return (TASK_TYPES as string[]).includes(normalized)
+    ? normalized as ParameterTaskTemplateType
+    : null
 }
 </script>

@@ -132,7 +132,6 @@ func newValidateInvitationHandler(code *service.RedeemCode) *AuthHandler {
 		nil,
 		nil,
 		nil,
-		nil,
 	)
 	return &AuthHandler{
 		settingSvc:    settingSvc,

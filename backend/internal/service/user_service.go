@@ -74,7 +74,7 @@ type UserListFilters struct {
 	Attributes map[int64]string // Custom attribute filters: attributeID -> value
 	// IncludeSubscriptions controls whether ListWithFilters should load active subscriptions.
 	// For large datasets this can be expensive; admin list pages should enable it on demand.
-	// nil means not specified (default: load subscriptions for backward compatibility).
+	// nil means not specified; existing callers keep loading subscriptions unless they opt out.
 	IncludeSubscriptions *bool
 }
 
@@ -206,21 +206,19 @@ type ChangePasswordRequest struct {
 
 // UserService 用户服务
 type UserService struct {
-	userRepo             UserRepository
-	settingRepo          SettingRepository
-	authCacheInvalidator APIKeyAuthCacheInvalidator
-	billingCache         BillingCache
-	lastActiveTouchL1    sync.Map
-	lastActiveTouchSF    singleflight.Group
+	userRepo          UserRepository
+	settingRepo       SettingRepository
+	billingCache      BillingCache
+	lastActiveTouchL1 sync.Map
+	lastActiveTouchSF singleflight.Group
 }
 
 // NewUserService 创建用户服务实例
-func NewUserService(userRepo UserRepository, settingRepo SettingRepository, authCacheInvalidator APIKeyAuthCacheInvalidator, billingCache BillingCache) *UserService {
+func NewUserService(userRepo UserRepository, settingRepo SettingRepository, billingCache BillingCache) *UserService {
 	return &UserService{
-		userRepo:             userRepo,
-		settingRepo:          settingRepo,
-		authCacheInvalidator: authCacheInvalidator,
-		billingCache:         billingCache,
+		userRepo:     userRepo,
+		settingRepo:  settingRepo,
+		billingCache: billingCache,
 	}
 }
 
@@ -369,9 +367,6 @@ func (s *UserService) UnbindUserAuthProviderWithResult(ctx context.Context, user
 	if err := s.userRepo.UnbindUserAuthProvider(ctx, userID, provider); err != nil {
 		return nil, false, err
 	}
-	if s.authCacheInvalidator != nil {
-		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
-	}
 
 	updatedUser, err := s.GetProfile(ctx, userID)
 	if err != nil {
@@ -383,49 +378,39 @@ func (s *UserService) UnbindUserAuthProviderWithResult(ctx context.Context, user
 // UpdateProfile 更新用户资料
 func (s *UserService) UpdateProfile(ctx context.Context, userID int64, req UpdateProfileRequest) (*User, error) {
 	if txRunner, ok := s.userRepo.(userProfileIdentityTxRunner); ok {
-		var (
-			updated        *User
-			oldConcurrency int
-		)
+		var updated *User
 		if err := txRunner.WithUserProfileIdentityTx(ctx, func(txCtx context.Context) error {
 			var err error
-			updated, oldConcurrency, err = s.updateProfile(txCtx, userID, req)
+			updated, err = s.updateProfile(txCtx, userID, req)
 			return err
 		}); err != nil {
 			return nil, err
 		}
-		if s.authCacheInvalidator != nil && updated != nil && updated.Concurrency != oldConcurrency {
-			s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
-		}
 		return updated, nil
 	}
 
-	updated, oldConcurrency, err := s.updateProfile(ctx, userID, req)
+	updated, err := s.updateProfile(ctx, userID, req)
 	if err != nil {
 		return nil, err
-	}
-	if s.authCacheInvalidator != nil && updated.Concurrency != oldConcurrency {
-		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
 	}
 	return updated, nil
 }
 
-func (s *UserService) updateProfile(ctx context.Context, userID int64, req UpdateProfileRequest) (*User, int, error) {
+func (s *UserService) updateProfile(ctx context.Context, userID int64, req UpdateProfileRequest) (*User, error) {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		return nil, 0, fmt.Errorf("get user: %w", err)
+		return nil, fmt.Errorf("get user: %w", err)
 	}
-	oldConcurrency := user.Concurrency
 
 	// 更新字段
 	if req.Email != nil {
 		// 检查新邮箱是否已被使用
 		exists, err := s.userRepo.ExistsByEmail(ctx, *req.Email)
 		if err != nil {
-			return nil, oldConcurrency, fmt.Errorf("check email exists: %w", err)
+			return nil, fmt.Errorf("check email exists: %w", err)
 		}
 		if exists && *req.Email != user.Email {
-			return nil, oldConcurrency, ErrEmailExists
+			return nil, ErrEmailExists
 		}
 		user.Email = *req.Email
 	}
@@ -433,7 +418,7 @@ func (s *UserService) updateProfile(ctx context.Context, userID int64, req Updat
 	if req.Username != nil {
 		username := strings.TrimSpace(*req.Username)
 		if username == "" {
-			return nil, oldConcurrency, ErrUsernameRequired
+			return nil, ErrUsernameRequired
 		}
 		user.Username = username
 	}
@@ -441,7 +426,7 @@ func (s *UserService) updateProfile(ctx context.Context, userID int64, req Updat
 	if req.AvatarURL != nil {
 		avatar, err := s.SetAvatar(ctx, userID, *req.AvatarURL)
 		if err != nil {
-			return nil, oldConcurrency, err
+			return nil, err
 		}
 		applyUserAvatar(user, avatar)
 	}
@@ -462,10 +447,10 @@ func (s *UserService) updateProfile(ctx context.Context, userID int64, req Updat
 	}
 
 	if err := s.userRepo.Update(ctx, user); err != nil {
-		return nil, oldConcurrency, fmt.Errorf("update user: %w", err)
+		return nil, fmt.Errorf("update user: %w", err)
 	}
 
-	return user, oldConcurrency, nil
+	return user, nil
 }
 
 func (s *UserService) SetAvatar(ctx context.Context, userID int64, raw string) (*UserAvatar, error) {
@@ -664,7 +649,7 @@ func (s *UserService) buildEmailIdentitySummary(user *User, records []UserAuthId
 		return summary
 	}
 
-	// Compatibility fallback for legacy normal-email users that predate auth_identities backfill.
+	// Keep showing the account email when no explicit email identity row exists yet.
 	email := strings.TrimSpace(user.Email)
 	if email == "" || isReservedEmail(email) {
 		return summary
@@ -1077,9 +1062,6 @@ func (s *UserService) UpdateBalance(ctx context.Context, userID int64, amount fl
 	if err := s.userRepo.UpdateBalance(ctx, userID, amount); err != nil {
 		return fmt.Errorf("update balance: %w", err)
 	}
-	if s.authCacheInvalidator != nil {
-		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
-	}
 	if s.billingCache != nil {
 		go func() {
 			defer func() {
@@ -1102,9 +1084,6 @@ func (s *UserService) UpdateConcurrency(ctx context.Context, userID int64, concu
 	if err := s.userRepo.UpdateConcurrency(ctx, userID, concurrency); err != nil {
 		return fmt.Errorf("update concurrency: %w", err)
 	}
-	if s.authCacheInvalidator != nil {
-		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
-	}
 	return nil
 }
 
@@ -1120,18 +1099,12 @@ func (s *UserService) UpdateStatus(ctx context.Context, userID int64, status str
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return fmt.Errorf("update user: %w", err)
 	}
-	if s.authCacheInvalidator != nil {
-		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
-	}
 
 	return nil
 }
 
 // Delete 删除用户（管理员功能）
 func (s *UserService) Delete(ctx context.Context, userID int64) error {
-	if s.authCacheInvalidator != nil {
-		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
-	}
 	if err := s.userRepo.Delete(ctx, userID); err != nil {
 		return fmt.Errorf("delete user: %w", err)
 	}

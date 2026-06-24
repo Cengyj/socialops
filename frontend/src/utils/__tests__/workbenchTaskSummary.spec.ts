@@ -40,7 +40,7 @@ describe('formatWorkbenchTaskSummary', () => {
       payload: {
         post: {
           text: 'hello world',
-          quote_post_url: 'https://x.com/openai/status/2',
+          quote_post_url: 'https://x.com/northwind/status/2',
           media: [
             { source: 'inline', file_name: 'post-image-1.png', content_type: 'image/png' },
             { source: 'inline', file_name: 'post-image-2.png', content_type: 'image/png' },
@@ -49,7 +49,7 @@ describe('formatWorkbenchTaskSummary', () => {
       },
     }, t)
 
-    expect(summary).toBe('Text: hello world · Quote: https://x.com/openai/status/2 · 2 media item(s)')
+    expect(summary).toBe('Text: hello world · Quote: https://x.com/northwind/status/2 · 2 media item(s)')
   })
 
   it('summarizes structured profile, avatar, and banner payloads', () => {
@@ -81,10 +81,10 @@ describe('formatWorkbenchTaskSummary', () => {
   it('falls back to target-based summaries for follow-like actions', () => {
     const summary = formatWorkbenchTaskSummary({
       action: 'follow',
-      target: '@openai',
+      target: '@northwind',
     }, t)
 
-    expect(summary).toBe('Target: @openai')
+    expect(summary).toBe('Target: @northwind')
   })
 
   it('falls back to template snapshot details when payload details are absent', () => {
@@ -94,13 +94,13 @@ describe('formatWorkbenchTaskSummary', () => {
         template_type: 'post',
         params: {
           contents: ['queued content'],
-          quote_post_url: 'https://x.com/openai/status/9',
+          quote_post_url: 'https://x.com/northwind/status/9',
           media: [{ source: 'inline', file_name: 'queued.png', content_type: 'image/png' }],
         },
       },
     }, t)
 
-    expect(summary).toBe('Text: queued content · Quote: https://x.com/openai/status/9 · 1 media item(s)')
+    expect(summary).toBe('Text: queued content · Quote: https://x.com/northwind/status/9 · 1 media item(s)')
   })
 })
 
@@ -148,7 +148,7 @@ describe('formatWorkbenchTaskSummaryMeta', () => {
       payload: {
         post: {
           text: 'hello world',
-          quote_post_url: 'https://x.com/openai/status/2',
+          quote_post_url: 'https://x.com/northwind/status/2',
           media: [{ source: 'inline', file_name: 'queued.png', content_type: 'image/png' }],
         },
       },
@@ -157,6 +157,6 @@ describe('formatWorkbenchTaskSummaryMeta', () => {
       summaryKeyPrefix: 'usage',
     })
 
-    expect(summary).toBe('Post · Text: hello world · Quote: https://x.com/openai/status/2 · 1 media item(s)')
+    expect(summary).toBe('Post · Text: hello world · Quote: https://x.com/northwind/status/2 · 1 media item(s)')
   })
 })

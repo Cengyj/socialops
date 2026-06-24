@@ -207,7 +207,7 @@ func TestLinuxDoOAuthCallbackAllowsMissingVerifierWhenPKCEDisabled(t *testing.T)
 			_, _ = w.Write([]byte(`{"access_token":"linuxdo-access","token_type":"Bearer","expires_in":3600}`))
 		case "/userinfo":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"id":"compat-subject","username":"linuxdo_user","name":"LinuxDo Display"}`))
+			_, _ = w.Write([]byte(`{"id":"stored-subject","username":"linuxdo_user","name":"LinuxDo Display"}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -355,7 +355,7 @@ func TestLinuxDoOAuthCallbackCreatesLoginPendingSessionForExistingIdentityUser(t
 	ctx := context.Background()
 	existingUser, err := client.User.Create().
 		SetEmail(linuxDoSyntheticEmail("321")).
-		SetUsername("legacy-user").
+		SetUsername("existing-login-user").
 		SetPasswordHash("hash").
 		SetRole(service.RoleUser).
 		SetStatus(service.StatusActive).
@@ -366,7 +366,7 @@ func TestLinuxDoOAuthCallbackCreatesLoginPendingSessionForExistingIdentityUser(t
 		SetProviderType("linuxdo").
 		SetProviderKey("linuxdo").
 		SetProviderSubject("321").
-		SetMetadata(map[string]any{"username": "legacy-user"}).
+		SetMetadata(map[string]any{"username": "existing-login-user"}).
 		Save(ctx)
 	require.NoError(t, err)
 
@@ -476,7 +476,7 @@ func TestLinuxDoOAuthCallbackRejectsDisabledExistingIdentityUser(t *testing.T) {
 	require.Zero(t, count)
 }
 
-func TestLinuxDoOAuthCallbackCreatesBindPendingSessionForCompatEmailUser(t *testing.T) {
+func TestLinuxDoOAuthCallbackCreatesBindPendingSessionForProviderEmailUser(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/token":
@@ -484,7 +484,7 @@ func TestLinuxDoOAuthCallbackCreatesBindPendingSessionForCompatEmailUser(t *test
 			_, _ = w.Write([]byte(`{"access_token":"linuxdo-access","token_type":"Bearer","expires_in":3600}`))
 		case "/userinfo":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"id":"321","email":"legacy@example.com","username":"linuxdo_user","name":"LinuxDo Display","avatar_url":"https://cdn.example/linuxdo.png"}`))
+			_, _ = w.Write([]byte(`{"id":"321","email":"stored@example.com","username":"linuxdo_user","name":"LinuxDo Display","avatar_url":"https://cdn.example/linuxdo.png"}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -508,8 +508,8 @@ func TestLinuxDoOAuthCallbackCreatesBindPendingSessionForCompatEmailUser(t *test
 
 	ctx := context.Background()
 	existingUser, err := client.User.Create().
-		SetEmail(" Legacy@Example.com ").
-		SetUsername("legacy-user").
+		SetEmail(" Stored@Example.com ").
+		SetUsername("stored-user").
 		SetPasswordHash("hash").
 		SetRole(service.RoleUser).
 		SetStatus(service.StatusActive).
@@ -518,12 +518,12 @@ func TestLinuxDoOAuthCallbackCreatesBindPendingSessionForCompatEmailUser(t *test
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/oauth/linuxdo/callback?code=code-compat&state=state-compat", nil)
-	req.AddCookie(encodedCookie(linuxDoOAuthStateCookieName, "state-compat"))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/oauth/linuxdo/callback?code=code-provider-email&state=state-provider-email", nil)
+	req.AddCookie(encodedCookie(linuxDoOAuthStateCookieName, "state-provider-email"))
 	req.AddCookie(encodedCookie(linuxDoOAuthRedirectCookie, "/dashboard"))
-	req.AddCookie(encodedCookie(linuxDoOAuthVerifierCookie, "verifier-compat"))
+	req.AddCookie(encodedCookie(linuxDoOAuthVerifierCookie, "verifier-provider-email"))
 	req.AddCookie(encodedCookie(linuxDoOAuthIntentCookieName, oauthIntentLogin))
-	req.AddCookie(encodedCookie(oauthPendingBrowserCookieName, "browser-compat"))
+	req.AddCookie(encodedCookie(oauthPendingBrowserCookieName, "browser-provider-email"))
 	c.Request = req
 
 	handler.LinuxDoOAuthCallback(c)
@@ -542,7 +542,7 @@ func TestLinuxDoOAuthCallbackCreatesBindPendingSessionForCompatEmailUser(t *test
 	require.NotNil(t, session.TargetUserID)
 	require.Equal(t, existingUser.ID, *session.TargetUserID)
 	require.Equal(t, strings.TrimSpace(existingUser.Email), session.ResolvedEmail)
-	require.Equal(t, "legacy@example.com", session.UpstreamIdentityClaims["compat_email"])
+	require.Equal(t, "stored@example.com", session.UpstreamIdentityClaims["compat_email"])
 
 	completion, ok := session.LocalFlowState[oauthCompletionResponseKey].(map[string]any)
 	require.True(t, ok)
@@ -895,8 +895,8 @@ func TestCompleteLinuxDoOAuthRegistrationBindsIdentityWithoutAdoptionFlags(t *te
 		SetBrowserSessionKey("linuxdo-browser-no-adoption").
 		SetUpstreamIdentityClaims(map[string]any{
 			"username":               "linuxdo_user",
-			"suggested_display_name": "LinuxDo Legacy",
-			"suggested_avatar_url":   "https://cdn.example/linuxdo-legacy.png",
+			"suggested_display_name": "LinuxDo No Adoption",
+			"suggested_avatar_url":   "https://cdn.example/linuxdo-no-adoption.png",
 		}).
 		SetExpiresAt(time.Now().UTC().Add(10 * time.Minute)).
 		Save(ctx)

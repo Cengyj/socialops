@@ -47,7 +47,7 @@ func executeUserIdempotentJSON(c *gin.Context, scope string, payload any, ttl ti
 	if err != nil {
 		if infraerrors.Code(err) == infraerrors.Code(service.ErrIdempotencyStoreUnavail) {
 			service.RecordIdempotencyStoreUnavailable(c.FullPath(), scope, "handler_fail_close")
-			logger.LegacyPrintf("handler.idempotency", "[Idempotency] store unavailable: method=%s route=%s scope=%s strategy=fail_close", c.Request.Method, c.FullPath(), scope)
+			logger.ComponentPrintf("handler.idempotency", "[Idempotency] store unavailable: method=%s route=%s scope=%s strategy=fail_close", c.Request.Method, c.FullPath(), scope)
 		}
 		if retryAfter := service.RetryAfterSecondsFromError(err); retryAfter > 0 {
 			c.Header("Retry-After", strconv.Itoa(retryAfter))

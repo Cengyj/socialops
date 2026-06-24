@@ -121,8 +121,11 @@ describe('mock API user subscription contract', () => {
 
   it('serves the existing admin per-subscription progress endpoint', async () => {
     const baseUrl = await startMockApi()
+    const adminHeaders = { Authorization: 'Bearer dev-mock-admin-token' }
 
-    const progress = await requestJson<MockSubscriptionProgress>(`${baseUrl}/api/v1/admin/subscriptions/1000/progress`)
+    const progress = await requestJson<MockSubscriptionProgress>(`${baseUrl}/api/v1/admin/subscriptions/1000/progress`, {
+      headers: adminHeaders,
+    })
 
     expect(progress.code).toBe(0)
     expect(progress.data).toMatchObject({
@@ -137,6 +140,24 @@ describe('mock API user subscription contract', () => {
       remaining_usd: expect.any(Number),
       resets_in_seconds: expect.any(Number),
     })
+  })
+
+  it('does not serve removed admin subscription assign endpoints', async () => {
+    const baseUrl = await startMockApi()
+    const adminHeaders = { Authorization: 'Bearer dev-mock-admin-token' }
+
+    for (const path of ['/api/v1/admin/subscriptions/assign', '/api/v1/admin/subscriptions/bulk-assign']) {
+      const response = await fetch(`${baseUrl}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...adminHeaders },
+        body: JSON.stringify({ user_id: 1, user_ids: [1], plan_id: 1, validity_days: 30 }),
+      })
+
+      expect(response.status).toBe(404)
+      await expect(response.json()).resolves.toMatchObject({
+        code: 'MOCK_NOT_FOUND',
+      })
+    }
   })
 })
 
@@ -170,8 +191,10 @@ async function startMockApi(): Promise<string> {
   throw new Error(`mock API did not start: ${stderr.join('') || stdout.join('')}`)
 }
 
-async function requestJson<T>(url: string): Promise<MockEnvelope<T>> {
-  const response = await fetch(url)
+async function requestJson<T>(url: string, options: { headers?: Record<string, string> } = {}): Promise<MockEnvelope<T>> {
+  const response = await fetch(url, {
+    headers: options.headers,
+  })
   return response.json() as Promise<MockEnvelope<T>>
 }
 

@@ -8,7 +8,7 @@ const typesPath = resolve(dirname(fileURLToPath(import.meta.url)), '../index.ts'
 const source = readFileSync(typesPath, 'utf8')
 
 describe('SocialOps core frontend types', () => {
-  it('does not export legacy proxy subscription conversion contracts from the shared type barrel', () => {
+  it('does not export removed proxy subscription conversion contracts from the shared type barrel', () => {
     expect(source).not.toContain('export interface Subscription {')
     expect(source).not.toContain('export interface ProxyNode')
     expect(source).not.toContain('export interface ConversionRequest')

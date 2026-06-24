@@ -202,7 +202,7 @@ describe('WechatOAuthSection', () => {
     expect(locationState.current.href).toBe('http://localhost/login')
   })
 
-  it('uses the legacy overall enabled flag when per-mode settings are not present', async () => {
+  it('uses the aggregate enabled flag when per-mode settings are not present', async () => {
     seedPublicSettings({
       wechat_oauth_enabled: true,
     })

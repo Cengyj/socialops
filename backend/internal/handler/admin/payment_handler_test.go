@@ -198,7 +198,7 @@ func TestAdminPaymentHandlerOrderResponsesExposeCurrencyWithoutSnapshot(t *testi
 		SetPayAmount(103).
 		SetFeeRate(3).
 		SetRechargeCode("ADMIN-CURRENCY").
-		SetOutTradeNo("sub2_admin_currency").
+		SetOutTradeNo("socialops_admin_currency").
 		SetPaymentType(payment.TypeStripe).
 		SetPaymentTradeNo("stripe-trade-admin-currency").
 		SetOrderType(payment.OrderTypeSubscription).
@@ -258,7 +258,7 @@ func TestAdminPaymentHandlerOrderDetailPropagatesAuditLogErrors(t *testing.T) {
 		SetPayAmount(100).
 		SetFeeRate(0).
 		SetRechargeCode("ADMIN-AUDIT-ERROR").
-		SetOutTradeNo("sub2_admin_audit_error").
+		SetOutTradeNo("socialops_admin_audit_error").
 		SetPaymentType(payment.TypeStripe).
 		SetPaymentTradeNo("stripe-trade-admin-audit-error").
 		SetOrderType(payment.OrderTypeBalance).

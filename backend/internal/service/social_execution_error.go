@@ -10,6 +10,7 @@ type SocialExecutionFailureKind string
 const (
 	SocialExecutionFailureAuthMissing       SocialExecutionFailureKind = "auth_missing"
 	SocialExecutionFailureAuthInvalid       SocialExecutionFailureKind = "auth_invalid"
+	SocialExecutionFailurePasswordInvalid   SocialExecutionFailureKind = "password_invalid"
 	SocialExecutionFailureProxyMissing      SocialExecutionFailureKind = "proxy_missing"
 	SocialExecutionFailureProxyInvalid      SocialExecutionFailureKind = "proxy_invalid"
 	SocialExecutionFailureProxyUnavailable  SocialExecutionFailureKind = "proxy_unavailable"
@@ -19,6 +20,7 @@ const (
 	SocialExecutionFailureActionInput       SocialExecutionFailureKind = "action_input"
 	SocialExecutionFailurePlatform          SocialExecutionFailureKind = "platform"
 	SocialExecutionFailureUnsupported       SocialExecutionFailureKind = "unsupported"
+	SocialExecutionFailureConfiguration     SocialExecutionFailureKind = "configuration"
 )
 
 // SocialExecutionError wraps a business-safe failure message with a structured

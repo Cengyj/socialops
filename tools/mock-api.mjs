@@ -1,11 +1,11 @@
 ﻿import http from 'node:http'
 import { URL } from 'node:url'
 import { createRequire } from 'node:module'
+import { createHash } from 'node:crypto'
 
 const port = Number(process.env.MOCK_API_PORT || 8080)
 const adminEmail = process.env.ADMIN_EMAIL || '3081794680@qq.com'
 const adminPassword = process.env.ADMIN_PASSWORD || '668435li'
-const dataManagementAgentEnabled = process.env.MOCK_DATA_MANAGEMENT_AGENT_ENABLED === '1'
 const socialTaskUnitPrice = 0.1
 const require = createRequire(import.meta.url)
 let mockXlsx
@@ -61,15 +61,39 @@ const regularUser = {
 }
 
 function currentMockUser(req) {
-  const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '')
-  return token === 'dev-mock-user-token' ? regularUser : adminUser
+  return authenticatedMockUser(req) || adminUser
+}
+
+function mockBearerToken(req) {
+  return String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+}
+
+function mockUserForToken(token) {
+  if (token === 'dev-mock-user-token') return regularUser
+  if (token === 'dev-mock-access-token' || token === 'dev-mock-admin-token') return adminUser
+  return null
+}
+
+function authenticatedMockUser(req) {
+  return mockUserForToken(mockBearerToken(req))
+}
+
+function isCoreUserMockPath(path) {
+  return path === '/api/v1/accounts' ||
+    path.startsWith('/api/v1/accounts/') ||
+    path === '/api/v1/proxies' ||
+    path.startsWith('/api/v1/proxies/') ||
+    path === '/api/v1/task-settings' ||
+    path.startsWith('/api/v1/task-settings/')
 }
 
 const mockIdentityProviders = ['email', 'linuxdo', 'oidc', 'wechat', 'dingtalk']
 const mockTotpStates = new Map()
 const mockTaskTemplatesByUser = new Map()
+const mockTaskMediaAssetsByUser = new Map()
 let nextMockTaskTemplateId = 1
-const mockTaskTemplateTypes = ['login_check', 'post', 'like', 'retweet', 'follow']
+const mockTaskTemplateTypes = ['follow', 'like', 'retweet', 'post', 'update_profile', 'update_avatar', 'update_banner']
+const mockExecutableTaskActions = ['login', 'login_check', ...mockTaskTemplateTypes]
 const maxMockTaskTemplatePoolValues = 500
 const maxMockTaskTemplateValueLength = 2048
 
@@ -216,7 +240,6 @@ const publicSettings = {
   home_content: '',
   hide_ccs_import_button: false,
   payment_enabled: true,
-  risk_control_enabled: false,
   table_default_page_size: 20,
   table_page_size_options: [10, 20, 50, 100],
   custom_menu_items: [],
@@ -250,7 +273,6 @@ const adminSettings = {
   smtp_from_name: 'SocialOps',
   smtp_use_tls: true,
   turnstile_secret_key_configured: false,
-  api_key_acl_trust_forwarded_ip: false,
   purchase_subscription_enabled: true,
   purchase_subscription_url: '/purchase',
   totp_enabled: false,
@@ -403,7 +425,6 @@ const mockPublicSettingDirectKeys = [
   'doc_url',
   'home_content',
   'payment_enabled',
-  'risk_control_enabled',
   'purchase_subscription_enabled',
   'purchase_subscription_url',
   'table_default_page_size',
@@ -485,9 +506,53 @@ let adminApiKey = {
 }
 
 const emailTemplateEvents = [
-  { value: 'auth.verify_code', label: 'Email Verification Code', category: 'auth' },
-  { value: 'subscription.purchase_success', label: 'Subscription Activated', category: 'subscription' },
+  {
+    value: 'auth.verify_code',
+    label: 'Auth verification code',
+    category: 'auth',
+    placeholders: ['verification_code', 'expires_in_minutes'],
+  },
+  {
+    value: 'auth.password_reset',
+    label: 'Password reset',
+    category: 'auth',
+    placeholders: ['reset_url', 'expires_in_minutes'],
+  },
+  {
+    value: 'notification_email.verify_code',
+    label: 'Notification email verification',
+    category: 'auth',
+    placeholders: ['verification_code'],
+  },
+  {
+    value: 'subscription.purchase_success',
+    label: 'Subscription purchase success',
+    category: 'subscription',
+    placeholders: ['subscription_group', 'plan_name', 'expires_at'],
+  },
+  {
+    value: 'subscription.expiry_reminder',
+    label: 'Subscription expiry reminder',
+    category: 'subscription',
+    optional: true,
+    placeholders: ['subscription_group', 'expiry_time', 'days_remaining', 'unsubscribe_url'],
+  },
+  {
+    value: 'balance.low',
+    label: 'Balance low',
+    category: 'billing',
+    optional: true,
+    placeholders: ['current_balance', 'balance', 'threshold', 'recharge_url', 'unsubscribe_url'],
+  },
+  {
+    value: 'balance.recharge_success',
+    label: 'Balance recharge success',
+    category: 'billing',
+    placeholders: ['recharge_amount', 'amount'],
+  },
 ]
+
+const emailTemplateEventMap = new Map(emailTemplateEvents.map((event) => [event.value, event]))
 
 const emailTemplateStore = new Map()
 
@@ -495,7 +560,12 @@ function emailTemplateKey(event, locale) {
   return `${event}::${locale}`
 }
 
+function emailTemplatePlaceholderUnion() {
+  return Array.from(new Set(emailTemplateEvents.flatMap((event) => event.placeholders || [])))
+}
+
 function defaultEmailTemplate(event, locale) {
+  const eventInfo = emailTemplateEventMap.get(event)
   const lang = String(locale || '').toLowerCase().startsWith('zh') ? 'zh' : 'en'
   const subject = lang === 'zh'
     ? 'SocialOps 通知 - {{site_name}}'
@@ -510,7 +580,7 @@ function defaultEmailTemplate(event, locale) {
     html,
     is_custom: false,
     updated_at: now(),
-    placeholders: ['site_name', 'recipient_name', 'recipient_email', 'verification_code'],
+    placeholders: eventInfo?.placeholders || [],
   }
 }
 
@@ -568,117 +638,20 @@ const paymentConfig = {
   alipay_force_qrcode: false,
 }
 
-const dataManagementConfig = {
-  source_mode: 'docker_exec',
-  backup_root: '/var/lib/socialops/backups',
-  retention_days: 14,
-  keep_last: 10,
-  active_postgres_profile_id: 'mock-postgres',
-  active_redis_profile_id: 'mock-redis',
-  active_s3_profile_id: 'mock-r2',
-  postgres: {
-    host: 'postgres',
-    port: 5432,
-    user: 'socialops',
-    password_configured: true,
-    database: 'socialops',
-    ssl_mode: 'disable',
-    container_name: 'socialops-postgres',
-  },
-  redis: {
-    addr: 'redis:6379',
-    username: '',
-    password_configured: true,
-    db: 0,
-    container_name: 'socialops-redis',
-  },
-  s3: {
-    enabled: true,
-    endpoint: 'https://example.r2.cloudflarestorage.com',
-    region: 'auto',
-    bucket: 'socialops-backups',
-    access_key_id: 'mock-access-key',
-    secret_access_key_configured: true,
-    prefix: 'backups/',
-    force_path_style: false,
-    use_ssl: true,
-  },
-}
-
-const mockSourceProfiles = {
-  postgres: [
-    {
-      source_type: 'postgres',
-      profile_id: 'mock-postgres',
-      name: 'Mock PostgreSQL',
-      is_active: true,
-      password_configured: true,
-      config: {
-        host: 'postgres',
-        port: 5432,
-        user: 'socialops',
-        database: 'socialops',
-        ssl_mode: 'disable',
-        addr: '',
-        username: '',
-        db: 0,
-        container_name: 'socialops-postgres',
-      },
-      created_at: now(),
-      updated_at: now(),
-    },
-  ],
-  redis: [
-    {
-      source_type: 'redis',
-      profile_id: 'mock-redis',
-      name: 'Mock Redis',
-      is_active: true,
-      password_configured: true,
-      config: {
-        host: '',
-        port: 0,
-        user: '',
-        database: '',
-        ssl_mode: '',
-        addr: 'redis:6379',
-        username: '',
-        db: 0,
-        container_name: 'socialops-redis',
-      },
-      created_at: now(),
-      updated_at: now(),
-    },
-  ],
-}
-
-const mockS3Profiles = [
-  {
-    profile_id: 'mock-r2',
-    name: 'Mock R2',
-    is_active: true,
-    s3: clone(dataManagementConfig.s3),
-    secret_access_key_configured: true,
-    created_at: now(),
-    updated_at: now(),
-  },
-]
-
-let mockBackupJobs = []
 let mockBackupS3Config = {
-  endpoint: dataManagementConfig.s3.endpoint,
-  region: dataManagementConfig.s3.region,
-  bucket: dataManagementConfig.s3.bucket,
-  access_key_id: dataManagementConfig.s3.access_key_id,
+  endpoint: 'https://example.r2.cloudflarestorage.com',
+  region: 'auto',
+  bucket: 'socialops-backups',
+  access_key_id: 'mock-access-key',
   secret_access_key: 'mock-secret-key',
-  prefix: dataManagementConfig.s3.prefix,
-  force_path_style: dataManagementConfig.s3.force_path_style,
+  prefix: 'backups/',
+  force_path_style: false,
 }
 let mockBackupSchedule = {
   enabled: false,
   cron_expr: '0 2 * * *',
-  retain_days: dataManagementConfig.retention_days,
-  retain_count: dataManagementConfig.keep_last,
+  retain_days: 14,
+  retain_count: 10,
 }
 let mockBackupRecords = []
 let nextProviderId = 20
@@ -959,7 +932,6 @@ let mockSubscriptions = [
 
 adminUser.subscriptions = mockSubscriptions.filter((subscription) => subscription.status === 'active')
 
-const mockChannels = []
 let mockOrders = []
 let mockRedeemCodes = []
 let nextPromoCodeId = 8500
@@ -1117,6 +1089,39 @@ let mockSocialAccounts = [
     created_at: daysAgo(2),
     updated_at: now(),
   },
+  {
+    id: nextSocialAccountId++,
+    name: 'x_busy_ops_03',
+    platform: 'x_twitter',
+    username: 'x_busy_ops_03',
+    platform_user_id: 'x-10003',
+    password: 'mock-pass-04',
+    phone: '+1 555 0104',
+    email: 'x-busy-03@example.test',
+    email_password: 'mail-pass-04',
+    two_factor: '',
+    backup_code: '',
+    email_client_id: '',
+    email_token: '',
+    registration_ip: '203.0.113.11',
+    auth_cookie: 'ct0=mock-busy; auth_token=mock-token-03',
+    execution_auth: '{"access_token":"mock-token-03","token_secret":"mock-secret-03"}',
+    account_status: 'available',
+    task_status: 'stored',
+    task_message: 'Existing mock task is still running',
+    remark: 'Seed account used to verify active-task submission guards',
+    assigned_user_id: regularUser.id,
+    proxy_id: regularUserSeedProxy.id,
+    default_proxy_snapshot: JSON.stringify({
+      id: regularUserSeedProxy.id,
+      name: regularUserSeedProxy.name,
+      ip_type: regularUserSeedProxy.ip_type,
+      endpoint: regularUserSeedProxy.endpoint,
+      status: regularUserSeedProxy.status,
+    }),
+    created_at: daysAgo(1),
+    updated_at: now(),
+  },
 ]
 
 let mockSocialTaskLogs = [
@@ -1124,16 +1129,16 @@ let mockSocialTaskLogs = [
     id: nextSocialTaskLogId++,
     social_account_id: mockSocialAccounts[0].id,
     user_id: regularUser.id,
-    action: 'login_check',
+    action: 'login',
     platform: mockSocialAccounts[0].platform,
     account_name: mockSocialAccounts[0].name,
     target: '',
     content: '',
     status: 'success',
-    result_message: 'Login check succeeded',
+    result_message: 'Login succeeded',
     charged: true,
     charged_amount: socialTaskUnitPrice,
-    price: socialTaskUnitPrice,
+    price: mockSocialTaskPriceForAction('login'),
     charge_status: 'charged',
     charge_source: 'subscription',
     proxy_id: null,
@@ -1142,6 +1147,29 @@ let mockSocialTaskLogs = [
     idempotency_key: 'mock-task-1',
     executed_at: daysAgo(1),
     created_at: daysAgo(1),
+  },
+  {
+    id: nextSocialTaskLogId++,
+    social_account_id: mockSocialAccounts[3].id,
+    user_id: regularUser.id,
+    action: 'login_check',
+    platform: mockSocialAccounts[3].platform,
+    account_name: mockSocialAccounts[3].name,
+    target: '',
+    content: '',
+    status: 'running',
+    result_message: 'Mock task is still running',
+    charged: false,
+    charged_amount: 0,
+    price: mockSocialTaskPriceForAction('login_check'),
+    charge_status: 'not_charged',
+    charge_source: '',
+    proxy_id: regularUserSeedProxy.id,
+    proxy_snapshot: mockSocialAccounts[3].default_proxy_snapshot,
+    billing_request_id: '',
+    idempotency_key: 'mock-active-task-running',
+    executed_at: '',
+    created_at: now(),
   },
 ]
 
@@ -1325,6 +1353,35 @@ function applyMockAnnouncementUpdate(announcement, body) {
 
 function roundMoney(value) {
   return Math.round(Number(value || 0) * 100) / 100
+}
+
+function mockSocialTaskPriceForAction(action) {
+  return String(action || '').trim() === 'login' ? socialTaskUnitPrice : 0
+}
+
+function mockSocialTaskAffordability(user, actionCount) {
+  const count = Math.max(0, Number(actionCount || 0))
+  const requiredTotal = roundMoney(count * socialTaskUnitPrice)
+  const walletBalance = roundMoney(Number(user?.balance || 0))
+  const walletRequired = roundMoney(Math.max(0, requiredTotal))
+  return {
+    requiredTotal,
+    walletRequired,
+    walletBalance,
+    canAfford: walletRequired <= walletBalance + 1e-9,
+  }
+}
+
+function sendMockSocialTaskInsufficientFunds(res, check) {
+  send(res, 400, {
+    code: 'SOCIAL_TASK_INSUFFICIENT_FUNDS',
+    message: 'insufficient subscription allowance and wallet balance for social task',
+    metadata: {
+      required_total: check.requiredTotal.toFixed(2),
+      wallet_required: check.walletRequired.toFixed(2),
+      wallet_balance: check.walletBalance.toFixed(2),
+    },
+  })
 }
 
 function paymentProviderForType(paymentType) {
@@ -2412,7 +2469,7 @@ function parseMockAdminImportFile(file) {
     return Array.isArray(parsed) ? parsed.map(mockAdminImportObjectToAccount) : []
   }
   if (filename.endsWith('.xls')) {
-    throw new Error('legacy .xls social account imports are not supported; please use .xlsx, .csv, or .json')
+    throw new Error('old .xls social account imports are not supported; please use .xlsx, .csv, or .json')
   }
   if (filename.endsWith('.xlsx') || contentType.includes('spreadsheet')) {
     const xlsx = loadMockXlsx()
@@ -2678,14 +2735,188 @@ function userSafeSocialAccount(account) {
   return copy
 }
 
+function adminSocialAccount(account) {
+  const copy = clone(account)
+  const owner = findMockUser(copy.assigned_user_id)
+  copy.assigned_user_email = owner?.email || ''
+  copy.default_proxy_configured = String(copy.default_proxy_snapshot || '').trim() !== ''
+  return copy
+}
+
 function mockTaskTemplatesForUser(userId) {
   const key = Number(userId)
   if (!mockTaskTemplatesByUser.has(key)) mockTaskTemplatesByUser.set(key, [])
   return mockTaskTemplatesByUser.get(key)
 }
 
+function mockTaskMediaAssetsForUser(userId) {
+  const key = Number(userId)
+  if (!mockTaskMediaAssetsByUser.has(key)) mockTaskMediaAssetsByUser.set(key, new Map())
+  return mockTaskMediaAssetsByUser.get(key)
+}
+
 function normalizeMockTaskTemplateValues(values) {
   return Array.isArray(values) ? values.map((item) => String(item).trim()).filter(Boolean) : []
+}
+
+function parseMockTaskMediaDataURL(raw) {
+  const value = String(raw || '').trim()
+  if (!value.toLowerCase().startsWith('data:')) return null
+  const comma = value.indexOf(',')
+  if (comma <= 5) return null
+  const meta = value.slice(5, comma).trim()
+  const data = value.slice(comma + 1).trim()
+  if (!/;base64$/i.test(meta) || !data) return null
+  const body = Buffer.from(data, 'base64')
+  if (body.length === 0) return null
+  const contentType = meta.replace(/;base64$/i, '').trim().toLowerCase()
+  return { contentType, body }
+}
+
+function mockTaskMediaContentType(ref) {
+  const explicit = String(ref?.content_type || '').trim().toLowerCase()
+  if (explicit) return explicit
+  return parseMockTaskMediaDataURL(ref?.url)?.contentType || ''
+}
+
+function mockTaskMediaFileExtension(contentType) {
+  switch (String(contentType || '').toLowerCase()) {
+    case 'image/jpeg':
+    case 'image/jpg':
+      return '.jpg'
+    case 'image/gif':
+      return '.gif'
+    case 'image/webp':
+      return '.webp'
+    case 'image/png':
+      return '.png'
+    default:
+      return '.png'
+  }
+}
+
+function mockTaskMediaExecutableStored(ref) {
+  return String(ref?.source || '').trim().toLowerCase() === 'library' &&
+    String(ref?.storage_key || '').trim().toLowerCase().startsWith('social-task/')
+}
+
+function mockTaskMediaExecutableInline(ref) {
+  const source = String(ref?.source || '').trim().toLowerCase()
+  return (source === '' || source === 'inline') && String(ref?.url || '').trim().toLowerCase().startsWith('data:')
+}
+
+function mockTaskMediaExecutable(ref) {
+  return mockTaskMediaExecutableInline(ref) || mockTaskMediaExecutableStored(ref)
+}
+
+function validateMockTaskImageMedia(ref, label, dimensions) {
+  if (!ref) return `${label} media is required`
+  if (!mockTaskMediaExecutable(ref)) return `${label} media source is not supported for SocialOps execution`
+  const contentType = mockTaskMediaContentType(ref)
+  if (!contentType.startsWith('image/')) return `${label} media must be an image`
+  if (dimensions) {
+    const width = Number(ref.width || 0)
+    const height = Number(ref.height || 0)
+    if (width !== dimensions.width || height !== dimensions.height) {
+      return `${label} image must be ${dimensions.width}x${dimensions.height} pixels`
+    }
+  }
+  return ''
+}
+
+function validateMockPostMedia(media) {
+  for (const [index, ref] of media.entries()) {
+    const label = `post media #${index + 1}`
+    if (!mockTaskMediaExecutable(ref)) return `${label} media source is not supported for SocialOps execution`
+    const contentType = mockTaskMediaContentType(ref)
+    if (contentType.startsWith('video/')) return 'video media is not supported for SocialOps execution'
+    if (!contentType || !contentType.startsWith('image/')) return 'post media content type is not supported'
+  }
+  return ''
+}
+
+function materializeMockTaskMediaRef(userId, ref) {
+  const normalized = normalizeMockTaskTemplateMediaRef(ref)
+  if (!normalized) return null
+  if (!mockTaskMediaExecutableInline(normalized)) return normalized
+  const parsed = parseMockTaskMediaDataURL(normalized.url)
+  if (!parsed) return normalized
+  const contentType = normalized.content_type || parsed.contentType || 'application/octet-stream'
+  const sha256 = createHash('sha256').update(parsed.body).digest('hex')
+  const fileName = normalized.file_name || `task-media${mockTaskMediaFileExtension(contentType)}`
+  const storageKey = `social-task/${Number(userId)}/${sha256}${mockTaskMediaFileExtension(contentType)}`
+  const asset = {
+    storage_key: storageKey,
+    url: normalized.url,
+    content_type: contentType,
+    file_name: fileName,
+    sha256,
+    byte_size: parsed.body.length,
+    width: Number(normalized.width || 0) || 0,
+    height: Number(normalized.height || 0) || 0,
+  }
+  mockTaskMediaAssetsForUser(userId).set(storageKey, asset)
+  const materialized = {
+    source: 'library',
+    storage_key: storageKey,
+    content_type: contentType,
+    file_name: fileName,
+    sha256,
+    byte_size: asset.byte_size,
+  }
+  if (asset.width > 0) materialized.width = asset.width
+  if (asset.height > 0) materialized.height = asset.height
+  return materialized
+}
+
+function materializeMockTaskTemplateMedia(userId, input) {
+  const next = clone(input)
+  if (next.type === 'post' && Array.isArray(next.params?.media)) {
+    next.params.media = next.params.media.map((item) => materializeMockTaskMediaRef(userId, item)).filter(Boolean)
+  }
+  if (next.type === 'update_avatar' && next.params?.avatar) {
+    next.params.avatar = materializeMockTaskMediaRef(userId, next.params.avatar)
+  }
+  if (next.type === 'update_banner' && next.params?.banner) {
+    next.params.banner = materializeMockTaskMediaRef(userId, next.params.banner)
+  }
+  return next
+}
+
+function normalizeMockTaskTemplateMediaRef(value) {
+  if (!value || typeof value !== 'object') return null
+  const media = {
+    source: String(value.source || '').trim(),
+    storage_key: String(value.storage_key || '').trim(),
+    url: String(value.url || '').trim(),
+    content_type: String(value.content_type || '').trim(),
+    file_name: String(value.file_name || '').trim(),
+    sha256: String(value.sha256 || '').trim(),
+  }
+  for (const field of ['byte_size', 'width', 'height']) {
+    const numeric = Number(value[field])
+    if (Number.isFinite(numeric) && numeric > 0) media[field] = numeric
+  }
+  const hasStringField = Object.values(media).some((item) => typeof item === 'string' && item !== '')
+  const hasNumericField = ['byte_size', 'width', 'height'].some((field) => Number(media[field]) > 0)
+  return hasStringField || hasNumericField ? media : null
+}
+
+function normalizeMockTaskTemplateMediaRefs(values) {
+  if (!Array.isArray(values)) return []
+  return values.map(normalizeMockTaskTemplateMediaRef).filter(Boolean)
+}
+
+function normalizeMockProfileParams(value) {
+  if (!value || typeof value !== 'object') return null
+  const profile = {
+    display_name: String(value.display_name || '').trim(),
+    screen_name: String(value.screen_name || '').trim(),
+    description: String(value.description || '').trim(),
+    location: String(value.location || '').trim(),
+    url: String(value.url || '').trim(),
+  }
+  return Object.values(profile).some(Boolean) ? profile : null
 }
 
 function normalizeMockTaskTemplateParamsForType(type, params = {}) {
@@ -2693,14 +2924,23 @@ function normalizeMockTaskTemplateParamsForType(type, params = {}) {
     targets: normalizeMockTaskTemplateValues(params.targets),
     contents: normalizeMockTaskTemplateValues(params.contents),
   }
-  if (type === 'login_check') return { targets: [], contents: [] }
   if (['follow', 'like', 'retweet'].includes(type)) return { targets: normalized.targets, contents: [] }
-  if (type === 'post') return { targets: [], contents: normalized.contents }
-  return normalized
+  if (type === 'post') {
+    return {
+      targets: [],
+      contents: normalized.contents,
+      quote_post_url: String(params.quote_post_url || '').trim(),
+      media: normalizeMockTaskTemplateMediaRefs(params.media),
+    }
+  }
+  if (type === 'update_profile') return { profile: normalizeMockProfileParams(params.profile) }
+  if (type === 'update_avatar') return { avatar: normalizeMockTaskTemplateMediaRef(params.avatar) }
+  if (type === 'update_banner') return { banner: normalizeMockTaskTemplateMediaRef(params.banner) }
+  return {}
 }
 
 function normalizeMockTaskTemplateInput(body = {}) {
-  const type = String(body.type || 'login_check').trim()
+  const type = String(body.type || '').trim()
   const params = body.params && typeof body.params === 'object' ? body.params : {}
   return {
     id: body.id ? String(body.id) : '',
@@ -2713,31 +2953,59 @@ function normalizeMockTaskTemplateInput(body = {}) {
 
 function validateMockTaskTemplateInput(input) {
   const errors = []
+  const params = input.params || {}
+  const targets = Array.isArray(params.targets) ? params.targets : []
+  const contents = Array.isArray(params.contents) ? params.contents : []
+  const media = Array.isArray(params.media) ? params.media : []
   if (!input.name) errors.push('template name is required')
-  if (!input.type) errors.push('unsupported task type')
-  if (input.params.targets.length > maxMockTaskTemplatePoolValues) {
+  if (!input.type) errors.push('unsupported task template type')
+  if (targets.length > maxMockTaskTemplatePoolValues) {
     errors.push(`target list cannot exceed ${maxMockTaskTemplatePoolValues} items`)
   }
-  if (input.params.contents.length > maxMockTaskTemplatePoolValues) {
+  if (contents.length > maxMockTaskTemplatePoolValues) {
     errors.push(`content pool cannot exceed ${maxMockTaskTemplatePoolValues} items`)
   }
-  if (input.params.targets.some((value) => Array.from(value).length > maxMockTaskTemplateValueLength)) {
+  if (targets.some((value) => Array.from(value).length > maxMockTaskTemplateValueLength)) {
     errors.push(`target item cannot exceed ${maxMockTaskTemplateValueLength} characters`)
   }
-  if (input.params.contents.some((value) => Array.from(value).length > maxMockTaskTemplateValueLength)) {
+  if (contents.some((value) => Array.from(value).length > maxMockTaskTemplateValueLength)) {
     errors.push(`content item cannot exceed ${maxMockTaskTemplateValueLength} characters`)
   }
-  if (['follow', 'like', 'retweet'].includes(input.type) && input.params.targets.length === 0) {
+  if (['follow', 'like', 'retweet'].includes(input.type) && targets.length === 0) {
     errors.push('target list is required')
   }
-  if (input.type === 'post' && input.params.contents.length === 0) {
-    errors.push('content pool is required')
+  if (input.type === 'post' && contents.length === 0 && media.length === 0) {
+    errors.push('post template requires content pool or media')
+  }
+  if (input.type === 'post' && media.length > 4) {
+    errors.push('post media cannot exceed 4 items')
+  }
+  if (input.type === 'post') {
+    const mediaError = validateMockPostMedia(media)
+    if (mediaError) errors.push(mediaError)
+  }
+  if (input.type === 'update_profile' && !params.profile) {
+    errors.push('profile settings are required')
+  }
+  if (input.type === 'update_avatar' && !params.avatar) {
+    errors.push('avatar media is required')
+  }
+  if (input.type === 'update_avatar' && params.avatar) {
+    const avatarError = validateMockTaskImageMedia(params.avatar, 'avatar', { width: 400, height: 400 })
+    if (avatarError) errors.push(avatarError)
+  }
+  if (input.type === 'update_banner' && !params.banner) {
+    errors.push('banner media is required')
+  }
+  if (input.type === 'update_banner' && params.banner) {
+    const bannerError = validateMockTaskImageMedia(params.banner, 'banner', { width: 1500, height: 500 })
+    if (bannerError) errors.push(bannerError)
   }
   return {
     valid: errors.length === 0,
     type: input.type || '',
-    targets: input.params.targets.length,
-    contents: input.params.contents.length,
+    targets: targets.length,
+    contents: contents.length,
     errors,
   }
 }
@@ -2746,15 +3014,16 @@ function saveMockTaskTemplate(userId, body = {}) {
   const input = normalizeMockTaskTemplateInput(body)
   const validation = validateMockTaskTemplateInput(input)
   if (!validation.valid) return { template: null, validation }
+  const materializedInput = materializeMockTaskTemplateMedia(userId, input)
   const templates = mockTaskTemplatesForUser(userId)
-  const existingIndex = input.id ? templates.findIndex((template) => template.id === input.id) : -1
+  const existingIndex = materializedInput.id ? templates.findIndex((template) => template.id === materializedInput.id) : -1
   const timestamp = now()
   const template = {
     id: existingIndex >= 0 ? templates[existingIndex].id : `tmpl_${nextMockTaskTemplateId++}`,
-    name: input.name,
-    type: input.type,
-    params: input.params,
-    is_default: input.is_default,
+    name: materializedInput.name,
+    type: materializedInput.type,
+    params: materializedInput.params,
+    is_default: materializedInput.is_default,
     created_at: existingIndex >= 0 ? templates[existingIndex].created_at : timestamp,
     updated_at: timestamp,
   }
@@ -2772,6 +3041,10 @@ function findMockTaskTemplate(userId, id) {
   return mockTaskTemplatesForUser(userId).find((template) => template.id === String(id))
 }
 
+function findMockDefaultTaskTemplate(userId, type) {
+  return mockTaskTemplatesForUser(userId).find((template) => template.type === String(type) && template.is_default === true)
+}
+
 function isCompleteWorkbenchImportAccount(account = {}) {
   const hasName = String(account?.name || '').trim() !== ''
   const hasPassword = String(account?.password || '').trim() !== ''
@@ -2782,6 +3055,29 @@ function isCompleteWorkbenchImportAccount(account = {}) {
     String(account?.email_token || '').trim() !== ''
   )
   return hasName && hasPassword && (hasTwoFactor || hasEmail || hasAuthCookie)
+}
+
+function mockUserBatchImportReasonMessage(reason) {
+  switch (reason) {
+    case 'matched_total_pool':
+      return 'matched an existing total-pool account'
+    case 'staged_not_stored':
+      return 'staged as a not-stored workbench account'
+    case 'invalid_input':
+      return 'account import data is invalid'
+    case 'duplicate_in_batch':
+      return 'account is duplicated in this import batch'
+    case 'duplicate_in_database':
+      return 'account already exists in the total account pool'
+    case 'already_in_workbench':
+      return 'account already exists in your workbench'
+    case 'already_assigned':
+      return 'account is already assigned to a workbench'
+    case 'ambiguous_total_pool_match':
+      return 'multiple total-pool accounts match this username'
+    default:
+      return 'account could not be imported'
+  }
 }
 
 function normalizeMockSocialPlatform(value) {
@@ -2826,9 +3122,58 @@ function mockSocialAccountBatchSuccess(result, account) {
   result.items.push({ id: account.id, name: account.name, status: 'succeeded' })
 }
 
+function mockSocialAccountBatchFail(result, id, name, reason, error = 'account could not be processed') {
+  result.failed += 1
+  result.errors.push(error)
+  result.items.push({ id, name, status: 'failed', reason, error })
+}
+
 function mockSocialAccountBatchSkip(result, id, name, reason) {
   result.skipped += 1
   result.items.push({ id, name, status: 'skipped', reason, error: 'account could not be processed' })
+}
+
+function uniqueMockNumberList(values = []) {
+  const seen = new Set()
+  const ids = []
+  for (const value of values) {
+    const id = Number(value)
+    if (seen.has(id)) continue
+    seen.add(id)
+    ids.push(id)
+  }
+  return ids
+}
+
+function mockUserSocialAccountDeleteResult(ids = []) {
+  return {
+    total: ids.length,
+    succeeded: 0,
+    removed: 0,
+    skipped: 0,
+    failed: 0,
+    errors: [],
+    items: [],
+  }
+}
+
+function mockUserSocialAccountDeleteSuccess(result, account) {
+  result.succeeded += 1
+  result.removed += 1
+  result.items.push({ id: account.id, status: 'succeeded' })
+}
+
+function mockUserSocialAccountDeleteFail(result, id, reason) {
+  const error = 'account could not be deleted'
+  result.failed += 1
+  result.errors.push(error)
+  result.items.push({ id, status: 'failed', reason, error })
+}
+
+function mockUserSocialAccountDeleteSkipped(result, id, reason) {
+  const error = 'account could not be deleted'
+  result.skipped += 1
+  result.items.push({ id, status: 'skipped', reason, error })
 }
 
 function isWorkbenchStagingAccount(account) {
@@ -2839,6 +3184,15 @@ function isWorkbenchStagingAccount(account) {
 
 function findSocialAccount(id) {
   return mockSocialAccounts.find((account) => account.id === Number(id)) || null
+}
+
+function deleteMockSocialAccount(id) {
+  const numericId = Number(id)
+  const index = mockSocialAccounts.findIndex((account) => account.id === numericId)
+  if (index < 0) return null
+  const [account] = mockSocialAccounts.splice(index, 1)
+  mockSocialTaskLogs = mockSocialTaskLogs.filter((log) => Number(log.social_account_id) !== numericId)
+  return account
 }
 
 function filterSocialAccounts(url, { userOnly = false, userId = adminUser.id, totalPoolOnly = false } = {}) {
@@ -2854,11 +3208,34 @@ function filterSocialAccounts(url, { userOnly = false, userId = adminUser.id, to
   const accountStatus = (url.searchParams.get('account_status') || '').trim()
   const taskStatus = (url.searchParams.get('task_status') || '').trim()
   const unassigned = url.searchParams.get('unassigned') === 'true'
+  const assigned = url.searchParams.get('assigned') === 'true'
+  const search = (url.searchParams.get('search') || '').trim().toLowerCase()
+  const accountIds = mockCsvNumberSet(url.searchParams.getAll('account_ids').join(','))
 
   if (platform) items = items.filter((account) => account.platform === platform)
   if (accountStatus) items = items.filter((account) => account.account_status === accountStatus)
   if (taskStatus) items = items.filter((account) => account.task_status === taskStatus)
+  if (accountIds.size > 0) items = items.filter((account) => accountIds.has(Number(account.id)))
+  if (assigned) items = items.filter((account) => Number(account.assigned_user_id) > 0)
   if (unassigned) items = items.filter((account) => !account.assigned_user_id)
+  if (search) {
+    items = items.filter((account) => {
+      const owner = findMockUser(account.assigned_user_id)
+      return [
+        account.id,
+        `#${account.id}`,
+        account.name,
+        account.username,
+        account.platform,
+        account.platform_user_id,
+        account.phone,
+        account.email,
+        account.registration_ip,
+        owner?.email,
+        owner?.username,
+      ].some((value) => String(value || '').toLowerCase().includes(search))
+    })
+  }
 
   return items.sort((a, b) => b.id - a.id)
 }
@@ -2938,13 +3315,19 @@ function filterMockProxies(url, { userId } = {}) {
   return items.sort((a, b) => b.id - a.id)
 }
 
+function currentUserMockProxies(userId) {
+  return mockProxies
+    .filter((proxy) => proxy.user_id === userId)
+    .sort((a, b) => a.id - b.id)
+}
+
 function createMockProxy(body = {}, userId = 0) {
   if (userId <= 0) return { error: { code: 'BAD_REQUEST', message: 'user_id is required' } }
   if (Object.prototype.hasOwnProperty.call(body, 'user_id')) {
     return { error: { code: 'SOCIAL_IP_USER_ID_NOT_ACCEPTED', message: 'user_id is not accepted' } }
   }
   const name = String(body.name || '').trim()
-  if (!name) return { error: { code: 'BAD_REQUEST', message: 'name is required' } }
+  if (!name) return { error: { code: 'SOCIAL_IP_NAME_REQUIRED', message: 'social IP name is required' } }
   const ipType = normalizeMockProxyType(body.ip_type, { defaultIfEmpty: true })
   if (!ipType) return { error: { code: 'SOCIAL_IP_TYPE_INVALID', message: 'social IP type is invalid' } }
   const endpointResult = normalizeMockProxyEndpoint(body.endpoint)
@@ -2969,9 +3352,12 @@ function createMockProxy(body = {}, userId = 0) {
 }
 
 function updateMockProxy(proxy, body = {}) {
+  if (Object.prototype.hasOwnProperty.call(body, 'user_id')) {
+    return { error: { code: 'SOCIAL_IP_USER_ID_NOT_ACCEPTED', message: 'user_id is not accepted' } }
+  }
   if (body.name !== undefined) {
     const name = String(body.name || '').trim()
-    if (!name) return { error: { code: 'BAD_REQUEST', message: 'name is required' } }
+    if (!name) return { error: { code: 'SOCIAL_IP_NAME_REQUIRED', message: 'social IP name is required' } }
     proxy.name = name
   }
   if (body.ip_type !== undefined) {
@@ -2982,15 +3368,19 @@ function updateMockProxy(proxy, body = {}) {
   if (body.endpoint !== undefined) {
     const endpointResult = normalizeMockProxyEndpoint(body.endpoint)
     if (!endpointResult.ok) return { error: { code: 'INVALID_PROXY_ENDPOINT', message: endpointResult.message } }
+    const previousEndpoint = String(proxy.endpoint || '')
     proxy.endpoint = endpointResult.endpoint
-    proxy.status = 'unknown'
-    proxy.latency_ms = null
-    proxy.last_check_at = null
+    if (endpointResult.endpoint !== previousEndpoint) {
+      proxy.status = 'unknown'
+      proxy.latency_ms = null
+      proxy.last_check_at = null
+    }
   }
   if (body.remark !== undefined) {
     proxy.remark = body.remark == null ? '' : String(body.remark)
   }
   proxy.updated_at = now()
+  syncMockDefaultProxySnapshots(proxy)
   return { proxy }
 }
 
@@ -2998,7 +3388,7 @@ function testMockProxy(proxy) {
   const checkedAt = now()
   let result
   if (!proxy.endpoint) {
-    result = { id: proxy.id, status: 'unknown', latency_ms: 0, error: 'no endpoint configured' }
+    result = { id: proxy.id, status: 'unknown', latency_ms: 0, error: 'proxy endpoint is not ready for connectivity check' }
   } else {
     result = { id: proxy.id, status: 'online', latency_ms: 80 }
   }
@@ -3006,6 +3396,7 @@ function testMockProxy(proxy) {
   proxy.latency_ms = result.latency_ms > 0 ? result.latency_ms : null
   proxy.last_check_at = checkedAt
   proxy.updated_at = checkedAt
+  syncMockDefaultProxySnapshots(proxy)
   return result
 }
 
@@ -3044,6 +3435,18 @@ function isMockAccountDefaultProxyUsableForUser(account, userId) {
   return isMockProxyUsableForUser(findMockProxy(proxyId), userId)
 }
 
+function syncMockDefaultProxySnapshots(proxy) {
+  if (!proxy?.id) return
+  const snapshot = mockProxySnapshot(proxy)
+  for (const account of mockSocialAccounts) {
+    if (account.assigned_user_id !== proxy.user_id) continue
+    if (account.proxy_id === proxy.id || mockSnapshotProxyID(account.default_proxy_snapshot) === proxy.id) {
+      account.default_proxy_snapshot = snapshot
+      account.updated_at = now()
+    }
+  }
+}
+
 function deleteMockProxy(id) {
   const numericId = Number(id)
   const before = mockProxies.length
@@ -3055,6 +3458,11 @@ function deleteMockProxy(id) {
       account.proxy_id = null
       account.default_proxy_snapshot = ''
       account.updated_at = now()
+    }
+  }
+  for (const log of mockSocialTaskLogs) {
+    if (Number(log.proxy_id) === numericId) {
+      log.proxy_id = null
     }
   }
   return true
@@ -3124,6 +3532,24 @@ function createMockWorkbenchImportAccount(body = {}, userId = regularUser.id) {
   return account
 }
 
+function findMockWorkbenchImportMatches(account = {}) {
+  const name = normalizeMockSocialUsername(account.name)
+  if (!name) return []
+  const platform = normalizeMockSocialPlatform(account.platform)
+  return mockSocialAccounts.filter((item) => {
+    if (normalizeMockSocialUsername(item.name) !== name) return false
+    return !platform || normalizeMockSocialPlatform(item.platform) === platform
+  })
+}
+
+function bindMockPoolAccountForWorkbenchImport(account, userId) {
+  account.assigned_user_id = userId
+  account.default_proxy_snapshot = ''
+  account.task_status = 'stored'
+  account.updated_at = now()
+  return account
+}
+
 function updateMockSocialAccount(account, body = {}) {
   const fields = [
     'name',
@@ -3179,19 +3605,170 @@ function updateMockUserSocialAccount(account, body = {}) {
   return account
 }
 
+function normalizeMockExecutableTaskAction(action) {
+  const clean = String(action || '').trim()
+  return mockExecutableTaskActions.includes(clean) ? clean : ''
+}
+
+function mockTaskActionRequiresTemplate(action) {
+  return action !== 'login' && action !== 'login_check'
+}
+
+function mockTaskPayloadFromTemplate(template) {
+  if (!template) return null
+  if (template.type === 'post') {
+    return {
+      post: {
+        quote_post_url: String(template.params?.quote_post_url || '').trim(),
+        media: clone(template.params?.media || []),
+      },
+    }
+  }
+  if (template.type === 'update_profile') return { profile: clone(template.params?.profile || {}) }
+  if (template.type === 'update_avatar') return { avatar: clone(template.params?.avatar || {}) }
+  if (template.type === 'update_banner') return { banner: clone(template.params?.banner || {}) }
+  return null
+}
+
+function mockTaskTemplateSnapshot(template) {
+  if (!template) return null
+  return {
+    template_id: template.id,
+    template_name: template.name,
+    template_type: template.type,
+    params: clone(template.params || {}),
+  }
+}
+
+function mockAccountExecutableForAction(account, action) {
+  if (!account) return false
+  if (action === 'login') return String(account.password || '').trim() !== ''
+  return account.account_status === 'available'
+}
+
+function mockTaskIdempotencyKey(body = {}) {
+  return String(body.client_request_id || body.idempotency_key || '').trim()
+}
+
+function mockCsvNumberSet(raw) {
+  const values = String(raw || '')
+    .split(',')
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isFinite(item) && item > 0)
+  return new Set(values)
+}
+
+function mockCsvStringSet(raw) {
+  const values = String(raw || '')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+  return new Set(values)
+}
+
+function mockTaskLogMatchesRequest(log, { account, action, target = '', content = '', payload = null, templateSnapshot = null } = {}) {
+  if (!log || !account) return false
+  if (Number(log.social_account_id) !== Number(account.id)) return false
+  if (String(log.action || '') !== String(action || '')) return false
+  if (String(log.target || '') !== String(target || '')) return false
+  if (String(log.content || '') !== String(content || '')) return false
+  if (JSON.stringify(log.payload || null) !== JSON.stringify(buildMockTaskPayloadForLog(payload, target, content))) return false
+  return JSON.stringify(log.template_snapshot || null) === JSON.stringify(templateSnapshot || null)
+}
+
+function findMockTaskLogByIdempotency(userId, accountId, action, key) {
+  if (!key) return null
+  return mockSocialTaskLogs.find((log) =>
+    Number(log.user_id) === Number(userId) &&
+    Number(log.social_account_id) === Number(accountId) &&
+    String(log.action || '') === String(action || '') &&
+    String(log.idempotency_key || '') === String(key)
+  ) || null
+}
+
+function findMockActiveTaskLog(userId, accountId) {
+  return mockSocialTaskLogs.find((log) =>
+    Number(log.user_id) === Number(userId) &&
+    Number(log.social_account_id) === Number(accountId) &&
+    ['pending', 'running'].includes(String(log.status || '').toLowerCase())
+  ) || null
+}
+
+function mockObjectHasValues(value) {
+  return !!value && typeof value === 'object' && Object.values(value).some((item) => {
+    if (Array.isArray(item)) return item.length > 0
+    if (item && typeof item === 'object') return mockObjectHasValues(item)
+    return String(item || '').trim() !== ''
+  })
+}
+
+function mockTaskPayloadIsZero(payload) {
+  if (!payload || typeof payload !== 'object') return true
+  if (String(payload.target || '').trim()) return false
+  const post = payload.post && typeof payload.post === 'object' ? payload.post : null
+  if (post) {
+    if (String(post.text || '').trim()) return false
+    if (String(post.quote_post_url || '').trim()) return false
+    if (Array.isArray(post.media) && post.media.length > 0) return false
+  }
+  if (mockObjectHasValues(payload.profile)) return false
+  if (mockObjectHasValues(payload.avatar)) return false
+  if (mockObjectHasValues(payload.banner)) return false
+  return true
+}
+
+function buildMockTaskPayloadForLog(payload, target = '', content = '') {
+  if (!payload || typeof payload !== 'object') return null
+  const next = clone(payload)
+  const normalizedTarget = String(target || '').trim()
+  const normalizedContent = String(content || '').trim()
+  if (normalizedTarget) next.target = normalizedTarget
+  if (normalizedContent) {
+    if (!next.post || typeof next.post !== 'object') next.post = {}
+    next.post.text = normalizedContent
+  }
+  return mockTaskPayloadIsZero(next) ? null : next
+}
+
+function listMockUserTaskLogs(url, userId) {
+  const accountIds = mockCsvNumberSet(url.searchParams.get('account_ids'))
+  const statuses = mockCsvStringSet(url.searchParams.get('statuses'))
+  const limit = Math.max(1, Math.min(200, Number(url.searchParams.get('limit') || 50) || 50))
+  return mockSocialTaskLogs
+    .filter((log) => Number(log.user_id) === Number(userId))
+    .filter((log) => accountIds.size === 0 || accountIds.has(Number(log.social_account_id)))
+    .filter((log) => statuses.size === 0 || statuses.has(String(log.status || '').toLowerCase()))
+    .sort((left, right) => {
+      const leftTime = new Date(left.executed_at || left.created_at || 0).getTime()
+      const rightTime = new Date(right.executed_at || right.created_at || 0).getTime()
+      if (leftTime !== rightTime) return rightTime - leftTime
+      return Number(right.id || 0) - Number(left.id || 0)
+    })
+    .slice(0, limit)
+    .map(userSafeTaskLog)
+}
+
 function createMockTaskLogs(body = {}, { admin = false } = {}) {
   const ids = Array.isArray(body.account_ids) ? body.account_ids.map(Number).filter(Boolean) : []
-  const action = String(body.action || 'login_check')
+  const sourceIndexes = Array.isArray(body.account_indices) ? body.account_indices.map(Number) : []
+  const action = normalizeMockExecutableTaskAction(body.action)
   const targetPool = Array.isArray(body.target_pool) ? body.target_pool.map((item) => String(item)).filter(Boolean) : []
   const contentPool = Array.isArray(body.content_pool) ? body.content_pool.map((item) => String(item)).filter(Boolean) : []
   const fallbackTarget = body.target ? String(body.target) : ''
   const fallbackContent = body.content ? String(body.content) : ''
+  const payload = body.payload && typeof body.payload === 'object' ? clone(body.payload) : null
+  const templateSnapshot = body.template_snapshot && typeof body.template_snapshot === 'object' ? clone(body.template_snapshot) : null
   const accounts = ids.map(findSocialAccount).filter(Boolean)
 
   const logs = accounts.map((account, index) => {
-    const target = fallbackTarget || (targetPool.length > 0 ? targetPool[index % targetPool.length] : '')
-    const content = fallbackContent || (contentPool.length > 0 ? contentPool[index % contentPool.length] : '')
-    const success = account.account_status === 'available'
+    const sourceIndex = Number.isFinite(sourceIndexes[index]) ? sourceIndexes[index] : index
+    const target = fallbackTarget || (targetPool.length > 0 ? targetPool[sourceIndex % targetPool.length] : '')
+    const content = fallbackContent || (contentPool.length > 0 ? contentPool[sourceIndex % contentPool.length] : '')
+    const logPayload = buildMockTaskPayloadForLog(payload, target, content)
+    const success = mockAccountExecutableForAction(account, action)
+    const price = mockSocialTaskPriceForAction(action)
+    const charged = success && price > 0
+    if (success && action === 'login') account.account_status = 'available'
     account.task_status = success ? 'success' : 'failed'
     account.task_message = success ? `${action} completed in mock executor` : 'Mock executor rejected a non-available account'
     account.updated_at = now()
@@ -3206,18 +3783,20 @@ function createMockTaskLogs(body = {}, { admin = false } = {}) {
       content,
       status: success ? 'success' : 'failed',
       result_message: account.task_message,
-      charged: success,
-      charged_amount: success ? socialTaskUnitPrice : 0,
-      price: socialTaskUnitPrice,
-      charge_status: success ? 'charged' : 'not_charged',
-      charge_source: success ? 'subscription' : '',
+      charged,
+      charged_amount: charged ? price : 0,
+      price,
+      charge_status: charged ? 'charged' : 'not_charged',
+      charge_source: charged ? 'subscription' : '',
       proxy_id: account.proxy_id,
       proxy_snapshot: account.default_proxy_snapshot || '',
-      billing_request_id: `mock-billing-${Date.now()}-${account.id}`,
-      idempotency_key: body.client_request_id || `mock-${Date.now()}-${account.id}`,
+      billing_request_id: charged ? `mock-billing-${Date.now()}-${account.id}` : '',
+      idempotency_key: mockTaskIdempotencyKey(body) || `mock-${Date.now()}-${account.id}`,
       executed_at: now(),
       created_at: now(),
     }
+    if (logPayload) log.payload = logPayload
+    if (templateSnapshot) log.template_snapshot = clone(templateSnapshot)
     mockSocialTaskLogs.unshift(log)
     return admin ? clone(log) : userSafeTaskLog(log)
   })
@@ -3264,14 +3843,22 @@ function userUsageLogs(userId) {
   return mockSocialTaskLogs.filter((log) => Number(log.user_id) === Number(userId))
 }
 
+function mockFinalizedTaskLogs(logs = mockSocialTaskLogs) {
+  return logs.filter((log) => ['success', 'failed'].includes(String(log.status || '').toLowerCase()))
+}
+
 function filterUsageLogs(url, userId) {
-  const operation = String(url.searchParams.get('operation') || url.searchParams.get('model') || '').trim().toLowerCase()
+  const operation = String(url.searchParams.get('operation') || '').trim().toLowerCase()
+  const platform = String(url.searchParams.get('platform') || '').trim().toLowerCase()
+  const account = String(url.searchParams.get('account') || url.searchParams.get('account_name') || '').trim().toLowerCase()
   const status = String(url.searchParams.get('status') || '').trim().toLowerCase()
   const startTime = parseMockUsageDate(url.searchParams.get('start_date'))
   const endTime = parseMockUsageDate(url.searchParams.get('end_date'), { endOfDay: true })
 
-  let items = userUsageLogs(userId)
+  let items = mockFinalizedTaskLogs(userUsageLogs(userId))
   if (operation) items = items.filter((log) => String(log.action || '').toLowerCase() === operation)
+  if (platform) items = items.filter((log) => String(log.platform || '').toLowerCase() === platform)
+  if (account) items = items.filter((log) => String(log.account_name || '').toLowerCase().includes(account))
   if (status) items = items.filter((log) => String(log.status || '').toLowerCase() === status)
   if (startTime) items = items.filter((log) => usageActivityTime(log) >= startTime)
   if (endTime) items = items.filter((log) => usageActivityTime(log) <= endTime)
@@ -3284,7 +3871,7 @@ function filterUsageLogs(url, userId) {
     if (sortBy === 'cost') {
       av = usageCost(a)
       bv = usageCost(b)
-    } else if (sortBy === 'operation' || sortBy === 'model') {
+    } else if (sortBy === 'operation') {
       av = String(a.action || '')
       bv = String(b.action || '')
     } else {
@@ -3316,20 +3903,34 @@ function usageLogProjection(log) {
 
 function usageStatsProjection(logs) {
   const totalCost = roundUsageAmount(logs.reduce((sum, log) => sum + usageCost(log), 0))
+  const successCount = logs.filter((log) => String(log.status || '').toLowerCase() === 'success').length
+  const failedCount = logs.filter((log) => String(log.status || '').toLowerCase() === 'failed').length
   return {
-    total_requests: logs.length,
-    total_input_tokens: 0,
-    total_output_tokens: 0,
-    total_cache_tokens: 0,
-    total_tokens: logs.length,
-    total_cost: totalCost,
-    total_actual_cost: totalCost,
-    average_duration_ms: 0,
+    total_operations: logs.length,
+    success_count: successCount,
+    failed_count: failedCount,
+    total_charged: totalCost,
+  }
+}
+
+function adminUserUsageStats(userId) {
+  const logs = mockFinalizedTaskLogs(userUsageLogs(userId))
+  return {
+    total_operations: logs.length,
+    total_charged: roundUsageAmount(logs.reduce((sum, log) => sum + usageCost(log), 0)),
+  }
+}
+
+function dashboardTaskExecutionSummary(logs) {
+  const totalCost = roundUsageAmount(logs.reduce((sum, log) => sum + usageCost(log), 0))
+  return {
+    operations: logs.length,
+    charged: totalCost,
   }
 }
 
 function userDashboardUsageStats(userId) {
-  const logs = userUsageLogs(userId)
+  const logs = mockFinalizedTaskLogs(userUsageLogs(userId))
   const nowDate = new Date()
   const todayStart = new Date(Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate()))
   const recentStart = new Date(nowDate.getTime() - 5 * 60 * 1000)
@@ -3341,59 +3942,39 @@ function userDashboardUsageStats(userId) {
     const activity = usageActivityTime(log)
     return activity >= recentStart && activity <= nowDate
   })
-  const stats = usageStatsProjection(logs)
-  const todayStats = usageStatsProjection(todayLogs)
+  const stats = dashboardTaskExecutionSummary(logs)
+  const todayStats = dashboardTaskExecutionSummary(todayLogs)
   const byPlatform = new Map()
   for (const log of logs) {
     const platform = log.platform || ''
     const current = byPlatform.get(platform) || {
       platform,
-      total_requests: 0,
-      total_tokens: 0,
-      total_actual_cost: 0,
-      today_requests: 0,
-      today_tokens: 0,
-      today_actual_cost: 0,
+      total_operations: 0,
+      total_charged: 0,
+      today_operations: 0,
+      today_charged: 0,
     }
     const cost = usageCost(log)
-    current.total_requests += 1
-    current.total_tokens += 1
-    current.total_actual_cost += cost
+    current.total_operations += 1
+    current.total_charged += cost
     const activity = usageActivityTime(log)
     if (activity >= todayStart && activity <= nowDate) {
-      current.today_requests += 1
-      current.today_tokens += 1
-      current.today_actual_cost += cost
+      current.today_operations += 1
+      current.today_charged += cost
     }
     byPlatform.set(platform, current)
   }
 
   return {
-    total_api_keys: 0,
-    active_api_keys: 0,
-    total_requests: stats.total_requests,
-    total_input_tokens: 0,
-    total_output_tokens: 0,
-    total_cache_creation_tokens: 0,
-    total_cache_read_tokens: 0,
-    total_tokens: stats.total_tokens,
-    total_cost: stats.total_cost,
-    total_actual_cost: stats.total_actual_cost,
-    today_requests: todayStats.total_requests,
-    today_input_tokens: 0,
-    today_output_tokens: 0,
-    today_cache_creation_tokens: 0,
-    today_cache_read_tokens: 0,
-    today_tokens: todayStats.total_tokens,
-    today_cost: todayStats.total_cost,
-    today_actual_cost: todayStats.total_actual_cost,
-    average_duration_ms: 0,
-    rpm: Math.floor(recentLogs.length / 5),
-    tpm: Math.floor(recentLogs.length / 5),
+    total_operations: stats.operations,
+    total_charged: stats.charged,
+    today_operations: todayStats.operations,
+    today_charged: todayStats.charged,
+    recent_operations_per_minute: Math.floor(recentLogs.length / 5),
     by_platform: Array.from(byPlatform.values()).map((item) => ({
       ...item,
-      total_actual_cost: roundUsageAmount(item.total_actual_cost),
-      today_actual_cost: roundUsageAmount(item.today_actual_cost),
+      total_charged: roundUsageAmount(item.total_charged),
+      today_charged: roundUsageAmount(item.today_charged),
     })),
   }
 }
@@ -3402,30 +3983,22 @@ function userUsageTrend(userId, granularity = 'day') {
   const end = new Date()
   const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000)
   const byDate = new Map()
-  for (const log of userUsageLogs(userId)) {
+  for (const log of mockFinalizedTaskLogs(userUsageLogs(userId))) {
     const activity = usageActivityTime(log)
     if (activity < start || activity > end) continue
     const date = trendBucket(activity, granularity)
     const current = byDate.get(date) || {
       date,
-      requests: 0,
-      input_tokens: 0,
-      output_tokens: 0,
-      cache_creation_tokens: 0,
-      cache_read_tokens: 0,
-      total_tokens: 0,
-      cost: 0,
-      actual_cost: 0,
+      operations: 0,
+      charged: 0,
     }
     const cost = usageCost(log)
-    current.requests += 1
-    current.total_tokens += 1
-    current.cost += cost
-    current.actual_cost += cost
+    current.operations += 1
+    current.charged += cost
     byDate.set(date, current)
   }
   return Array.from(byDate.values())
-    .map((item) => ({ ...item, cost: roundUsageAmount(item.cost), actual_cost: roundUsageAmount(item.actual_cost) }))
+    .map((item) => ({ ...item, charged: roundUsageAmount(item.charged) }))
     .sort((a, b) => a.date.localeCompare(b.date))
 }
 
@@ -3433,7 +4006,7 @@ function userById(userId) {
   return [adminUser, regularUser].find((user) => Number(user.id) === Number(userId)) || null
 }
 
-function usageTrendFromLogs(logs, granularity = 'day') {
+function adminDashboardTrendFromLogs(logs, granularity = 'day') {
   const end = new Date()
   const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000)
   const byDate = new Map()
@@ -3443,29 +4016,21 @@ function usageTrendFromLogs(logs, granularity = 'day') {
     const date = trendBucket(activity, granularity)
     const current = byDate.get(date) || {
       date,
-      requests: 0,
-      input_tokens: 0,
-      output_tokens: 0,
-      cache_creation_tokens: 0,
-      cache_read_tokens: 0,
-      total_tokens: 0,
-      cost: 0,
-      actual_cost: 0,
+      operations: 0,
+      charged: 0,
     }
     const cost = usageCost(log)
-    current.requests += 1
-    current.total_tokens += 1
-    current.cost += cost
-    current.actual_cost += cost
+    current.operations += 1
+    current.charged += cost
     byDate.set(date, current)
   }
   return Array.from(byDate.values())
-    .map((item) => ({ ...item, cost: roundUsageAmount(item.cost), actual_cost: roundUsageAmount(item.actual_cost) }))
+    .map((item) => ({ ...item, charged: roundUsageAmount(item.charged) }))
     .sort((a, b) => a.date.localeCompare(b.date))
 }
 
 function adminDashboardStats() {
-  const logs = [...mockSocialTaskLogs]
+  const logs = mockFinalizedTaskLogs()
   const nowDate = new Date()
   const todayStart = new Date(Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate()))
   const hourStart = new Date(nowDate)
@@ -3478,51 +4043,34 @@ function adminDashboardStats() {
   })
   const hourlyUserIds = new Set()
   const activeUserIds = new Set()
-  let recentRequests = 0
+  let recentOperations = 0
   for (const log of logs) {
     const activity = usageActivityTime(log)
     if (activity >= todayStart && activity <= nowDate) activeUserIds.add(log.user_id)
     if (activity >= hourStart && activity <= nowDate) hourlyUserIds.add(log.user_id)
-    if (activity >= recentStart && activity <= nowDate) recentRequests += 1
+    if (activity >= recentStart && activity <= nowDate) recentOperations += 1
   }
-  const stats = usageStatsProjection(logs)
-  const todayStats = usageStatsProjection(todayLogs)
+  const stats = dashboardTaskExecutionSummary(logs)
+  const todayStats = dashboardTaskExecutionSummary(todayLogs)
 
   return {
     total_users: users.length,
     today_new_users: users.filter((user) => new Date(user.created_at) >= todayStart).length,
     active_users: activeUserIds.size,
     hourly_active_users: hourlyUserIds.size,
-    stats_updated_at: now(),
-    stats_stale: false,
-    total_api_keys: 0,
-    active_api_keys: 0,
     total_accounts: mockSocialAccounts.length,
     normal_accounts: mockSocialAccounts.filter((account) => account.account_status === 'available').length,
     error_accounts: mockSocialAccounts.filter((account) => ['invalid', 'not_stored'].includes(account.account_status)).length,
     ratelimit_accounts: mockSocialAccounts.filter((account) => account.account_status === 'limited').length,
     overload_accounts: mockSocialAccounts.filter((account) => account.account_status === 'pending_check').length,
-    total_requests: stats.total_requests,
-    total_input_tokens: 0,
-    total_output_tokens: 0,
-    total_cache_creation_tokens: 0,
-    total_cache_read_tokens: 0,
-    total_tokens: stats.total_tokens,
-    total_cost: stats.total_cost,
-    total_actual_cost: stats.total_actual_cost,
-    total_account_cost: 0,
-    today_requests: todayStats.total_requests,
-    today_input_tokens: 0,
-    today_output_tokens: 0,
-    today_cache_creation_tokens: 0,
-    today_cache_read_tokens: 0,
-    today_tokens: todayStats.total_tokens,
-    today_cost: todayStats.total_cost,
-    today_actual_cost: todayStats.total_actual_cost,
-    today_account_cost: 0,
+    total_operations: stats.operations,
+    today_operations: todayStats.operations,
+    total_charged: stats.charged,
+    today_charged: todayStats.charged,
     average_duration_ms: 0,
-    rpm: Math.floor(recentRequests / 5),
-    tpm: Math.floor(recentRequests / 5),
+    recent_operations_per_minute: Math.floor(recentOperations / 5),
+    stats_updated_at: now(),
+    stats_stale: false,
   }
 }
 
@@ -3530,7 +4078,7 @@ function adminUserUsageTrend(granularity = 'day', limit = 20) {
   const end = new Date()
   const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000)
   const byUserDate = new Map()
-  for (const log of mockSocialTaskLogs) {
+  for (const log of mockFinalizedTaskLogs()) {
     const activity = usageActivityTime(log)
     if (activity < start || activity > end) continue
     const date = trendBucket(activity, granularity)
@@ -3541,24 +4089,20 @@ function adminUserUsageTrend(granularity = 'day', limit = 20) {
       user_id: log.user_id,
       email: user?.email || '',
       username: user?.username || '',
-      requests: 0,
-      tokens: 0,
-      cost: 0,
-      actual_cost: 0,
+      operations: 0,
+      charged: 0,
     }
     const cost = usageCost(log)
-    current.requests += 1
-    current.tokens += 1
-    current.cost += cost
-    current.actual_cost += cost
+    current.operations += 1
+    current.charged += cost
     byUserDate.set(key, current)
   }
   return Array.from(byUserDate.values())
-    .map((item) => ({ ...item, cost: roundUsageAmount(item.cost), actual_cost: roundUsageAmount(item.actual_cost) }))
+    .map((item) => ({ ...item, charged: roundUsageAmount(item.charged) }))
     .sort((a, b) => {
       if (a.date !== b.date) return a.date.localeCompare(b.date)
-      if (a.actual_cost !== b.actual_cost) return b.actual_cost - a.actual_cost
-      if (a.requests !== b.requests) return b.requests - a.requests
+      if (a.charged !== b.charged) return b.charged - a.charged
+      if (a.operations !== b.operations) return b.operations - a.operations
       return Number(a.user_id) - Number(b.user_id)
     })
     .slice(0, limit)
@@ -3568,50 +4112,44 @@ function adminUserSpendingRanking(limit = 20) {
   const end = new Date()
   const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000)
   const byUser = new Map()
-  let totalRequests = 0
-  let totalActualCost = 0
-  for (const log of mockSocialTaskLogs) {
+  let totalOperations = 0
+  let totalCharged = 0
+  for (const log of mockFinalizedTaskLogs()) {
     const activity = usageActivityTime(log)
     if (activity < start || activity > end) continue
     const user = userById(log.user_id)
     const current = byUser.get(log.user_id) || {
       user_id: log.user_id,
       email: user?.email || '',
-      username: user?.username || '',
-      actual_cost: 0,
-      requests: 0,
-      tokens: 0,
+      charged: 0,
+      operations: 0,
     }
     const cost = usageCost(log)
-    current.requests += 1
-    current.tokens += 1
-    current.actual_cost += cost
-    totalRequests += 1
-    totalActualCost += cost
+    current.operations += 1
+    current.charged += cost
+    totalOperations += 1
+    totalCharged += cost
     byUser.set(log.user_id, current)
   }
   const ranking = Array.from(byUser.values())
-    .map((item) => ({ ...item, actual_cost: roundUsageAmount(item.actual_cost) }))
+    .map((item) => ({ ...item, charged: roundUsageAmount(item.charged) }))
     .sort((a, b) => {
-      if (a.actual_cost !== b.actual_cost) return b.actual_cost - a.actual_cost
-      if (a.requests !== b.requests) return b.requests - a.requests
+      if (a.charged !== b.charged) return b.charged - a.charged
+      if (a.operations !== b.operations) return b.operations - a.operations
       return Number(a.user_id) - Number(b.user_id)
     })
     .slice(0, limit)
 
   return {
     ranking,
-    total_actual_cost: roundUsageAmount(totalActualCost),
-    total_requests: totalRequests,
-    total_tokens: totalRequests,
+    total_charged: roundUsageAmount(totalCharged),
+    total_operations: totalOperations,
   }
 }
 
 function userSafeTaskLog(log) {
   const copy = clone(log)
   delete copy.user_id
-  delete copy.target
-  delete copy.content
   delete copy.price
   delete copy.charge_source
   delete copy.proxy_id
@@ -3664,6 +4202,17 @@ function sendText(res, status, text, contentType = 'text/plain; charset=utf-8') 
   res.end(text)
 }
 
+function sendBinary(res, status, body, contentType = 'application/octet-stream', fileName = 'task-media') {
+  res.writeHead(status, {
+    'Content-Type': contentType,
+    'Content-Disposition': `inline; filename="${String(fileName || 'task-media').replace(/"/g, '')}"`,
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept-Language, X-Idempotency-Key',
+    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+  })
+  res.end(body)
+}
+
 const userTaskPath = '/api/v1/accounts' + '/tasks'
 const adminTaskPath = '/api/v1/admin/accounts' + '/tasks'
 
@@ -3686,74 +4235,21 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
-  if (path.startsWith('/api/v1/admin/') && currentMockUser(req).role !== 'admin') {
-    send(res, 403, { code: 'ADMIN_ONLY', message: 'Admin permission is required' })
+  if (isCoreUserMockPath(path) && !authenticatedMockUser(req)) {
+    send(res, 401, { code: 'UNAUTHENTICATED', message: 'Authentication is required' })
     return
   }
 
-  if (path === '/api/v1/admin/data-management/agent/health' && req.method === 'GET') {
-    ok(res, {
-      enabled: dataManagementAgentEnabled,
-      reason: dataManagementAgentEnabled ? '' : 'DATA_MANAGEMENT_DEPRECATED',
-      socket_path: '/var/run/socialops/datamanagementd.sock',
-      agent: dataManagementAgentEnabled
-        ? {
-            status: 'ready',
-            version: 'mock-agent',
-            uptime_seconds: 1860,
-          }
-        : undefined,
-    })
-    return
-  }
-
-  if (path.startsWith('/api/v1/admin/data-management/') && !dataManagementAgentEnabled) {
-    send(res, 503, {
-      code: 'DATA_MANAGEMENT_DEPRECATED',
-      message: 'Data management agent is disabled in mock mode',
-      metadata: { socket_path: '/var/run/socialops/datamanagementd.sock' },
-    })
-    return
-  }
-
-  if (path === '/api/v1/admin/data-management/config' && req.method === 'GET') {
-    ok(res, clone(dataManagementConfig))
-    return
-  }
-
-  if (/^\/api\/v1\/admin\/data-management\/sources\/(postgres|redis)\/profiles$/.test(path) && req.method === 'GET') {
-    const sourceType = path.split('/')[6]
-    ok(res, { items: clone(mockSourceProfiles[sourceType] || []) })
-    return
-  }
-
-  if (path === '/api/v1/admin/data-management/s3/profiles' && req.method === 'GET') {
-    ok(res, { items: clone(mockS3Profiles) })
-    return
-  }
-
-  if (path === '/api/v1/admin/data-management/backups' && req.method === 'GET') {
-    ok(res, { items: clone(mockBackupJobs), next_page_token: '' })
-    return
-  }
-
-  if (path === '/api/v1/admin/data-management/backups' && req.method === 'POST') {
-    const body = await readJson(req)
-    const job = {
-      job_id: `mock-backup-${Date.now()}`,
-      backup_type: body.backup_type || 'full',
-      status: 'queued',
-      triggered_by: 'admin:1',
-      s3_profile_id: body.upload_to_s3 ? dataManagementConfig.active_s3_profile_id : '',
-      postgres_profile_id: dataManagementConfig.active_postgres_profile_id,
-      redis_profile_id: dataManagementConfig.active_redis_profile_id,
-      started_at: now(),
-      finished_at: '',
-      error_message: '',
+  if (path.startsWith('/api/v1/admin/')) {
+    const authenticatedUser = authenticatedMockUser(req)
+    if (!authenticatedUser) {
+      send(res, 401, { code: 'UNAUTHENTICATED', message: 'Authentication is required' })
+      return
     }
-    mockBackupJobs.unshift(job)
-    ok(res, { job_id: job.job_id, status: job.status })
-    return
+    if (authenticatedUser.role !== 'admin') {
+      send(res, 403, { code: 'ADMIN_ONLY', message: 'Admin permission is required' })
+      return
+    }
   }
 
   if (path === '/api/v1/admin/backups/s3-config' && req.method === 'GET') {
@@ -3999,7 +4495,7 @@ const server = http.createServer(async (req, res) => {
           }
         }),
       ),
-      placeholders: ['site_name', 'recipient_name', 'recipient_email', 'verification_code'],
+      placeholders: emailTemplatePlaceholderUnion(),
     })
     return
   }
@@ -4009,6 +4505,10 @@ const server = http.createServer(async (req, res) => {
     const event = decodeURIComponent(emailTemplateMatch[1])
     const locale = decodeURIComponent(emailTemplateMatch[2])
     const restore = path.endsWith('/restore-official')
+    if (!emailTemplateEventMap.has(event)) {
+      send(res, 400, { code: 'EMAIL_TEMPLATE_EVENT_UNSUPPORTED', message: 'unsupported email template event' })
+      return
+    }
     if (req.method === 'GET') {
       ok(res, clone(getStoredEmailTemplate(event, locale)))
       return
@@ -4432,11 +4932,6 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
-  if (path === '/api/v1/payment/channels' && req.method === 'GET') {
-    ok(res, mockChannels)
-    return
-  }
-
   if (path === '/api/v1/payment/limits' && req.method === 'GET') {
     ok(res, {
       methods: clone(methodLimits),
@@ -4658,35 +5153,90 @@ const server = http.createServer(async (req, res) => {
     let failed = 0
     for (const account of accounts) {
       if (!isCompleteWorkbenchImportAccount(account)) {
+        const reason = 'invalid_input'
+        const message = mockUserBatchImportReasonMessage(reason)
         failed += 1
-        errors.push('account could not be imported')
+        errors.push(message)
         items.push({
           name: String(account?.name || '').trim(),
           status: 'failed',
-          reason: 'invalid_input',
-          error: 'account could not be imported',
+          reason,
+          error: message,
         })
         continue
       }
       const key = mockSocialAccountDedupKey(account)
       if (key && seen.has(key)) {
+        const reason = 'duplicate_in_batch'
+        const message = mockUserBatchImportReasonMessage(reason)
         duplicates += 1
-        errors.push('account could not be imported')
+        errors.push(message)
         items.push({
           name: String(account?.name || '').trim(),
           status: 'duplicate',
-          reason: 'duplicate_in_batch',
-          error: 'account could not be imported',
+          reason,
+          error: message,
         })
         continue
       }
       if (key) seen.add(key)
-      const createdAccount = createMockWorkbenchImportAccount(account, user.id)
+
+      const matches = findMockWorkbenchImportMatches(account)
+      const currentUserMatch = matches.find((item) => Number(item.assigned_user_id) === Number(user.id))
+      if (currentUserMatch) {
+        const reason = 'already_in_workbench'
+        const message = mockUserBatchImportReasonMessage(reason)
+        duplicates += 1
+        errors.push(message)
+        items.push({
+          id: currentUserMatch.id,
+          name: String(account?.name || '').trim(),
+          status: 'duplicate',
+          reason,
+          error: message,
+        })
+        continue
+      }
+      const unassignedMatches = matches.filter((item) => !item.assigned_user_id)
+      const assignedMatch = matches.find((item) => item.assigned_user_id)
+      if (unassignedMatches.length === 0 && assignedMatch) {
+        const reason = 'already_assigned'
+        const message = mockUserBatchImportReasonMessage(reason)
+        duplicates += 1
+        errors.push(message)
+        items.push({
+          id: assignedMatch.id,
+          name: String(account?.name || '').trim(),
+          status: 'duplicate',
+          reason,
+          error: message,
+        })
+        continue
+      }
+      if (unassignedMatches.length > 1) {
+        const reason = 'ambiguous_total_pool_match'
+        const message = mockUserBatchImportReasonMessage(reason)
+        failed += 1
+        errors.push(message)
+        items.push({
+          name: String(account?.name || '').trim(),
+          status: 'failed',
+          reason,
+          error: message,
+        })
+        continue
+      }
+
+      const createdAccount = unassignedMatches.length === 1
+        ? bindMockPoolAccountForWorkbenchImport(unassignedMatches[0], user.id)
+        : createMockWorkbenchImportAccount(account, user.id)
       created.push(createdAccount)
+      const reason = unassignedMatches.length === 1 ? 'matched_total_pool' : 'staged_not_stored'
       items.push({
         id: createdAccount.id,
         name: createdAccount.name,
         status: 'succeeded',
+        reason,
       })
     }
     ok(res, {
@@ -4700,6 +5250,31 @@ const server = http.createServer(async (req, res) => {
       items,
       accounts: created.map(userSafeSocialAccount),
     })
+    return
+  }
+
+  if (path === '/api/v1/task-settings/media' && req.method === 'GET') {
+    const user = currentMockUser(req)
+    const storageKey = String(url.searchParams.get('storage_key') || '').trim()
+    if (!storageKey) {
+      send(res, 400, { code: 'TASK_TEMPLATE_MEDIA_STORAGE_KEY_REQUIRED', message: 'task template media storage key is required' })
+      return
+    }
+    if (!storageKey.toLowerCase().startsWith('social-task/')) {
+      send(res, 400, { code: 'TASK_TEMPLATE_MEDIA_SOURCE_UNSUPPORTED', message: 'task template media source is not supported' })
+      return
+    }
+    const asset = mockTaskMediaAssetsForUser(user.id).get(storageKey)
+    if (!asset) {
+      send(res, 404, { code: 'TASK_TEMPLATE_MEDIA_NOT_FOUND', message: 'task template media asset not found' })
+      return
+    }
+    const parsed = parseMockTaskMediaDataURL(asset.url)
+    if (!parsed) {
+      send(res, 400, { code: 'TASK_TEMPLATE_MEDIA_INVALID', message: 'task template media asset is invalid' })
+      return
+    }
+    sendBinary(res, 200, parsed.body, asset.content_type || parsed.contentType, asset.file_name || 'task-media')
     return
   }
 
@@ -4792,8 +5367,7 @@ const server = http.createServer(async (req, res) => {
       send(res, 404, { code: 'MOCK_NOT_FOUND', message: 'Mock assigned account not found' })
       return
     }
-    account.assigned_user_id = null
-    account.updated_at = now()
+    deleteMockSocialAccount(id)
     ok(res, null)
     return
   }
@@ -4801,17 +5375,28 @@ const server = http.createServer(async (req, res) => {
   if (path === '/api/v1/accounts/batch-delete' && req.method === 'POST') {
     const user = currentMockUser(req)
     const body = await readJson(req)
-    const ids = Array.isArray(body.ids) ? body.ids.map(Number).filter(Boolean) : []
-    let removed = 0
+    const ids = Array.isArray(body.ids) ? body.ids.map((value) => Number(value)) : []
+    const result = mockUserSocialAccountDeleteResult(ids)
+    const seen = new Set()
     for (const id of ids) {
-      const account = findSocialAccount(id)
-      if (account && account.assigned_user_id === user.id) {
-        account.assigned_user_id = null
-        account.updated_at = now()
-        removed += 1
+      if (id <= 0) {
+        mockUserSocialAccountDeleteFail(result, id, 'invalid_id')
+        continue
       }
+      if (seen.has(id)) {
+        mockUserSocialAccountDeleteSkipped(result, id, 'duplicate_in_batch')
+        continue
+      }
+      seen.add(id)
+      const account = findSocialAccount(id)
+      if (!account || account.assigned_user_id !== user.id) {
+        mockUserSocialAccountDeleteFail(result, id, 'delete_failed')
+        continue
+      }
+      deleteMockSocialAccount(id)
+      mockUserSocialAccountDeleteSuccess(result, account)
     }
-    ok(res, { total: ids.length, removed, skipped: Math.max(0, ids.length - removed), errors: [] })
+    ok(res, result)
     return
   }
 
@@ -4821,18 +5406,49 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
+  if (path === userTaskPath && req.method === 'GET') {
+    const user = currentMockUser(req)
+    ok(res, { logs: listMockUserTaskLogs(url, user.id) })
+    return
+  }
+
   if (path === userTaskPath && req.method === 'POST') {
     const user = currentMockUser(req)
     const body = await readJson(req)
     const templateId = String(body.template_id || '').trim()
-    if (!templateId) {
-      send(res, 400, { code: 'TASK_TEMPLATE_REQUIRED', message: 'task template is required' })
-      return
-    }
-    const template = findMockTaskTemplate(user.id, templateId)
-    if (!template) {
-      send(res, 404, { code: 'MOCK_NOT_FOUND', message: 'Mock task template not found' })
-      return
+    let action = normalizeMockExecutableTaskAction(body.action)
+    let targetPool = []
+    let contentPool = []
+    let payload = null
+    let templateSnapshot = null
+    if (templateId) {
+      const template = findMockTaskTemplate(user.id, templateId)
+      if (!template) {
+        send(res, 404, { code: 'MOCK_NOT_FOUND', message: 'Mock task template not found' })
+        return
+      }
+      action = template.type
+      targetPool = template.params?.targets || []
+      contentPool = template.params?.contents || []
+      payload = mockTaskPayloadFromTemplate(template)
+      templateSnapshot = mockTaskTemplateSnapshot(template)
+      } else {
+      if (!action) {
+        send(res, 400, { code: 'SOCIAL_TASK_UNSUPPORTED_ACTION', message: 'unsupported social task action' })
+        return
+      }
+      if (mockTaskActionRequiresTemplate(action)) {
+        const template = findMockDefaultTaskTemplate(user.id, action)
+        if (!template) {
+          send(res, 400, { code: 'TASK_DEFAULT_TEMPLATE_REQUIRED', message: 'default task template is required for this action' })
+          return
+        }
+        action = template.type
+        targetPool = template.params?.targets || []
+        contentPool = template.params?.contents || []
+        payload = mockTaskPayloadFromTemplate(template)
+        templateSnapshot = mockTaskTemplateSnapshot(template)
+      }
     }
     const scopedIds = Array.isArray(body.account_ids)
       ? body.account_ids.map(Number).filter((id) => findSocialAccount(id)?.assigned_user_id === user.id)
@@ -4841,34 +5457,80 @@ const server = http.createServer(async (req, res) => {
       send(res, 403, { code: 'ACCOUNT_SCOPE_DENIED', message: 'Account is outside the current user scope' })
       return
     }
-    const unavailableAccount = scopedIds
-      .map(findSocialAccount)
-      .find((account) => account?.account_status !== 'available')
+    const unavailableAccount = scopedIds.map(findSocialAccount).find((account) => !mockAccountExecutableForAction(account, action))
     if (unavailableAccount) {
+      if (action === 'login' && String(unavailableAccount.password || '').trim() === '') {
+        send(res, 400, { code: 'SOCIAL_TASK_LOGIN_PASSWORD_REQUIRED', message: 'account password is required to log in' })
+        return
+      }
       send(res, 400, { code: 'SOCIAL_ACCOUNT_NOT_AVAILABLE', message: 'account is not available for execution' })
       return
     }
     const missingDefaultProxy = scopedIds
       .map(findSocialAccount)
-      .find((account) => account?.account_status === 'available' && !isMockAccountDefaultProxyUsableForUser(account, user.id))
+      .find((account) => !isMockAccountDefaultProxyUsableForUser(account, user.id))
     if (missingDefaultProxy) {
       send(res, 400, { code: 'SOCIAL_IP_NOT_AVAILABLE', message: 'default social IP is required for execution' })
       return
     }
+    const idempotencyKey = mockTaskIdempotencyKey(body)
+    const replayLogs = []
+    const pendingIds = []
+    const pendingIndexes = []
+    for (let index = 0; index < scopedIds.length; index += 1) {
+      const account = findSocialAccount(scopedIds[index])
+      const target = targetPool.length > 0 ? targetPool[index % targetPool.length] : ''
+      const content = contentPool.length > 0 ? contentPool[index % contentPool.length] : ''
+      const existing = findMockTaskLogByIdempotency(user.id, account.id, action, idempotencyKey)
+      if (existing) {
+        if (!mockTaskLogMatchesRequest(existing, { account, action, target, content, payload, templateSnapshot })) {
+          send(res, 409, { code: 'SOCIAL_TASK_IDEMPOTENCY_CONFLICT', message: 'idempotency key was already used for a different task' })
+          return
+        }
+        replayLogs.push(userSafeTaskLog(existing))
+        continue
+      }
+      const activeLog = findMockActiveTaskLog(user.id, account.id)
+      if (activeLog) {
+        send(res, 409, { code: 'SOCIAL_TASK_ACCOUNT_BUSY', message: 'account already has an active task' })
+        return
+      }
+      pendingIds.push(account.id)
+      pendingIndexes.push(index)
+    }
+    if (pendingIds.length === 0) {
+      ok(res, {
+        submitted: replayLogs.length,
+        enqueued: 0,
+        failed_closed: 0,
+        logs: replayLogs,
+      })
+      return
+    }
+    if (mockSocialTaskPriceForAction(action) > 0) {
+      const affordability = mockSocialTaskAffordability(user, pendingIds.length)
+      if (!affordability.canAfford) {
+        sendMockSocialTaskInsufficientFunds(res, affordability)
+        return
+      }
+    }
     const logs = createMockTaskLogs({
       ...body,
-      account_ids: scopedIds,
-      action: template.type,
+      account_ids: pendingIds,
+      account_indices: pendingIndexes,
+      action,
       target: '',
       content: '',
-      target_pool: template.params?.targets || [],
-      content_pool: template.params?.contents || [],
+      target_pool: targetPool,
+      content_pool: contentPool,
+      payload,
+      template_snapshot: templateSnapshot,
     }, { admin: false })
     ok(res, {
-      submitted: logs.length,
+      submitted: replayLogs.length + logs.length,
       enqueued: logs.length,
       failed_closed: 0,
-      logs,
+      logs: [...replayLogs, ...logs],
     })
     return
   }
@@ -4882,9 +5544,16 @@ const server = http.createServer(async (req, res) => {
       send(res, 404, { code: 'MOCK_NOT_FOUND', message: 'Mock assigned account not found' })
       return
     }
-    if (body.proxy_id != null && !isMockProxyUsableForUser(findMockProxy(body.proxy_id), user.id)) {
-      send(res, 400, { code: 'PROXY_UNAVAILABLE', message: 'proxy must be online and belong to current user' })
-      return
+    if (body.proxy_id != null) {
+      const proxy = findMockProxy(body.proxy_id)
+      if (!proxy || proxy.user_id !== user.id) {
+        send(res, 404, { code: 'SOCIAL_IP_NOT_FOUND', message: 'social IP not found' })
+        return
+      }
+      if (!isMockProxyUsableForUser(proxy, user.id)) {
+        send(res, 400, { code: 'SOCIAL_IP_NOT_AVAILABLE', message: 'social IP is not available' })
+        return
+      }
     }
     updateMockSocialAccount(account, { proxy_id: body.proxy_id })
     ok(res, userSafeSocialAccount(account))
@@ -4894,11 +5563,12 @@ const server = http.createServer(async (req, res) => {
   if (path === '/api/v1/accounts/default-proxy' && req.method === 'POST') {
     const user = currentMockUser(req)
     const body = await readJson(req)
-    const ids = Array.isArray(body.account_ids) ? body.account_ids.map(Number).filter(Boolean) : []
+    const ids = Array.isArray(body.account_ids) ? body.account_ids.map(Number) : []
     const mode = String(body.mode || '')
     const onlineProxies = filterMockProxies(url, { userId: user.id }).filter((proxy) => isMockProxyUsableForUser(proxy, user.id))
-    const result = { total: ids.length, succeeded: 0, skipped: 0, failed: 0, items: [] }
+    const result = { total: ids.length, succeeded: 0, skipped: 0, failed: 0, errors: [], items: [] }
     let randomIndex = 0
+    let specificProxyUnavailable = false
     if (!['specific', 'random', 'clear'].includes(mode)) {
       send(res, 400, { code: 'SOCIAL_IP_ASSIGNMENT_MODE_INVALID', message: 'proxy assignment mode is invalid' })
       return
@@ -4909,20 +5579,36 @@ const server = http.createServer(async (req, res) => {
         send(res, 400, { code: 'SOCIAL_IP_REQUIRED', message: 'proxy is required for this assignment' })
         return
       }
-      if (!isMockProxyUsableForUser(findMockProxy(proxyID), user.id)) {
-        send(res, 400, { code: 'PROXY_UNAVAILABLE', message: 'proxy must be online and belong to current user' })
+      const proxy = findMockProxy(proxyID)
+      if (!proxy || proxy.user_id !== user.id) {
+        send(res, 404, { code: 'SOCIAL_IP_NOT_FOUND', message: 'social IP not found' })
         return
       }
+      specificProxyUnavailable = !isMockProxyUsableForUser(proxy, user.id)
     }
     if (mode === 'random' && onlineProxies.length === 0) {
-      send(res, 400, { code: 'PROXY_UNAVAILABLE', message: 'no online proxies available' })
+      send(res, 400, { code: 'SOCIAL_IP_POOL_EMPTY', message: 'no online proxy is available for assignment' })
       return
     }
+    const seen = new Set()
     for (const id of ids) {
+      if (!Number.isFinite(id) || id <= 0) {
+        result.failed += 1
+        result.errors.push('account proxy could not be assigned')
+        result.items.push({ id, status: 'failed', reason: 'invalid_id', error: 'account proxy could not be assigned' })
+        continue
+      }
+      if (seen.has(id)) {
+        result.skipped += 1
+        result.items.push({ id, status: 'skipped', reason: 'duplicate_in_batch', error: 'account proxy could not be assigned' })
+        continue
+      }
+      seen.add(id)
       const account = findSocialAccount(id)
       if (!account || account.assigned_user_id !== user.id) {
         result.failed += 1
-        result.items.push({ id, status: 'failed', reason: 'account is outside current user scope' })
+        result.errors.push('account proxy could not be assigned')
+        result.items.push({ id, status: 'failed', reason: account ? 'account_not_assigned' : 'account_not_found', error: 'account proxy could not be assigned' })
         continue
       }
       if (mode === 'clear') {
@@ -4932,6 +5618,12 @@ const server = http.createServer(async (req, res) => {
         randomIndex += 1
         result.items.push(assignMockDefaultProxy(account, proxy.id))
       } else {
+        if (specificProxyUnavailable) {
+          result.failed += 1
+          result.errors.push('account proxy could not be assigned')
+          result.items.push({ id, name: account.name, status: 'failed', reason: 'proxy_not_available', error: 'account proxy could not be assigned' })
+          continue
+        }
         result.items.push(assignMockDefaultProxy(account, Number(body.proxy_id)))
       }
       result.succeeded += 1
@@ -4948,7 +5640,7 @@ const server = http.createServer(async (req, res) => {
 
   if (path === '/api/v1/proxies/usable' && req.method === 'GET') {
     const user = currentMockUser(req)
-    ok(res, filterMockProxies(url, { userId: user.id }).filter((proxy) => proxy.status === 'online' && String(proxy.endpoint || '').trim() !== ''))
+    ok(res, currentUserMockProxies(user.id).filter((proxy) => proxy.status === 'online' && String(proxy.endpoint || '').trim() !== ''))
     return
   }
 
@@ -4969,7 +5661,7 @@ const server = http.createServer(async (req, res) => {
     const body = await readJson(req)
     const proxy = findMockProxy(path.split('/').pop())
     if (!proxy || proxy.user_id !== user.id) {
-      send(res, 404, { code: 'MOCK_NOT_FOUND', message: 'Mock proxy not found' })
+      send(res, 404, { code: 'SOCIAL_IP_NOT_FOUND', message: 'social IP not found' })
       return
     }
     const result = updateMockProxy(proxy, body)
@@ -4985,7 +5677,7 @@ const server = http.createServer(async (req, res) => {
     const user = currentMockUser(req)
     const proxy = findMockProxy(path.split('/').pop())
     if (!proxy || proxy.user_id !== user.id) {
-      send(res, 404, { code: 'MOCK_NOT_FOUND', message: 'Mock proxy not found' })
+      send(res, 404, { code: 'SOCIAL_IP_NOT_FOUND', message: 'social IP not found' })
       return
     }
     deleteMockProxy(proxy.id)
@@ -4997,7 +5689,7 @@ const server = http.createServer(async (req, res) => {
     const user = currentMockUser(req)
     const proxy = findMockProxy(path.split('/')[4])
     if (!proxy || proxy.user_id !== user.id) {
-      send(res, 404, { code: 'MOCK_NOT_FOUND', message: 'Mock proxy not found' })
+      send(res, 404, { code: 'SOCIAL_IP_NOT_FOUND', message: 'social IP not found' })
       return
     }
     ok(res, testMockProxy(proxy))
@@ -5006,17 +5698,36 @@ const server = http.createServer(async (req, res) => {
 
   if (path === '/api/v1/proxies/test' && req.method === 'POST') {
     const user = currentMockUser(req)
-    ok(res, filterMockProxies(url, { userId: user.id }).map(testMockProxy))
+    ok(res, currentUserMockProxies(user.id).map(testMockProxy))
     return
   }
 
   if (path === '/api/v1/admin/accounts' && req.method === 'GET') {
-    paginatedFromUrl(res, url, filterSocialAccounts(url))
+    paginatedFromUrl(res, url, filterSocialAccounts(url).map(adminSocialAccount))
     return
   }
 
   if (path === '/api/v1/admin/total-accounts' && req.method === 'GET') {
-    paginatedFromUrl(res, url, filterSocialAccounts(url, { totalPoolOnly: true }))
+    paginatedFromUrl(res, url, filterSocialAccounts(url, { totalPoolOnly: true }).map(adminSocialAccount))
+    return
+  }
+
+  if (path === '/api/v1/admin/total-accounts/export' && req.method === 'GET') {
+    sendText(res, 200, mockCsvPayload(filterSocialAccounts(url, { totalPoolOnly: true })), 'text/csv; charset=utf-8')
+    return
+  }
+
+  if (path === '/api/v1/admin/total-accounts/import' && req.method === 'POST') {
+    const file = await readMultipartFile(req)
+    if (!file) {
+      send(res, 400, { code: 'MOCK_IMPORT_FILE_REQUIRED', message: 'file is required' })
+      return
+    }
+    try {
+      ok(res, importMockTotalPoolAccounts(parseMockAdminImportFile(file)))
+    } catch (error) {
+      send(res, 400, { code: 'MOCK_IMPORT_PARSE_FAILED', message: `invalid import file: ${error?.message || 'parse failed'}` })
+    }
     return
   }
 
@@ -5032,7 +5743,35 @@ const server = http.createServer(async (req, res) => {
 
   if (path === '/api/v1/admin/accounts' && req.method === 'POST') {
     const body = await readJson(req)
-    ok(res, clone(createMockSocialAccount(body)))
+    ok(res, adminSocialAccount(createMockSocialAccount(body)))
+    return
+  }
+
+  if (path === '/api/v1/admin/accounts/store-workbench' && req.method === 'POST') {
+    const body = await readJson(req)
+    const ids = Array.isArray(body.account_ids) ? body.account_ids.map(Number).filter(Boolean) : []
+    const result = mockSocialAccountBatchResult(ids)
+    for (const id of ids) {
+      const account = findSocialAccount(id)
+      if (!account) {
+        mockSocialAccountBatchSkip(result, id, '', 'not_found')
+        continue
+      }
+      if (!isWorkbenchStagingAccount(account)) {
+        mockSocialAccountBatchSkip(result, id, account.name, 'already_stored')
+        continue
+      }
+      if (!isCompleteWorkbenchImportAccount(account)) {
+        mockSocialAccountBatchFail(result, id, account.name, 'invalid_credentials', 'account could not be uploaded')
+        continue
+      }
+      account.account_status = 'pending_check'
+      account.task_status = 'stored'
+      account.task_message = ''
+      account.updated_at = now()
+      mockSocialAccountBatchSuccess(result, account)
+    }
+    ok(res, result)
     return
   }
 
@@ -5057,11 +5796,18 @@ const server = http.createServer(async (req, res) => {
 
   if (path === '/api/v1/admin/accounts/batch-delete' && req.method === 'POST') {
     const body = await readJson(req)
-    const ids = Array.isArray(body.ids) ? body.ids.map(Number).filter(Boolean) : []
-    const before = mockSocialAccounts.length
-    mockSocialAccounts = mockSocialAccounts.filter((account) => !ids.includes(account.id))
-    const deleted = before - mockSocialAccounts.length
-    ok(res, { deleted })
+    const ids = Array.isArray(body.ids) ? body.ids.map(Number) : []
+    const result = mockSocialAccountBatchResult(ids)
+    for (const id of ids) {
+      const account = findSocialAccount(id)
+      if (!account) {
+        mockSocialAccountBatchSkip(result, id, '', 'not_found')
+        continue
+      }
+      deleteMockSocialAccount(id)
+      mockSocialAccountBatchSuccess(result, account)
+    }
+    ok(res, result)
     return
   }
 
@@ -5070,13 +5816,32 @@ const server = http.createServer(async (req, res) => {
     const ids = Array.isArray(body.ids) ? body.ids.map(Number) : []
     const userId = Number(body.user_id)
     const result = mockSocialAccountBatchResult(ids)
+    const seen = new Set()
     for (const id of ids) {
       const account = findSocialAccount(id)
-      if (!account || !userId || account.assigned_user_id) {
-        mockSocialAccountBatchSkip(result, id, account?.name, 'already_assigned')
+      if (id <= 0 || userId <= 0) {
+        mockSocialAccountBatchSkip(result, id, account?.name || '', 'invalid_input')
+        continue
+      }
+      if (seen.has(id)) {
+        mockSocialAccountBatchSkip(result, id, account?.name || '', 'duplicate_in_batch')
+        continue
+      }
+      seen.add(id)
+      if (!account || isWorkbenchStagingAccount(account)) {
+        mockSocialAccountBatchFail(result, id, '', 'assign_failed', 'account could not be assigned')
+        continue
+      }
+      if (!findMockUser(userId)) {
+        mockSocialAccountBatchFail(result, id, account.name, 'target_user_not_found', 'target user not found')
+        continue
+      }
+      if (account.assigned_user_id) {
+        mockSocialAccountBatchSkip(result, id, account.name, 'already_assigned')
         continue
       }
       account.assigned_user_id = userId
+      account.default_proxy_snapshot = ''
       account.task_status = 'stored'
       account.updated_at = now()
       mockSocialAccountBatchSuccess(result, account)
@@ -5089,10 +5854,24 @@ const server = http.createServer(async (req, res) => {
     const body = await readJson(req)
     const ids = Array.isArray(body.ids) ? body.ids.map(Number) : []
     const result = mockSocialAccountBatchResult(ids)
+    const seen = new Set()
     for (const id of ids) {
+      if (id <= 0) {
+        mockSocialAccountBatchSkip(result, id, '', 'invalid_id')
+        continue
+      }
+      if (seen.has(id)) {
+        mockSocialAccountBatchSkip(result, id, '', 'duplicate_in_batch')
+        continue
+      }
+      seen.add(id)
       const account = findSocialAccount(id)
-      if (!account) {
-        mockSocialAccountBatchSkip(result, id, '', 'not_found')
+      if (!account || isWorkbenchStagingAccount(account)) {
+        mockSocialAccountBatchFail(result, id, '', 'reclaim_failed', 'account could not be reclaimed')
+        continue
+      }
+      if (!account.assigned_user_id) {
+        mockSocialAccountBatchSkip(result, id, account.name, 'already_unassigned')
         continue
       }
       account.assigned_user_id = null
@@ -5108,22 +5887,49 @@ const server = http.createServer(async (req, res) => {
     const body = await readJson(req)
     const ids = Array.isArray(body.ids) ? body.ids.map(Number) : []
     const result = mockSocialAccountBatchResult(ids)
+    const seen = new Set()
     for (const id of ids) {
-      const index = mockSocialAccounts.findIndex((account) => account.id === id)
-      if (index < 0) {
-        mockSocialAccountBatchSkip(result, id, '', 'not_found')
+      if (id <= 0) {
+        mockSocialAccountBatchSkip(result, id, '', 'invalid_id')
         continue
       }
-      const [account] = mockSocialAccounts.splice(index, 1)
+      if (seen.has(id)) {
+        mockSocialAccountBatchSkip(result, id, '', 'duplicate_in_batch')
+        continue
+      }
+      seen.add(id)
+      const index = mockSocialAccounts.findIndex((account) => account.id === id && !isWorkbenchStagingAccount(account))
+      if (index < 0) {
+        mockSocialAccountBatchFail(result, id, '', 'delete_failed', 'account could not be deleted')
+        continue
+      }
+      const account = deleteMockSocialAccount(id)
       mockSocialAccountBatchSuccess(result, account)
     }
     ok(res, result)
     return
   }
 
+  if (/^\/api\/v1\/admin\/total-accounts\/\d+$/.test(path) && req.method === 'PUT') {
+    const body = await readJson(req)
+    const account = findSocialAccount(path.split('/').pop())
+    if (!account || isWorkbenchStagingAccount(account)) {
+      send(res, 404, { code: 'SOCIAL_ACCOUNT_NOT_FOUND', message: 'social account not found' })
+      return
+    }
+    const { name: _name, platform_user_id: _platformUserId, ...mutableBody } = body
+    ok(res, adminSocialAccount(updateMockSocialAccount(account, mutableBody)))
+    return
+  }
+
   if (path === adminTaskPath && req.method === 'POST') {
     const body = await readJson(req)
-    const logs = createMockTaskLogs(body, { admin: true })
+    const action = normalizeMockExecutableTaskAction(body.action)
+    if (!action) {
+      send(res, 400, { code: 'SOCIAL_TASK_UNSUPPORTED_ACTION', message: 'unsupported social task action' })
+      return
+    }
+    const logs = createMockTaskLogs({ ...body, action }, { admin: true })
     ok(res, {
       submitted: logs.length,
       enqueued: logs.length,
@@ -5139,7 +5945,7 @@ const server = http.createServer(async (req, res) => {
       send(res, 404, { code: 'MOCK_NOT_FOUND', message: 'Mock account not found' })
       return
     }
-    ok(res, clone(account))
+    ok(res, adminSocialAccount(account))
     return
   }
 
@@ -5150,46 +5956,95 @@ const server = http.createServer(async (req, res) => {
       send(res, 404, { code: 'MOCK_NOT_FOUND', message: 'Mock account not found' })
       return
     }
-    ok(res, clone(updateMockSocialAccount(account, body)))
+    ok(res, adminSocialAccount(updateMockSocialAccount(account, body)))
     return
   }
 
   if (/^\/api\/v1\/admin\/accounts\/\d+$/.test(path) && req.method === 'DELETE') {
     const id = Number(path.split('/').pop())
-    const before = mockSocialAccounts.length
-    mockSocialAccounts = mockSocialAccounts.filter((account) => account.id !== id)
-    ok(res, { deleted: before - mockSocialAccounts.length })
+    const account = deleteMockSocialAccount(id)
+    if (!account) {
+      send(res, 404, { code: 'MOCK_NOT_FOUND', message: 'Mock account not found' })
+      return
+    }
+    ok(res, null)
     return
   }
 
   if (/^\/api\/v1\/admin\/total-accounts\/\d+\/assign$/.test(path) && req.method === 'POST') {
     const body = await readJson(req)
     const account = findSocialAccount(path.split('/')[5])
-    if (!account) {
-      send(res, 404, { code: 'MOCK_NOT_FOUND', message: 'Mock account not found' })
+    if (!account || isWorkbenchStagingAccount(account)) {
+      send(res, 404, { code: 'SOCIAL_ACCOUNT_NOT_FOUND', message: 'social account not found' })
       return
     }
-    account.assigned_user_id = Number(body.user_id || adminUser.id)
+    const userId = Number(body.user_id)
+    if (!findMockUser(userId)) {
+      send(res, 404, { code: 'USER_NOT_FOUND', message: 'target user not found' })
+      return
+    }
+    if (account.assigned_user_id) {
+      send(res, 409, { code: 'SOCIAL_ACCOUNT_ALREADY_ASSIGNED', message: 'social account already assigned' })
+      return
+    }
+    account.assigned_user_id = userId
+    account.default_proxy_snapshot = ''
     account.task_status = 'stored'
     account.updated_at = now()
-    ok(res, clone(account))
+    ok(res, adminSocialAccount(account))
     return
   }
 
   if (/^\/api\/v1\/admin\/total-accounts\/\d+\/reclaim$/.test(path) && req.method === 'POST') {
     const account = findSocialAccount(path.split('/')[5])
-    if (!account) {
-      send(res, 404, { code: 'MOCK_NOT_FOUND', message: 'Mock account not found' })
+    if (!account || isWorkbenchStagingAccount(account)) {
+      send(res, 404, { code: 'SOCIAL_ACCOUNT_NOT_FOUND', message: 'social account not found' })
       return
     }
     account.assigned_user_id = null
+    account.default_proxy_snapshot = ''
     account.updated_at = now()
-    ok(res, clone(account))
+    ok(res, adminSocialAccount(account))
     return
   }
 
   if (path === '/api/v1/admin/users' && req.method === 'GET') {
     paginatedFromUrl(res, url, [adminUser, regularUser])
+    return
+  }
+
+  if (/^\/api\/v1\/admin\/users\/\d+\/balance$/.test(path) && req.method === 'POST') {
+    const user = findMockUser(path.split('/')[5])
+    if (!user) {
+      send(res, 404, { code: 'USER_NOT_FOUND', message: 'target user not found' })
+      return
+    }
+    const body = await readJson(req)
+    const amount = roundMoney(body.balance)
+    const operation = String(body.operation || 'set')
+    if (!Number.isFinite(amount) || amount < 0) {
+      send(res, 400, { code: 'INVALID_BALANCE', message: 'balance must be a non-negative number' })
+      return
+    }
+    if (operation === 'add') {
+      user.balance = roundMoney(Number(user.balance || 0) + amount)
+    } else if (operation === 'subtract') {
+      user.balance = roundMoney(Math.max(0, Number(user.balance || 0) - amount))
+    } else {
+      user.balance = amount
+    }
+    user.updated_at = now()
+    ok(res, clone(user))
+    return
+  }
+
+  if (/^\/api\/v1\/admin\/users\/\d+\/usage$/.test(path) && req.method === 'GET') {
+    const userId = Number(path.split('/')[5])
+    if (!userById(userId)) {
+      send(res, 404, { code: 'MOCK_NOT_FOUND', message: 'Mock user not found' })
+      return
+    }
+    ok(res, adminUserUsageStats(userId))
     return
   }
 
@@ -5312,43 +6167,6 @@ const server = http.createServer(async (req, res) => {
       return
     }
     ok(res, subscriptionProgress(subscription))
-    return
-  }
-
-  if (path === '/api/v1/admin/subscriptions/assign' && req.method === 'POST') {
-    const body = await readJson(req)
-    const subscription =
-      body.plan_id != null
-        ? createSubscriptionFromPlan(Number(body.user_id || adminUser.id), Number(body.plan_id), Number(body.validity_days || 30))
-        : createSubscriptionFromGroup(Number(body.user_id || adminUser.id), Number(body.group_id), Number(body.validity_days || 30))
-    if (!subscription) {
-      send(res, 400, { code: 'MOCK_BAD_REQUEST', message: 'Invalid plan or group for mock subscription creation' })
-      return
-    }
-    subscription.notes = String(body.notes || '')
-    ok(res, clone(subscription))
-    return
-  }
-
-  if (path === '/api/v1/admin/subscriptions/bulk-assign' && req.method === 'POST') {
-    const body = await readJson(req)
-    const userIds = Array.isArray(body.user_ids) ? [...new Set(body.user_ids.map((id) => Number(id)).filter((id) => id > 0))] : []
-    const subscriptions = userIds
-      .map((userId) =>
-        body.plan_id != null
-          ? createSubscriptionFromPlan(userId, Number(body.plan_id), Number(body.validity_days || 30))
-          : createSubscriptionFromGroup(userId, Number(body.group_id), Number(body.validity_days || 30))
-      )
-      .filter(Boolean)
-      .map((subscription) => ({ ...subscription, notes: String(body.notes || '') }))
-    ok(res, {
-      success_count: subscriptions.length,
-      created_count: subscriptions.length,
-      reused_count: 0,
-      failed_count: 0,
-      subscriptions: clone(subscriptions),
-      errors: [],
-    })
     return
   }
 
@@ -5881,7 +6699,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (path === '/api/v1/admin/dashboard/trend' && req.method === 'GET') {
-    ok(res, usageTrendFromLogs(mockSocialTaskLogs, String(url.searchParams.get('granularity') || 'day').trim().toLowerCase()))
+    ok(res, adminDashboardTrendFromLogs(mockFinalizedTaskLogs(), String(url.searchParams.get('granularity') || 'day').trim().toLowerCase()))
     return
   }
 
@@ -5904,4 +6722,3 @@ server.listen(port, '0.0.0.0', () => {
   console.log(`[mock-api] listening on http://localhost:${port}`)
   console.log(`[mock-api] admin ${adminEmail} / ${adminPassword}`)
 })
-

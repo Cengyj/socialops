@@ -18,7 +18,7 @@ const AES256KeySize = 32
 // matching the Node.js crypto.ts format for cross-compatibility.
 //
 // Deprecated: payment provider configs are now stored as plaintext JSON.
-// This function is kept only for seeding legacy ciphertext in tests and for
+// This function is kept only for seeding historical ciphertext in tests and for
 // the transitional Decrypt fallback. Scheduled for removal after all live
 // deployments complete migration by re-saving their configs.
 func Encrypt(plaintext string, key []byte) (string, error) {

@@ -10,13 +10,4 @@ const (
 
 	// ClientRequestID 客户端请求的唯一标识，用于追踪请求全生命周期。
 	ClientRequestID Key = "ctx_client_request_id"
-
-	// Platform 当前请求最终命中的平台（用于统一请求链路日志字段）。
-	Platform Key = "ctx_platform"
-
-	// AccountID 当前请求最终命中的账号 ID（用于统一请求链路日志字段）。
-	AccountID Key = "ctx_account_id"
-
-	// Group 认证后的分组信息，由 API Key 认证中间件设置
-	Group Key = "ctx_group"
 )

@@ -28,7 +28,6 @@ func RegisterPaymentRoutes(
 		authenticated.GET("/config", paymentHandler.GetPaymentConfig)
 		authenticated.GET("/checkout-info", paymentHandler.GetCheckoutInfo)
 		authenticated.GET("/plans", paymentHandler.GetPlans)
-		authenticated.GET("/channels", paymentHandler.GetChannels)
 		authenticated.GET("/limits", paymentHandler.GetLimits)
 
 		orders := authenticated.Group("/orders")
@@ -45,8 +44,8 @@ func RegisterPaymentRoutes(
 
 	// --- Public payment endpoints (no auth) ---
 	// Signed resume-token recovery is the preferred public lookup path.
-	// The legacy anonymous out_trade_no verify endpoint remains available as a
-	// persisted-state compatibility path for staggered upgrades.
+	// Anonymous out_trade_no verification remains available for payment-provider
+	// return recovery when no signed resume token is available.
 	public := v1.Group("/payment/public")
 	{
 		public.POST("/orders/verify", paymentHandler.VerifyOrderPublic)

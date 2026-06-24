@@ -79,7 +79,7 @@ func executeAdminIdempotentJSONWithMode(
 				strategy = "fail_open"
 			}
 			service.RecordIdempotencyStoreUnavailable(c.FullPath(), scope, "handler_"+strategy)
-			logger.LegacyPrintf("handler.idempotency", "[Idempotency] store unavailable: method=%s route=%s scope=%s strategy=%s", c.Request.Method, c.FullPath(), scope, strategy)
+			logger.ComponentPrintf("handler.idempotency", "[Idempotency] store unavailable: method=%s route=%s scope=%s strategy=%s", c.Request.Method, c.FullPath(), scope, strategy)
 			if mode == idempotencyStoreUnavailableFailOpen {
 				result, fallbackErr := fn(c.Request.Context())
 				if fallbackErr != nil {

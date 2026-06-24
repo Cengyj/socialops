@@ -13,7 +13,6 @@ import (
 	dbent "github.com/Wei-Shaw/socialops/ent"
 	"github.com/Wei-Shaw/socialops/internal/payment"
 	infraerrors "github.com/Wei-Shaw/socialops/internal/pkg/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,7 +54,7 @@ type paymentRefundBillingCacheRecorder struct {
 }
 
 func (r *paymentRefundBillingCacheRecorder) GetUserBalance(context.Context, int64) (float64, error) {
-	return 0, errors.New("not implemented")
+	return 0, errors.New("unexpected GetUserBalance call")
 }
 
 func (r *paymentRefundBillingCacheRecorder) SetUserBalance(context.Context, int64, float64) error {
@@ -74,7 +73,7 @@ func (r *paymentRefundBillingCacheRecorder) InvalidateUserBalance(_ context.Cont
 }
 
 func (r *paymentRefundBillingCacheRecorder) GetSubscriptionCache(context.Context, int64, int64) (*SubscriptionCacheData, error) {
-	return nil, errors.New("not implemented")
+	return nil, errors.New("unexpected GetSubscriptionCache call")
 }
 
 func (r *paymentRefundBillingCacheRecorder) SetSubscriptionCache(context.Context, int64, int64, *SubscriptionCacheData) error {
@@ -89,43 +88,26 @@ func (r *paymentRefundBillingCacheRecorder) InvalidateSubscriptionCache(context.
 	return nil
 }
 
-func (r *paymentRefundBillingCacheRecorder) GetAPIKeyRateLimit(context.Context, int64) (*APIKeyRateLimitCacheData, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (r *paymentRefundBillingCacheRecorder) SetAPIKeyRateLimit(context.Context, int64, *APIKeyRateLimitCacheData) error {
-	return nil
-}
-
-func (r *paymentRefundBillingCacheRecorder) UpdateAPIKeyRateLimitUsage(context.Context, int64, float64) error {
-	return nil
-}
-
-func (r *paymentRefundBillingCacheRecorder) InvalidateAPIKeyRateLimit(context.Context, int64) error {
-	return nil
-}
-
 func (r *paymentRefundBillingCacheRecorder) invalidationCount() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.userBalanceInvalidations)
 }
 
-func newPaymentRefundCacheAwareRedeemService(cache BillingCache, auth *authCacheInvalidatorStub) *RedeemService {
+func newPaymentRefundCacheAwareRedeemService(cache BillingCache) *RedeemService {
 	return &RedeemService{
-		billingCacheService:  &BillingCacheService{cache: cache},
-		authCacheInvalidator: auth,
+		billingCacheService: &BillingCacheService{cache: cache},
 	}
 }
 
-func TestValidateRefundRequestRejectsLegacyGuessedProviderInstance(t *testing.T) {
+func TestValidateRefundRequestRejectsHistoricalGuessedProviderInstance(t *testing.T) {
 	ctx := context.Background()
 	client := newPaymentConfigServiceTestClient(t)
 
 	user, err := client.User.Create().
-		SetEmail("refund-legacy@example.com").
+		SetEmail("refund-historical@example.com").
 		SetPasswordHash("hash").
-		SetUsername("refund-legacy-user").
+		SetUsername("refund-historical-user").
 		Save(ctx)
 	require.NoError(t, err)
 
@@ -147,10 +129,10 @@ func TestValidateRefundRequestRejectsLegacyGuessedProviderInstance(t *testing.T)
 		SetAmount(88).
 		SetPayAmount(88).
 		SetFeeRate(0).
-		SetRechargeCode("REFUND-LEGACY-ORDER").
-		SetOutTradeNo("sub2_refund_legacy_order").
+		SetRechargeCode("REFUND-HISTORICAL-ORDER").
+		SetOutTradeNo("socialops_refund_historical_order").
 		SetPaymentType(payment.TypeAlipay).
-		SetPaymentTradeNo("trade-legacy-refund").
+		SetPaymentTradeNo("trade-historical-refund").
 		SetOrderType(payment.OrderTypeBalance).
 		SetStatus(OrderStatusCompleted).
 		SetExpiresAt(time.Now().Add(time.Hour)).
@@ -199,7 +181,7 @@ func TestValidateRefundRequestRequiresProviderRefundEnabled(t *testing.T) {
 		SetPayAmount(88).
 		SetFeeRate(0).
 		SetRechargeCode("REFUND-DISABLED-ORDER").
-		SetOutTradeNo("sub2_refund_disabled_order").
+		SetOutTradeNo("socialops_refund_disabled_order").
 		SetPaymentType(payment.TypeAlipay).
 		SetPaymentTradeNo("trade-disabled-refund").
 		SetOrderType(payment.OrderTypeBalance).
@@ -222,14 +204,14 @@ func TestValidateRefundRequestRequiresProviderRefundEnabled(t *testing.T) {
 	require.Equal(t, "USER_REFUND_DISABLED", infraerrors.Reason(err))
 }
 
-func TestPrepareRefundRejectsLegacyGuessedProviderInstance(t *testing.T) {
+func TestPrepareRefundRejectsHistoricalGuessedProviderInstance(t *testing.T) {
 	ctx := context.Background()
 	client := newPaymentConfigServiceTestClient(t)
 
 	user, err := client.User.Create().
-		SetEmail("refund-legacy-admin@example.com").
+		SetEmail("refund-historical-admin@example.com").
 		SetPasswordHash("hash").
-		SetUsername("refund-legacy-admin-user").
+		SetUsername("refund-historical-admin-user").
 		Save(ctx)
 	require.NoError(t, err)
 
@@ -251,10 +233,10 @@ func TestPrepareRefundRejectsLegacyGuessedProviderInstance(t *testing.T) {
 		SetAmount(188).
 		SetPayAmount(188).
 		SetFeeRate(0).
-		SetRechargeCode("REFUND-LEGACY-ADMIN-ORDER").
-		SetOutTradeNo("sub2_refund_legacy_admin_order").
+		SetRechargeCode("REFUND-HISTORICAL-ADMIN-ORDER").
+		SetOutTradeNo("socialops_refund_historical_admin_order").
 		SetPaymentType(payment.TypeAlipay).
-		SetPaymentTradeNo("trade-legacy-admin-refund").
+		SetPaymentTradeNo("trade-historical-admin-refund").
 		SetOrderType(payment.OrderTypeBalance).
 		SetStatus(OrderStatusCompleted).
 		SetExpiresAt(time.Now().Add(time.Hour)).
@@ -308,7 +290,7 @@ func TestGwRefundRejectsAlipayMerchantIdentitySnapshotMismatch(t *testing.T) {
 		SetPayAmount(88).
 		SetFeeRate(0).
 		SetRechargeCode("REFUND-SNAPSHOT-MISMATCH-ORDER").
-		SetOutTradeNo("sub2_refund_snapshot_mismatch_order").
+		SetOutTradeNo("socialops_refund_snapshot_mismatch_order").
 		SetPaymentType(payment.TypeAlipay).
 		SetPaymentTradeNo("trade-refund-snapshot-mismatch").
 		SetOrderType(payment.OrderTypeBalance).
@@ -395,7 +377,7 @@ func TestPrepareRefundAllowsRemainingAmountForPartiallyRefundedOrder(t *testing.
 		SetPayAmount(103).
 		SetFeeRate(3).
 		SetRechargeCode("REFUND-PARTIAL-REMAINING").
-		SetOutTradeNo("sub2_refund_partial_remaining").
+		SetOutTradeNo("socialops_refund_partial_remaining").
 		SetPaymentType(payment.TypeAlipay).
 		SetPaymentTradeNo("trade-partial-remaining").
 		SetOrderType(payment.OrderTypeBalance).
@@ -445,7 +427,7 @@ func TestExecuteRefundCumulatesPartiallyRefundedAmount(t *testing.T) {
 		SetPayAmount(103).
 		SetFeeRate(3).
 		SetRechargeCode("REFUND-PARTIAL-CUMULATIVE").
-		SetOutTradeNo("sub2_refund_partial_cumulative").
+		SetOutTradeNo("socialops_refund_partial_cumulative").
 		SetPaymentType(payment.TypeAlipay).
 		SetPaymentTradeNo("").
 		SetOrderType(payment.OrderTypeBalance).
@@ -496,7 +478,7 @@ func TestExecuteRefundInvalidatesBalanceCachesAfterSuccessfulDeduction(t *testin
 		SetPayAmount(88).
 		SetFeeRate(0).
 		SetRechargeCode("REFUND-CACHE-SUCCESS").
-		SetOutTradeNo("sub2_refund_cache_success").
+		SetOutTradeNo("socialops_refund_cache_success").
 		SetPaymentType(payment.TypeAlipay).
 		SetPaymentTradeNo("").
 		SetOrderType(payment.OrderTypeBalance).
@@ -509,7 +491,6 @@ func TestExecuteRefundInvalidatesBalanceCachesAfterSuccessfulDeduction(t *testin
 	require.NoError(t, err)
 
 	cache := &paymentRefundBillingCacheRecorder{}
-	auth := &authCacheInvalidatorStub{}
 	userRepo := &paymentRefundUserRepoStub{
 		user: &User{
 			ID:      user.ID,
@@ -519,7 +500,7 @@ func TestExecuteRefundInvalidatesBalanceCachesAfterSuccessfulDeduction(t *testin
 	svc := &PaymentService{
 		entClient:     client,
 		userRepo:      userRepo,
-		redeemService: newPaymentRefundCacheAwareRedeemService(cache, auth),
+		redeemService: newPaymentRefundCacheAwareRedeemService(cache),
 	}
 
 	result, err := svc.ExecuteRefund(ctx, &RefundPlan{
@@ -538,7 +519,6 @@ func TestExecuteRefundInvalidatesBalanceCachesAfterSuccessfulDeduction(t *testin
 	require.Eventually(t, func() bool {
 		return cache.invalidationCount() == 1
 	}, 2*time.Second, 10*time.Millisecond)
-	assert.Equal(t, []int64{user.ID}, auth.userIDs)
 }
 
 func TestRollbackRefundInvalidatesBalanceCachesAfterSuccessfulRollback(t *testing.T) {
@@ -560,7 +540,7 @@ func TestRollbackRefundInvalidatesBalanceCachesAfterSuccessfulRollback(t *testin
 		SetPayAmount(88).
 		SetFeeRate(0).
 		SetRechargeCode("REFUND-CACHE-ROLLBACK").
-		SetOutTradeNo("sub2_refund_cache_rollback").
+		SetOutTradeNo("socialops_refund_cache_rollback").
 		SetPaymentType(payment.TypeAlipay).
 		SetPaymentTradeNo("trade-rollback-cache").
 		SetOrderType(payment.OrderTypeBalance).
@@ -573,7 +553,6 @@ func TestRollbackRefundInvalidatesBalanceCachesAfterSuccessfulRollback(t *testin
 	require.NoError(t, err)
 
 	cache := &paymentRefundBillingCacheRecorder{}
-	auth := &authCacheInvalidatorStub{}
 	userRepo := &paymentRefundUserRepoStub{
 		user: &User{
 			ID:      user.ID,
@@ -583,7 +562,7 @@ func TestRollbackRefundInvalidatesBalanceCachesAfterSuccessfulRollback(t *testin
 	svc := &PaymentService{
 		entClient:     client,
 		userRepo:      userRepo,
-		redeemService: newPaymentRefundCacheAwareRedeemService(cache, auth),
+		redeemService: newPaymentRefundCacheAwareRedeemService(cache),
 	}
 
 	ok := svc.RollbackRefund(ctx, &RefundPlan{
@@ -598,5 +577,4 @@ func TestRollbackRefundInvalidatesBalanceCachesAfterSuccessfulRollback(t *testin
 	require.Eventually(t, func() bool {
 		return cache.invalidationCount() == 1
 	}, 2*time.Second, 10*time.Millisecond)
-	assert.Equal(t, []int64{user.ID}, auth.userIDs)
 }

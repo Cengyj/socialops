@@ -1,13 +1,12 @@
 # socialops 项目开发指南
 
-> 本文档记录项目环境配置、常见坑点和注意事项，供 Claude Code 和团队成员参考。
+> 本文档记录项目环境配置、常见坑点和注意事项，供 Codex 和团队成员参考。
 
 ## 一、项目基本信息
 
 | 项目 | 说明 |
 |------|------|
-| **上游仓库** | Wei-Shaw/socialops |
-| **Fork 仓库** | bayma888/socialops-bmai |
+| **仓库** | Wei-Shaw/socialops |
 | **技术栈** | Go 后端 (Ent ORM + Gin) + Vue3 前端 (pnpm) |
 | **数据库** | PostgreSQL 16 + Redis |
 | **包管理** | 后端: go modules, 前端: **pnpm**（不是 npm） |
@@ -34,8 +33,8 @@
 ### 开发工具
 
 ```bash
-# golangci-lint v2.7
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.7
+# golangci-lint v2.9 (matches CI)
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.9.0
 
 # pnpm (前端包管理)
 npm install -g pnpm
@@ -47,13 +46,13 @@ npm install -g pnpm
 
 | Workflow | 触发条件 | 检查内容 |
 |----------|----------|----------|
-| **backend-ci.yml** | push, pull_request | 单元测试 + 集成测试 + golangci-lint v2.7 |
+| **backend-ci.yml** | push, pull_request | 单元测试 + 集成测试 + golangci-lint v2.9 |
 | **security-scan.yml** | push, pull_request, 每周一 | govulncheck + gosec + pnpm audit |
 | **release.yml** | tag `v*` | 构建发布（PR 不触发） |
 
 ### CI 要求
 
-- Go 版本必须是 **1.25.7**
+- Go 版本必须是 **1.26.3**（以 `backend/go.mod` 和 CI 校验为准）
 - 前端使用 `pnpm install --frozen-lockfile`，必须提交 `pnpm-lock.yaml`
 
 ### 本地测试命令
@@ -209,30 +208,7 @@ git add ent/       # 生成的文件也要提交
 
 ---
 
-### 坑 10：前端测试看似正常，但后端调用失败（模型映射被批量误改）
-
-**典型现象**：
-- 前端按钮点测看起来正常；
-- 实际通过 API/客户端调用时返回 `Service temporarily unavailable` 或提示无可用账号；
-- 常见于 OpenAI 账号（例如 Codex 模型）在批量修改后突然不可用。
-
-**根因**：
-- OpenAI 账号编辑页默认不显式展示映射规则，容易让人误以为“没映射也没关系”；
-- 但在**批量修改同时选中不同平台账号**（OpenAI + Antigravity/Gemini）时，模型白名单/映射可能被跨平台策略覆盖；
-- 结果是 OpenAI 账号的关键模型映射丢失或被改坏，后端选不到可用账号。
-
-**修复方案（按优先级）**：
-1. **快速修复（推荐）**：在批量修改中补回正确的透传映射（例如 `gpt-5.3-codex -> gpt-5.3-codex-spark`）。
-2. **彻底重建**：删除并重新添加全部相关账号（最稳但成本高）。
-
-**关键经验**：
-- 如果某模型已被软件内置默认映射覆盖，通常不需要额外再加透传；
-- 但当上游模型更新快于本仓库默认映射时，**手动批量添加透传映射**是最简单、最低风险的临时兜底方案；
-- 批量操作前尽量按平台分组，不要混选不同平台账号。
-
----
-
-### 坑 11：PR 提交前检查清单
+### 坑 10：PR 提交前检查清单
 
 提交 PR 前务必本地验证：
 
@@ -313,7 +289,7 @@ golangci-lint run ./...
 ## 六、项目结构速览
 
 ```
-socialops-bmai/
+socialops/
 ├── backend/
 │   ├── cmd/server/          # 主程序入口
 │   ├── ent/                 # Ent ORM 生成代码
@@ -334,8 +310,10 @@ socialops-bmai/
 │   │   └── i18n/            # 国际化
 │   ├── package.json         # 依赖配置
 │   └── pnpm-lock.yaml       # pnpm 锁文件（必须提交）
-└── .claude/
-    └── CLAUDE.md            # 本文档
+├── docs/                    # 支付和集成文档
+├── deploy/                  # 部署配置和脚本
+├── DEV_GUIDE.md             # 本文档
+└── PROJECT_GUIDE.md         # 当前 SocialOps 项目边界和清理规则
 ```
 
 ## 七、参考资源

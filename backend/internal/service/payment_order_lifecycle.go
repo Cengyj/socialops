@@ -389,7 +389,7 @@ func (s *PaymentService) ExpireTimedOutOrders(ctx context.Context) (int, error) 
 }
 
 // getOrderProvider creates a provider using the order's original instance config.
-// Falls back to registry lookup if instance ID is missing (legacy orders).
+// Falls back to registry lookup only when a historical order has no instance ID.
 func (s *PaymentService) getOrderProvider(ctx context.Context, o *dbent.PaymentOrder) (payment.Provider, error) {
 	inst, err := s.getOrderProviderInstance(ctx, o)
 	if err != nil {

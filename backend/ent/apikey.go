@@ -36,35 +36,35 @@ type APIKey struct {
 	GroupID *int64 `json:"group_id,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
-	// Last usage time of this API key
+	// Historical last usage time for removed user API key records
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
-	// Allowed IPs/CIDRs, e.g. ["192.168.1.100", "10.0.0.0/8"]
+	// Historical allowed IP/CIDR list for removed user API key records
 	IPWhitelist []string `json:"ip_whitelist,omitempty"`
-	// Blocked IPs/CIDRs
+	// Historical blocked IP/CIDR list for removed user API key records
 	IPBlacklist []string `json:"ip_blacklist,omitempty"`
-	// Quota limit in USD for this API key (0 = unlimited)
+	// Historical quota limit in USD for removed user API key records
 	Quota float64 `json:"quota,omitempty"`
-	// Used quota amount in USD
+	// Historical used quota amount in USD for removed user API key records
 	QuotaUsed float64 `json:"quota_used,omitempty"`
-	// Expiration time for this API key (null = never expires)
+	// Historical expiration time for removed user API key records
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
-	// Rate limit in USD per 5 hours (0 = unlimited)
+	// Historical USD rate limit per 5 hours for removed user API key records
 	RateLimit5h float64 `json:"rate_limit_5h,omitempty"`
-	// Rate limit in USD per day (0 = unlimited)
+	// Historical USD rate limit per day for removed user API key records
 	RateLimit1d float64 `json:"rate_limit_1d,omitempty"`
-	// Rate limit in USD per 7 days (0 = unlimited)
+	// Historical USD rate limit per 7 days for removed user API key records
 	RateLimit7d float64 `json:"rate_limit_7d,omitempty"`
-	// Used amount in USD for the current 5h window
+	// Historical used amount in USD for the 5h window
 	Usage5h float64 `json:"usage_5h,omitempty"`
-	// Used amount in USD for the current 1d window
+	// Historical used amount in USD for the 1d window
 	Usage1d float64 `json:"usage_1d,omitempty"`
-	// Used amount in USD for the current 7d window
+	// Historical used amount in USD for the 7d window
 	Usage7d float64 `json:"usage_7d,omitempty"`
-	// Start time of the current 5h rate limit window
+	// Historical start time of the 5h rate limit window
 	Window5hStart *time.Time `json:"window_5h_start,omitempty"`
-	// Start time of the current 1d rate limit window
+	// Historical start time of the 1d rate limit window
 	Window1dStart *time.Time `json:"window_1d_start,omitempty"`
-	// Start time of the current 7d rate limit window
+	// Historical start time of the 7d rate limit window
 	Window7dStart *time.Time `json:"window_7d_start,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the APIKeyQuery when eager-loading is set.

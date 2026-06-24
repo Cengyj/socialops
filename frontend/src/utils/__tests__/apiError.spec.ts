@@ -21,7 +21,7 @@ function makeT(existingKeys: Record<string, string> = {}) {
 }
 
 describe('extractI18nErrorMessage', () => {
-  it('keeps the legacy raw fallback for admin and diagnostic surfaces', () => {
+  it('keeps the raw fallback for admin and diagnostic surfaces', () => {
     const message = extractI18nErrorMessage(
       {
         response: {
@@ -95,7 +95,7 @@ describe('extractSafeApiErrorMessage', () => {
     ).toBe('Invalid redeem code')
   })
 
-  it('falls back for unknown errors while the legacy helper can still extract raw detail', () => {
+  it('falls back for unknown errors while the raw extractor can still read detail', () => {
     const error = {
       response: {
         data: {

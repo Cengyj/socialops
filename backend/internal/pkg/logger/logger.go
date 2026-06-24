@@ -429,13 +429,13 @@ func (b *stdLogBridge) Write(p []byte) (int, error) {
 
 	switch level {
 	case LevelDebug:
-		entry.Debug(msg, zap.Bool("legacy_stdlog", true))
+		entry.Debug(msg, zap.Bool("stdlog_bridge", true))
 	case LevelWarn:
-		entry.Warn(msg, zap.Bool("legacy_stdlog", true))
+		entry.Warn(msg, zap.Bool("stdlog_bridge", true))
 	case LevelError, LevelFatal:
-		entry.Error(msg, zap.Bool("legacy_stdlog", true))
+		entry.Error(msg, zap.Bool("stdlog_bridge", true))
 	default:
-		entry.Info(msg, zap.Bool("legacy_stdlog", true))
+		entry.Info(msg, zap.Bool("stdlog_bridge", true))
 	}
 	return len(p), nil
 }
@@ -473,8 +473,8 @@ func inferStdLogLevel(msg string) Level {
 	return LevelInfo
 }
 
-// LegacyPrintf 用于平滑迁移历史的 printf 风格日志到结构化 logger。
-func LegacyPrintf(component, format string, args ...any) {
+// ComponentPrintf routes printf-style component logs through the structured logger.
+func ComponentPrintf(component, format string, args ...any) {
 	msg := normalizeStdLogMessage(fmt.Sprintf(format, args...))
 	if msg == "" {
 		return
@@ -495,13 +495,13 @@ func LegacyPrintf(component, format string, args ...any) {
 
 	switch inferStdLogLevel(msg) {
 	case LevelDebug:
-		l.Debug(msg, zap.Bool("legacy_printf", true))
+		l.Debug(msg, zap.Bool("component_printf_bridge", true))
 	case LevelWarn:
-		l.Warn(msg, zap.Bool("legacy_printf", true))
+		l.Warn(msg, zap.Bool("component_printf_bridge", true))
 	case LevelError, LevelFatal:
-		l.Error(msg, zap.Bool("legacy_printf", true))
+		l.Error(msg, zap.Bool("component_printf_bridge", true))
 	default:
-		l.Info(msg, zap.Bool("legacy_printf", true))
+		l.Info(msg, zap.Bool("component_printf_bridge", true))
 	}
 }
 

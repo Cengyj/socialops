@@ -141,14 +141,14 @@ func TestUserSubscriptionRepositoryPlatformFilterUsesPlanSnapshotBeforeGroup(t *
 		SetAssignedAt(now).
 		SetNotes("plan snapshot instagram").
 		SaveX(ctx)
-	legacyXGroup := client.UserSubscription.Create().
+	groupPlatformSnapshot := client.UserSubscription.Create().
 		SetUserID(user.ID).
 		SetGroupID(xGroup.ID).
 		SetStartsAt(now).
 		SetExpiresAt(now.AddDate(0, 0, 30)).
 		SetStatus(service.SubscriptionStatusActive).
 		SetAssignedAt(now).
-		SetNotes("legacy group platform").
+		SetNotes("group platform snapshot").
 		SaveX(ctx)
 
 	items, page, err := repo.List(ctx, pagination.PaginationParams{Page: 1, PageSize: 20}, nil, nil, nil, "", "twitter", "", "")
@@ -158,7 +158,7 @@ func TestUserSubscriptionRepositoryPlatformFilterUsesPlanSnapshotBeforeGroup(t *
 	for _, item := range items {
 		gotIDs = append(gotIDs, item.ID)
 	}
-	require.ElementsMatch(t, []int64{planXOnInstagramGroup.ID, legacyXGroup.ID}, gotIDs)
+	require.ElementsMatch(t, []int64{planXOnInstagramGroup.ID, groupPlatformSnapshot.ID}, gotIDs)
 
 	items, page, err = repo.List(ctx, pagination.PaginationParams{Page: 1, PageSize: 20}, nil, nil, nil, "", "instagram", "", "")
 	require.NoError(t, err)
@@ -167,12 +167,12 @@ func TestUserSubscriptionRepositoryPlatformFilterUsesPlanSnapshotBeforeGroup(t *
 	require.Equal(t, planInstagramOnXGroup.ID, items[0].ID)
 }
 
-func TestUserSubscriptionRepositoryPlatformFilterIncludesLegacyPlanPlatformAliases(t *testing.T) {
+func TestUserSubscriptionRepositoryPlatformFilterIncludesPlanPlatformAliases(t *testing.T) {
 	ctx := context.Background()
 	repo, client := newUserSubscriptionRepoSQLite(t)
 
 	user := client.User.Create().
-		SetEmail("subscription-platform-legacy@example.com").
+		SetEmail("subscription-platform-alias@example.com").
 		SetPasswordHash("hash").
 		SetRole(service.RoleUser).
 		SetStatus(service.StatusActive).
@@ -186,7 +186,7 @@ func TestUserSubscriptionRepositoryPlatformFilterIncludesLegacyPlanPlatformAlias
 		SaveX(ctx)
 
 	now := time.Now().UTC().Truncate(time.Second)
-	legacyTwitterSnapshot := client.UserSubscription.Create().
+	twitterAliasSnapshot := client.UserSubscription.Create().
 		SetUserID(user.ID).
 		SetGroupID(instagramGroup.ID).
 		SetPlanPlatform("twitter").
@@ -194,9 +194,9 @@ func TestUserSubscriptionRepositoryPlatformFilterIncludesLegacyPlanPlatformAlias
 		SetExpiresAt(now.AddDate(0, 0, 30)).
 		SetStatus(service.SubscriptionStatusActive).
 		SetAssignedAt(now).
-		SetNotes("legacy twitter snapshot").
+		SetNotes("twitter alias snapshot").
 		SaveX(ctx)
-	legacyXSnapshot := client.UserSubscription.Create().
+	xAliasSnapshot := client.UserSubscription.Create().
 		SetUserID(user.ID).
 		SetGroupID(instagramGroup.ID).
 		SetPlanPlatform("x").
@@ -204,7 +204,7 @@ func TestUserSubscriptionRepositoryPlatformFilterIncludesLegacyPlanPlatformAlias
 		SetExpiresAt(now.AddDate(0, 0, 30)).
 		SetStatus(service.SubscriptionStatusActive).
 		SetAssignedAt(now).
-		SetNotes("legacy x snapshot").
+		SetNotes("x alias snapshot").
 		SaveX(ctx)
 	client.UserSubscription.Create().
 		SetUserID(user.ID).
@@ -224,5 +224,5 @@ func TestUserSubscriptionRepositoryPlatformFilterIncludesLegacyPlanPlatformAlias
 	for _, item := range items {
 		gotIDs = append(gotIDs, item.ID)
 	}
-	require.ElementsMatch(t, []int64{legacyTwitterSnapshot.ID, legacyXSnapshot.ID}, gotIDs)
+	require.ElementsMatch(t, []int64{twitterAliasSnapshot.ID, xAliasSnapshot.ID}, gotIDs)
 }

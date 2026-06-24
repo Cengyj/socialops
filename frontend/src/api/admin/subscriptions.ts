@@ -7,8 +7,6 @@ import { apiClient } from '../client'
 import type {
   UserSubscription,
   SubscriptionProgress,
-  AssignSubscriptionRequest,
-  BulkAssignSubscriptionRequest,
   CreateUserSubscriptionFromPlanRequest,
   BulkCreateUserSubscriptionFromPlanRequest,
   ExtendSubscriptionRequest,
@@ -73,50 +71,10 @@ export async function getProgress(id: number): Promise<SubscriptionProgress> {
 }
 
 /**
- * Assign subscription to user
- * @param request - Assignment request
- * @returns Created subscription
- */
-export async function assign(request: AssignSubscriptionRequest): Promise<UserSubscription> {
-  const { data } = await apiClient.post<UserSubscription>('/admin/subscriptions/assign', request)
-  return data
-}
-
-/**
  * Create a subscription from a configured quota package.
- * New admin UI should use this plan-only entrypoint; assign() is kept for legacy compatibility.
  */
 export async function create(request: CreateUserSubscriptionFromPlanRequest): Promise<UserSubscription> {
   const { data } = await apiClient.post<UserSubscription>('/admin/subscriptions', request)
-  return data
-}
-
-/**
- * Bulk assign subscriptions to multiple users
- * @param request - Bulk assignment request
- * @returns Created subscriptions
- */
-export async function bulkAssign(
-  request: BulkAssignSubscriptionRequest
-): Promise<{
-  success_count: number
-  created_count: number
-  reused_count: number
-  failed_count: number
-  subscriptions: UserSubscription[]
-  errors: string[]
-}> {
-  const { data } = await apiClient.post<{
-    success_count: number
-    created_count: number
-    reused_count: number
-    failed_count: number
-    subscriptions: UserSubscription[]
-    errors: string[]
-  }>(
-    '/admin/subscriptions/bulk-assign',
-    request
-  )
   return data
 }
 
@@ -239,8 +197,6 @@ export const subscriptionsAPI = {
   getProgress,
   create,
   bulkCreate,
-  assign,
-  bulkAssign,
   extend,
   revoke,
   resetQuota,

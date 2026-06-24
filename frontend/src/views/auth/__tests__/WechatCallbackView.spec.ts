@@ -253,7 +253,7 @@ describe('WechatCallbackView', () => {
     expect(locationState.current.href).toContain('mode=mp')
   })
 
-  it('ignores legacy aggregate wechat settings and reuses the query mode during bind recovery', async () => {
+  it('ignores aggregate-only wechat settings and reuses the query mode during bind recovery', async () => {
     routeState.query = {
       wechat_bind_existing: '1',
       mode: 'open',
@@ -282,9 +282,9 @@ describe('WechatCallbackView', () => {
     expect(locationState.current.href).toContain('mode=open')
   })
 
-  it('accepts the legacy fragment token success callback without pending-session exchange', async () => {
+  it('accepts the fragment token success callback without pending-session exchange', async () => {
     locationState.current.hash =
-      '#access_token=legacy-access-token&refresh_token=legacy-refresh-token&expires_in=3600&token_type=Bearer&redirect=%2Flegacy-dashboard'
+      '#access_token=fragment-access-token&refresh_token=fragment-refresh-token&expires_in=3600&token_type=Bearer&redirect=%2Ffragment-dashboard'
     Object.defineProperty(window, 'location', {
       configurable: true,
       value: locationState.current,
@@ -305,24 +305,24 @@ describe('WechatCallbackView', () => {
     await flushPromises()
 
     expect(exchangePendingOAuthCompletionMock).not.toHaveBeenCalled()
-    expect(setTokenMock).toHaveBeenCalledWith('legacy-access-token')
-    expect(localStorage.getItem('refresh_token')).toBe('legacy-refresh-token')
+    expect(setTokenMock).toHaveBeenCalledWith('fragment-access-token')
+    expect(localStorage.getItem('refresh_token')).toBe('fragment-refresh-token')
     expect(localStorage.getItem('token_expires_at')).not.toBeNull()
     expect(showSuccessMock).toHaveBeenCalledWith('Login success')
-    expect(replaceMock).toHaveBeenCalledWith('/legacy-dashboard')
+    expect(replaceMock).toHaveBeenCalledWith('/fragment-dashboard')
   })
 
-  it('accepts the legacy pending oauth invitation fragment without pending-session exchange', async () => {
+  it('accepts the pending oauth invitation fragment without pending-session exchange', async () => {
     locationState.current.hash =
-      '#error=invitation_required&pending_oauth_token=legacy-pending-token&redirect=%2Flegacy-invite'
+      '#error=invitation_required&pending_oauth_token=fragment-pending-token&redirect=%2Ffragment-invite'
     Object.defineProperty(window, 'location', {
       configurable: true,
       value: locationState.current,
     })
     apiClientPostMock.mockResolvedValue({
       data: {
-        access_token: 'legacy-access-token',
-        refresh_token: 'legacy-refresh-token',
+        access_token: 'fragment-access-token',
+        refresh_token: 'fragment-refresh-token',
         expires_in: 3600,
         token_type: 'Bearer',
       },
@@ -348,13 +348,13 @@ describe('WechatCallbackView', () => {
     await flushPromises()
 
     expect(apiClientPostMock).toHaveBeenCalledWith('/auth/oauth/wechat/complete-registration', {
-      pending_oauth_token: 'legacy-pending-token',
+      pending_oauth_token: 'fragment-pending-token',
       invitation_code: 'invite-code',
       adopt_display_name: true,
       adopt_avatar: true,
     })
-    expect(setTokenMock).toHaveBeenCalledWith('legacy-access-token')
-    expect(replaceMock).toHaveBeenCalledWith('/legacy-invite')
+    expect(setTokenMock).toHaveBeenCalledWith('fragment-access-token')
+    expect(replaceMock).toHaveBeenCalledWith('/fragment-invite')
   })
 
   it('does not send adoption decisions during the initial exchange', async () => {

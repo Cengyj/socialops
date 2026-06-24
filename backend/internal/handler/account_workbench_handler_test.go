@@ -7,7 +7,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"encoding/csv"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"image"
 	"image/png"
 	"net/http"
@@ -20,6 +23,12 @@ import (
 
 	dbent "github.com/Wei-Shaw/socialops/ent"
 	"github.com/Wei-Shaw/socialops/ent/enttest"
+	"github.com/Wei-Shaw/socialops/ent/schema/mixins"
+	"github.com/Wei-Shaw/socialops/ent/socialaccount"
+	"github.com/Wei-Shaw/socialops/ent/socialip"
+	"github.com/Wei-Shaw/socialops/ent/socialtasklog"
+	"github.com/Wei-Shaw/socialops/ent/usagelog"
+	infraerrors "github.com/Wei-Shaw/socialops/internal/pkg/errors"
 	middleware2 "github.com/Wei-Shaw/socialops/internal/server/middleware"
 	"github.com/Wei-Shaw/socialops/internal/service"
 	"github.com/gin-gonic/gin"
@@ -66,15 +75,16 @@ func TestAccountWorkbenchHandlerSubmitTaskFailsClosedWithoutCharging(t *testing.
 		Params: service.TaskTemplateParams{
 			Targets: []string{"@target"},
 		},
+		IsDefault: true,
 	})
 	require.NoError(t, err)
+	require.Equal(t, service.SocialTaskActionFollow, tmpl.Type)
 
 	rec := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(rec)
 	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", bytes.NewBufferString(`{
 		"account_ids": [`+formatID(account.ID)+`],
-		"action": "login_check",
-		"template_id": "`+tmpl.ID+`",
+		"action": "follow",
 		"client_request_id": "g008-submit-1"
 	}`))
 	ginCtx.Request.Header.Set("Content-Type", "application/json")
@@ -87,11 +97,7 @@ func TestAccountWorkbenchHandlerSubmitTaskFailsClosedWithoutCharging(t *testing.
 	require.Contains(t, rec.Body.String(), `"platform":"x_twitter"`)
 	require.Contains(t, rec.Body.String(), `"account_name":"@submit_task"`)
 	require.Contains(t, rec.Body.String(), `"charged":false`)
-	require.Contains(t, rec.Body.String(), "暂不可用")
-	require.NotContains(t, rec.Body.String(), "not configured")
-	require.NotContains(t, rec.Body.String(), "executor")
-	require.NotContains(t, rec.Body.String(), "executor queue")
-	require.NotContains(t, rec.Body.String(), "queue is")
+	require.Contains(t, rec.Body.String(), "social platform executor queue is not configured; task was not charged")
 	require.NotContains(t, rec.Body.String(), "proxy_snapshot")
 	require.NotContains(t, rec.Body.String(), "proxy_id")
 	require.NotContains(t, rec.Body.String(), "billing_request_id")
@@ -108,12 +114,398 @@ func TestAccountWorkbenchHandlerSubmitTaskFailsClosedWithoutCharging(t *testing.
 	require.Zero(t, logs[0].ChargedAmount)
 	require.Nil(t, logs[0].ChargeSource)
 	require.NotNil(t, logs[0].ResultMessage)
-	require.Contains(t, *logs[0].ResultMessage, "not configured")
+	require.Equal(t, "social platform executor queue is not configured; task was not charged", *logs[0].ResultMessage)
 	require.NotNil(t, logs[0].IdempotencyKey)
 	require.Equal(t, "g008-submit-1", *logs[0].IdempotencyKey)
 	require.Nil(t, logs[0].BillingRequestID)
 	require.NotNil(t, logs[0].ProxySnapshot)
 	require.Contains(t, *logs[0].ProxySnapshot, proxyEndpoint)
+}
+
+func TestAccountWorkbenchHandlerRoutesRequireAuthSubject(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := NewAccountWorkbenchHandler(nil, nil, nil, nil, nil)
+
+	tests := []struct {
+		name   string
+		method string
+		target string
+		call   func(*gin.Context)
+	}{
+		{
+			name:   "list accounts",
+			method: http.MethodGet,
+			target: "/api/v1/accounts",
+			call:   handler.ListMyAccounts,
+		},
+		{
+			name:   "list task logs",
+			method: http.MethodGet,
+			target: "/api/v1/accounts/tasks",
+			call:   handler.ListTaskLogs,
+		},
+		{
+			name:   "batch import",
+			method: http.MethodPost,
+			target: "/api/v1/accounts/batch-import",
+			call:   handler.BatchImportMyAccounts,
+		},
+		{
+			name:   "update account",
+			method: http.MethodPut,
+			target: "/api/v1/accounts/1",
+			call:   handler.UpdateMyAccount,
+		},
+		{
+			name:   "delete account",
+			method: http.MethodDelete,
+			target: "/api/v1/accounts/1",
+			call:   handler.DeleteMyAccount,
+		},
+		{
+			name:   "batch delete",
+			method: http.MethodPost,
+			target: "/api/v1/accounts/batch-delete",
+			call:   handler.BatchDeleteMyAccounts,
+		},
+		{
+			name:   "export accounts",
+			method: http.MethodGet,
+			target: "/api/v1/accounts/export",
+			call:   handler.ExportMyAccounts,
+		},
+		{
+			name:   "submit task",
+			method: http.MethodPost,
+			target: "/api/v1/accounts/tasks",
+			call:   handler.SubmitTask,
+		},
+		{
+			name:   "set default proxy",
+			method: http.MethodPut,
+			target: "/api/v1/accounts/1/default-proxy",
+			call:   handler.SetDefaultProxy,
+		},
+		{
+			name:   "batch set default proxy",
+			method: http.MethodPost,
+			target: "/api/v1/accounts/default-proxy",
+			call:   handler.BatchSetDefaultProxy,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			ginCtx, _ := gin.CreateTestContext(rec)
+			ginCtx.Request = httptest.NewRequest(tt.method, tt.target, nil)
+
+			tt.call(ginCtx)
+
+			require.Equal(t, http.StatusUnauthorized, rec.Code)
+			require.Contains(t, rec.Body.String(), "unauthorized")
+		})
+	}
+}
+
+func TestAccountWorkbenchHandlerRejectsInvalidPathIDs(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := NewAccountWorkbenchHandler(nil, nil, nil, nil, nil)
+
+	tests := []struct {
+		name   string
+		method string
+		target string
+		call   func(*gin.Context)
+	}{
+		{
+			name:   "update account",
+			method: http.MethodPut,
+			target: "/api/v1/accounts/not-a-number",
+			call:   handler.UpdateMyAccount,
+		},
+		{
+			name:   "delete account",
+			method: http.MethodDelete,
+			target: "/api/v1/accounts/not-a-number",
+			call:   handler.DeleteMyAccount,
+		},
+		{
+			name:   "set default proxy",
+			method: http.MethodPut,
+			target: "/api/v1/accounts/not-a-number/default-proxy",
+			call:   handler.SetDefaultProxy,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			ginCtx, _ := gin.CreateTestContext(rec)
+			ginCtx.Request = httptest.NewRequest(tt.method, tt.target, nil)
+			ginCtx.Params = gin.Params{{Key: "id", Value: "not-a-number"}}
+			ginCtx.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 7})
+
+			tt.call(ginCtx)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			require.Contains(t, rec.Body.String(), "invalid id")
+		})
+	}
+}
+
+func TestAccountWorkbenchHandlerReportsAccountServiceUnavailableWhenDependencyIsMissing(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := NewAccountWorkbenchHandler(nil, nil, nil, nil, nil)
+
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		pathID string
+		body   []byte
+		call   func(*gin.Context)
+	}{
+		{name: "list accounts", method: http.MethodGet, path: "/api/v1/accounts", call: handler.ListMyAccounts},
+		{name: "list task logs", method: http.MethodGet, path: "/api/v1/accounts/tasks", call: handler.ListTaskLogs},
+		{name: "batch import", method: http.MethodPost, path: "/api/v1/accounts/batch-import", body: []byte(`{"accounts":[{"name":"@service_unavailable","platform":"x_twitter"}]}`), call: handler.BatchImportMyAccounts},
+		{name: "update account", method: http.MethodPut, path: "/api/v1/accounts/1", pathID: "1", body: []byte(`{"password":"updated-secret"}`), call: handler.UpdateMyAccount},
+		{name: "delete account", method: http.MethodDelete, path: "/api/v1/accounts/1", pathID: "1", call: handler.DeleteMyAccount},
+		{name: "batch delete", method: http.MethodPost, path: "/api/v1/accounts/batch-delete", body: []byte(`{"ids":[1]}`), call: handler.BatchDeleteMyAccounts},
+		{name: "export accounts", method: http.MethodGet, path: "/api/v1/accounts/export", call: handler.ExportMyAccounts},
+		{name: "clear default proxy", method: http.MethodPut, path: "/api/v1/accounts/1/default-proxy", pathID: "1", body: []byte(`{"proxy_id":null}`), call: handler.SetDefaultProxy},
+		{name: "batch clear default proxy", method: http.MethodPost, path: "/api/v1/accounts/default-proxy", body: []byte(`{"account_ids":[1],"mode":"clear"}`), call: handler.BatchSetDefaultProxy},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := invokeJSONSocialHandlerAsUserWithPathID(t, 7, tt.method, tt.path, tt.pathID, tt.body, tt.call)
+
+			requireAccountWorkbenchServiceUnavailableError(t, rec, "SOCIAL_ACCOUNT_SERVICE_UNAVAILABLE")
+		})
+	}
+}
+
+func TestAccountWorkbenchHandlerReportsProxyServiceUnavailableForDefaultProxyDependencies(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	client := newAccountWorkbenchHandlerTestClient(t)
+	handler := NewAccountWorkbenchHandler(service.NewSocialAccountService(client), nil, nil, nil, nil)
+
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		pathID string
+		body   []byte
+		call   func(*gin.Context)
+	}{
+		{name: "single specific proxy", method: http.MethodPut, path: "/api/v1/accounts/1/default-proxy", pathID: "1", body: []byte(`{"proxy_id":1}`), call: handler.SetDefaultProxy},
+		{name: "batch specific proxy", method: http.MethodPost, path: "/api/v1/accounts/default-proxy", body: []byte(`{"account_ids":[1],"mode":"specific","proxy_id":1}`), call: handler.BatchSetDefaultProxy},
+		{name: "batch random proxy", method: http.MethodPost, path: "/api/v1/accounts/default-proxy", body: []byte(`{"account_ids":[1],"mode":"random"}`), call: handler.BatchSetDefaultProxy},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := invokeJSONSocialHandlerAsUserWithPathID(t, 7, tt.method, tt.path, tt.pathID, tt.body, tt.call)
+
+			requireAccountWorkbenchServiceUnavailableError(t, rec, "SOCIAL_IP_SERVICE_UNAVAILABLE")
+		})
+	}
+}
+
+func TestAccountWorkbenchHandlerReportsTaskDependenciesUnavailableWithoutChangingLoginTemplateSemantics(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := NewAccountWorkbenchHandler(nil, nil, nil, nil, nil)
+
+	followRec := invokeJSONSocialHandlerAsUser(t, 7, http.MethodPost, "/api/v1/accounts/tasks", []byte(`{"account_ids":[1],"action":"follow"}`), handler.SubmitTask)
+	requireAccountWorkbenchServiceUnavailableError(t, followRec, "TASK_TEMPLATE_SERVICE_UNAVAILABLE")
+
+	loginRec := invokeJSONSocialHandlerAsUser(t, 7, http.MethodPost, "/api/v1/accounts/tasks", []byte(`{"account_ids":[1],"action":"login"}`), handler.SubmitTask)
+	requireAccountWorkbenchServiceUnavailableError(t, loginRec, "SOCIAL_TASK_SERVICE_UNAVAILABLE")
+	require.NotContains(t, loginRec.Body.String(), "TASK_TEMPLATE_SERVICE_UNAVAILABLE")
+}
+
+func TestAccountWorkbenchHandlerInputBindingErrorsAreStructured(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := NewAccountWorkbenchHandler(nil, nil, nil, nil, nil)
+
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		pathID string
+		body   []byte
+		call   func(*gin.Context)
+	}{
+		{
+			name:   "batch import malformed json",
+			method: http.MethodPost,
+			path:   "/api/v1/accounts/batch-import",
+			body:   []byte(`{"accounts":`),
+			call:   handler.BatchImportMyAccounts,
+		},
+		{
+			name:   "batch import wrong field type",
+			method: http.MethodPost,
+			path:   "/api/v1/accounts/batch-import",
+			body:   []byte(`{"accounts":"bad"}`),
+			call:   handler.BatchImportMyAccounts,
+		},
+		{
+			name:   "update account malformed json",
+			method: http.MethodPut,
+			path:   "/api/v1/accounts/1",
+			pathID: "1",
+			body:   []byte(`{"password":`),
+			call:   handler.UpdateMyAccount,
+		},
+		{
+			name:   "update account wrong field type",
+			method: http.MethodPut,
+			path:   "/api/v1/accounts/1",
+			pathID: "1",
+			body:   []byte(`{"password":123}`),
+			call:   handler.UpdateMyAccount,
+		},
+		{
+			name:   "batch delete malformed json",
+			method: http.MethodPost,
+			path:   "/api/v1/accounts/batch-delete",
+			body:   []byte(`{"ids":`),
+			call:   handler.BatchDeleteMyAccounts,
+		},
+		{
+			name:   "batch delete wrong field type",
+			method: http.MethodPost,
+			path:   "/api/v1/accounts/batch-delete",
+			body:   []byte(`{"ids":"bad"}`),
+			call:   handler.BatchDeleteMyAccounts,
+		},
+		{
+			name:   "submit task malformed json",
+			method: http.MethodPost,
+			path:   "/api/v1/accounts/tasks",
+			body:   []byte(`{"account_ids":`),
+			call:   handler.SubmitTask,
+		},
+		{
+			name:   "submit task wrong field type",
+			method: http.MethodPost,
+			path:   "/api/v1/accounts/tasks",
+			body:   []byte(`{"account_ids":"bad","action":"follow"}`),
+			call:   handler.SubmitTask,
+		},
+		{
+			name:   "set default proxy malformed json",
+			method: http.MethodPut,
+			path:   "/api/v1/accounts/1/default-proxy",
+			pathID: "1",
+			body:   []byte(`{"proxy_id":`),
+			call:   handler.SetDefaultProxy,
+		},
+		{
+			name:   "set default proxy wrong field type",
+			method: http.MethodPut,
+			path:   "/api/v1/accounts/1/default-proxy",
+			pathID: "1",
+			body:   []byte(`{"proxy_id":"bad"}`),
+			call:   handler.SetDefaultProxy,
+		},
+		{
+			name:   "batch default proxy malformed json",
+			method: http.MethodPost,
+			path:   "/api/v1/accounts/default-proxy",
+			body:   []byte(`{"account_ids":[1],"mode":`),
+			call:   handler.BatchSetDefaultProxy,
+		},
+		{
+			name:   "batch default proxy wrong field type",
+			method: http.MethodPost,
+			path:   "/api/v1/accounts/default-proxy",
+			body:   []byte(`{"account_ids":"bad","mode":"specific"}`),
+			call:   handler.BatchSetDefaultProxy,
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := invokeJSONSocialHandlerAsUserWithPathID(t, 7, tt.method, tt.path, tt.pathID, tt.body, tt.call)
+
+			requireStructuredAccountWorkbenchInputError(t, rec)
+		})
+	}
+}
+
+func TestAccountWorkbenchFiltersFromQueryKeepsListAndExportFilterFields(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	ginCtx, _ := gin.CreateTestContext(rec)
+	ginCtx.Request = httptest.NewRequest(http.MethodGet, "/api/v1/accounts?search=northwind&platform=x_twitter&account_status=available&task_status=stored&account_ids=101,%20102,bad", nil)
+
+	filters := accountWorkbenchFiltersFromQuery(ginCtx)
+
+	require.Equal(t, service.SocialAccountListFilters{
+		Search:        "northwind",
+		Platform:      "x_twitter",
+		AccountStatus: "available",
+		TaskStatus:    "stored",
+		AccountIDs:    []int64{101, 102},
+	}, filters)
+}
+
+func TestAccountWorkbenchTaskLogFiltersFromQueryParsesPollingFilters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	ginCtx, _ := gin.CreateTestContext(rec)
+	ginCtx.Request = httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/accounts/tasks?log_ids=1,%202,bad,3&account_ids=7,0,-1,9&statuses=pending,running&statuses=success&limit=25",
+		nil,
+	)
+
+	filters, err := accountWorkbenchTaskLogFiltersFromQuery(ginCtx, 42)
+
+	require.NoError(t, err)
+	require.Equal(t, service.SocialTaskLogListFilters{
+		UserID:     42,
+		LogIDs:     []int64{1, 2, 3},
+		AccountIDs: []int64{7, 9},
+		Statuses:   []string{"pending", "running", "success"},
+		Limit:      25,
+	}, filters)
+}
+
+func TestAccountWorkbenchTaskLogFiltersFromQueryDefaultsLimit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	ginCtx, _ := gin.CreateTestContext(rec)
+	ginCtx.Request = httptest.NewRequest(http.MethodGet, "/api/v1/accounts/tasks", nil)
+
+	filters, err := accountWorkbenchTaskLogFiltersFromQuery(ginCtx, 42)
+
+	require.NoError(t, err)
+	require.Equal(t, 50, filters.Limit)
+}
+
+func TestAccountWorkbenchTaskLogFiltersFromQueryRejectsInvalidLimit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	for _, target := range []string{
+		"/api/v1/accounts/tasks?limit=0",
+		"/api/v1/accounts/tasks?limit=not-a-number",
+	} {
+		t.Run(target, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			ginCtx, _ := gin.CreateTestContext(rec)
+			ginCtx.Request = httptest.NewRequest(http.MethodGet, target, nil)
+
+			_, err := accountWorkbenchTaskLogFiltersFromQuery(ginCtx, 42)
+
+			require.Error(t, err)
+			require.Equal(t, http.StatusBadRequest, infraerrors.Code(err))
+			require.Equal(t, "SOCIAL_TASK_LOG_LIMIT_INVALID", infraerrors.Reason(err))
+		})
+	}
 }
 
 func TestShortUserTaskResultSanitizesExecutionDetails(t *testing.T) {
@@ -126,10 +518,23 @@ func TestShortUserTaskResultSanitizesExecutionDetails(t *testing.T) {
 		{
 			name:    "executor unavailable",
 			message: "social platform executor queue is not configured; task was not charged",
-			want:    "该平台动作暂不可用，本次未扣费",
+			want:    "social platform executor queue is not configured; task was not charged",
+		},
+		{
+			name:    "login dependency not configured",
+			message: "twitter device fingerprint provider is not configured",
+			want:    "登录依赖服务未配置，本次未扣费",
 			forbidden: []string{
-				"executor",
+				"device fingerprint",
 				"not configured",
+			},
+		},
+		{
+			name:    "password invalid",
+			message: "twitter password is incorrect",
+			want:    "密码错误，本次未扣费",
+			forbidden: []string{
+				"password",
 			},
 		},
 		{
@@ -152,7 +557,7 @@ func TestShortUserTaskResultSanitizesExecutionDetails(t *testing.T) {
 		},
 		{
 			name:    "unsupported action",
-			message: "unsupported action message on x_twitter",
+			message: "unsupported action unsupported_action on x_twitter",
 			want:    "该动作暂不支持，本次未扣费",
 			forbidden: []string{
 				"unsupported action",
@@ -191,7 +596,7 @@ func TestShortUserTaskResultSanitizesExecutionDetails(t *testing.T) {
 		},
 		{
 			name:    "post video unavailable",
-			message: "video media is not implemented yet",
+			message: "video media is not supported for SocialOps execution",
 			want:    "视频发帖媒体暂未开放，本次未扣费",
 		},
 		{
@@ -240,27 +645,54 @@ func TestShortUserTaskResultSanitizesExecutionDetails(t *testing.T) {
 			want:    "发帖媒体类型暂不支持，本次未扣费",
 		},
 		{
+			name:    "safe stale task timeout message is preserved",
+			message: "任务执行超时，本次未扣费",
+			want:    "任务执行超时，本次未扣费",
+		},
+		{
+			name:    "raw platform business error is preserved",
+			message: "twitter error 399: Sorry, we could not find your account.",
+			want:    "账号不存在，本次未扣费",
+		},
+		{
+			name:    "twitter 399 wrong password prefers password classification",
+			message: "twitter error 399: Wrong password!",
+			want:    "密码错误，本次未扣费",
+		},
+		{
+			name:    "twitter 399 without exact business message remains raw",
+			message: "twitter error 399",
+			want:    "twitter error 399",
+		},
+		{
+			name:    "twitter 399 with unknown business message remains raw",
+			message: "twitter error 399: Password checkpoint required.",
+			want:    "twitter error 399: Password checkpoint required.",
+		},
+		{
+			name:    "raw platform password business error is preserved",
+			message: "twitter login error: The password you entered is incorrect.",
+			want:    "密码错误，本次未扣费",
+		},
+		{
+			name:    "twitter login error with unknown business message remains raw",
+			message: "twitter login error: Password checkpoint required.",
+			want:    "twitter login error: Password checkpoint required.",
+		},
+		{
+			name:    "raw platform error with sensitive value is hidden",
+			message: "twitter error 89: token=secret-token-value",
+			want:    "twitter error 89: token=secret-token-value",
+		},
+		{
 			name:    "unknown internal detail",
 			message: `upstream response body {"error":"secret","headers":{"authorization":"Bearer abc"}} trace_id=trace-123 request_id=req-456`,
-			want:    "任务执行失败，本次未扣费",
-			forbidden: []string{
-				"response body",
-				"authorization",
-				"Bearer abc",
-				"trace-123",
-				"req-456",
-			},
+			want:    `upstream response body {"error":"secret","headers":{"authorization":"Bearer abc"}} trace_id=trace-123 request_id=req-456`,
 		},
 		{
 			name:    "success-looking sensitive upstream detail",
 			message: `follow succeeded https://upstream.example/callback?trace_id=trace-123 authorization=Bearer abc`,
-			want:    "任务已完成，详细结果已隐藏",
-			forbidden: []string{
-				"https://upstream.example",
-				"trace-123",
-				"authorization",
-				"Bearer abc",
-			},
+			want:    `follow succeeded https://upstream.example/callback?trace_id=trace-123 authorization=Bearer abc`,
 		},
 	}
 
@@ -283,6 +715,277 @@ func TestShortUserTaskResultKeepsSafeSuccessSummary(t *testing.T) {
 
 	require.NotNil(t, got)
 	require.Equal(t, "follow succeeded", *got)
+}
+
+func TestUserTaskLogResponseFromServiceAppliesAccountAndSanitizesStructuredFields(t *testing.T) {
+	message := "auth cookie missing for account; token=secret-token-value"
+	target := "https://x.com/northwind"
+	content := "hello from template"
+	executedAt := time.Date(2026, 6, 21, 9, 30, 0, 0, time.UTC)
+	createdAt := time.Date(2026, 6, 21, 9, 29, 0, 0, time.UTC)
+
+	resp := userTaskLogResponseFromService(&service.SocialTaskLog{
+		ID:              77,
+		SocialAccountID: 12,
+		Action:          service.SocialTaskActionPost,
+		Target:          &target,
+		Content:         &content,
+		Payload: &service.SocialTaskPayload{
+			Post: &service.SocialPostPayload{
+				Text: "hello from template",
+				Media: []service.SocialTaskMediaRef{{
+					Source:      "library",
+					StorageKey:  "social-task/12/post.png",
+					URL:         "https://media.example/private/post.png",
+					ContentType: "image/png",
+					FileName:    "post.png",
+					Width:       640,
+					Height:      640,
+				}},
+			},
+		},
+		TemplateSnapshot: &service.SocialTaskTemplateSnapshot{
+			TemplateID:   "tmpl-post",
+			TemplateName: "Post template",
+			TemplateType: service.SocialTaskActionPost,
+			Params: service.TaskTemplateParams{
+				Media: []service.SocialTaskMediaRef{{
+					Source:      "library",
+					StorageKey:  "social-task/12/template.png",
+					URL:         "https://media.example/private/template.png",
+					ContentType: "image/png",
+					FileName:    "template.png",
+				}},
+			},
+		},
+		Status:        service.SocialTaskLogStatusSuccess,
+		ResultMessage: &message,
+		ChargedAmount: 0.2,
+		ChargeStatus:  service.SocialTaskChargeStatusCharged,
+		ExecutedAt:    &executedAt,
+		CreatedAt:     createdAt,
+	}, &service.SocialAccount{
+		ID:       12,
+		Name:     "@northwind",
+		Platform: "x_twitter",
+	})
+
+	require.Equal(t, int64(77), resp.ID)
+	require.Equal(t, int64(12), resp.SocialAccountID)
+	require.Equal(t, "x_twitter", resp.Platform)
+	require.Equal(t, "@northwind", resp.AccountName)
+	require.True(t, resp.Charged)
+	require.InEpsilon(t, 0.2, resp.ChargedAmount, 0.000001)
+	require.Equal(t, service.SocialTaskChargeStatusCharged, resp.ChargeStatus)
+	require.Equal(t, executedAt, *resp.ExecutedAt)
+	require.Equal(t, createdAt, resp.CreatedAt)
+	require.NotNil(t, resp.ResultMessage)
+	require.Equal(t, "账号认证信息不可用，本次未扣费", *resp.ResultMessage)
+	require.NotNil(t, resp.Payload)
+	require.NotNil(t, resp.Payload.Post)
+	require.Len(t, resp.Payload.Post.Media, 1)
+	require.Equal(t, "inline", resp.Payload.Post.Media[0].Source)
+	require.Equal(t, "image/png", resp.Payload.Post.Media[0].ContentType)
+	require.Equal(t, "post.png", resp.Payload.Post.Media[0].FileName)
+	require.Empty(t, resp.Payload.Post.Media[0].StorageKey)
+	require.Empty(t, resp.Payload.Post.Media[0].URL)
+	require.NotNil(t, resp.TemplateSnapshot)
+	require.Len(t, resp.TemplateSnapshot.Params.Media, 1)
+	require.Equal(t, "inline", resp.TemplateSnapshot.Params.Media[0].Source)
+	require.Equal(t, "template.png", resp.TemplateSnapshot.Params.Media[0].FileName)
+	require.Empty(t, resp.TemplateSnapshot.Params.Media[0].StorageKey)
+	require.Empty(t, resp.TemplateSnapshot.Params.Media[0].URL)
+}
+
+func TestUserTaskLogChargedRequiresChargedStatusAndPositiveAmount(t *testing.T) {
+	tests := []struct {
+		name string
+		log  *service.SocialTaskLog
+		want bool
+	}{
+		{
+			name: "charged with positive amount",
+			log:  &service.SocialTaskLog{ChargeStatus: service.SocialTaskChargeStatusCharged, ChargedAmount: 0.1},
+			want: true,
+		},
+		{
+			name: "charged status without amount",
+			log:  &service.SocialTaskLog{ChargeStatus: service.SocialTaskChargeStatusCharged, ChargedAmount: 0},
+			want: false,
+		},
+		{
+			name: "amount without charged status",
+			log:  &service.SocialTaskLog{ChargeStatus: service.SocialTaskChargeStatusNotCharged, ChargedAmount: 0.1},
+			want: false,
+		},
+		{
+			name: "nil log",
+			log:  nil,
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, userTaskLogCharged(tt.log))
+		})
+	}
+}
+
+func TestUserSocialAccountResponseFromServiceKeepsDeliveryFieldsAndPublicStatus(t *testing.T) {
+	platformUserID := "pool-account-id"
+	password := "pool-secret"
+	phone := "+15550000001"
+	email := "account@example.test"
+	emailPassword := "mail-secret"
+	twoFactor := "totp-secret"
+	backupCode := "backup-code"
+	emailClientID := "mail-client"
+	emailToken := "mail-token"
+	registrationIP := "203.0.113.10"
+	authCookie := "ct0=list; auth_token=list"
+	executionAuth := "encrypted-execution-auth-ciphertext"
+	taskMessage := `upstream response body {"error":"secret"} authorization=Bearer abc token=secret-token`
+	proxySnapshot := `{"id":301,"name":"delivery proxy","ip_type":"residential","endpoint":"http://proxy.local:8080","status":"online"}`
+	remark := "operator note"
+	createdAt := time.Date(2026, 6, 21, 10, 0, 0, 0, time.UTC)
+	updatedAt := time.Date(2026, 6, 21, 10, 30, 0, 0, time.UTC)
+
+	resp := userSocialAccountResponseFromService(&service.SocialAccount{
+		ID:                   12,
+		Name:                 "@delivery",
+		Platform:             "x_twitter",
+		Username:             "delivery",
+		PlatformUserID:       &platformUserID,
+		Password:             &password,
+		Phone:                &phone,
+		Email:                &email,
+		EmailPassword:        &emailPassword,
+		TwoFactor:            &twoFactor,
+		BackupCode:           &backupCode,
+		EmailClientID:        &emailClientID,
+		EmailToken:           &emailToken,
+		RegistrationIP:       &registrationIP,
+		AuthCookie:           &authCookie,
+		ExecutionAuth:        &executionAuth,
+		AccountStatus:        service.SocialAccountStatusAvailable,
+		TaskStatus:           service.SocialTaskStatusManualReview,
+		TaskMessage:          &taskMessage,
+		DefaultProxySnapshot: &proxySnapshot,
+		Remark:               &remark,
+		CreatedAt:            createdAt,
+		UpdatedAt:            updatedAt,
+	})
+
+	require.Equal(t, int64(12), resp.ID)
+	require.Equal(t, "@delivery", resp.Name)
+	require.Equal(t, "x_twitter", resp.Platform)
+	require.Equal(t, "delivery", resp.Username)
+	require.Equal(t, platformUserID, *resp.PlatformUserID)
+	require.Equal(t, password, *resp.Password)
+	require.Equal(t, phone, *resp.Phone)
+	require.Equal(t, email, *resp.Email)
+	require.Equal(t, emailPassword, *resp.EmailPassword)
+	require.Equal(t, twoFactor, *resp.TwoFactor)
+	require.Equal(t, backupCode, *resp.BackupCode)
+	require.Equal(t, emailClientID, *resp.EmailClientID)
+	require.Equal(t, emailToken, *resp.EmailToken)
+	require.Equal(t, registrationIP, *resp.RegistrationIP)
+	require.Equal(t, authCookie, *resp.AuthCookie)
+	require.Equal(t, executionAuth, *resp.ExecutionAuth)
+	require.Equal(t, service.SocialAccountStatusAvailable, resp.AccountStatus)
+	require.Equal(t, service.SocialTaskStatusManualReview, resp.TaskStatus)
+	require.NotNil(t, resp.TaskMessage)
+	require.Equal(t, "账号认证信息不可用，本次未扣费", *resp.TaskMessage)
+	require.Equal(t, proxySnapshot, *resp.DefaultProxySnapshot)
+	require.True(t, resp.DefaultProxyConfigured)
+	require.Equal(t, remark, *resp.Remark)
+	require.Equal(t, createdAt, resp.CreatedAt)
+	require.Equal(t, updatedAt, resp.UpdatedAt)
+}
+
+func TestUserSocialAccountDefaultProxyConfiguredRequiresUsableSnapshot(t *testing.T) {
+	onlineSnapshot := `{"id":301,"endpoint":"http://proxy.local:8080","status":"online"}`
+	offlineSnapshot := `{"id":301,"endpoint":"http://proxy.local:8080","status":"offline"}`
+	emptyEndpointSnapshot := `{"id":301,"endpoint":"","status":"online"}`
+
+	require.True(t, userSocialAccountDefaultProxyConfigured(&service.SocialAccount{DefaultProxySnapshot: &onlineSnapshot}))
+	require.False(t, userSocialAccountDefaultProxyConfigured(&service.SocialAccount{DefaultProxySnapshot: &offlineSnapshot}))
+	require.False(t, userSocialAccountDefaultProxyConfigured(&service.SocialAccount{DefaultProxySnapshot: &emptyEndpointSnapshot}))
+	require.False(t, userSocialAccountDefaultProxyConfigured(&service.SocialAccount{}))
+	require.False(t, userSocialAccountDefaultProxyConfigured(nil))
+}
+
+func TestAccountWorkbenchHandlerListTaskLogsFiltersCurrentUserActivity(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx := context.Background()
+	client := newAccountWorkbenchHandlerTestClient(t)
+	user := createSocialHandlerUser(t, ctx, client, "task-log-owner@example.com")
+	otherUser := createSocialHandlerUser(t, ctx, client, "task-log-other@example.com")
+	account := client.SocialAccount.Create().
+		SetName("@task_log_owner").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("task_log_owner").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(service.SocialAccountStatusAvailable).
+		SetTaskStatus(service.SocialTaskStatusStored).
+		SaveX(ctx)
+	otherAccount := client.SocialAccount.Create().
+		SetName("@task_log_other").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("task_log_other").
+		SetAssignedUserID(otherUser.ID).
+		SetAccountStatus(service.SocialAccountStatusAvailable).
+		SetTaskStatus(service.SocialTaskStatusStored).
+		SaveX(ctx)
+	pendingLog := client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(service.SocialTaskActionLogin).
+		SetStatus(service.SocialTaskLogStatusPending).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(0).
+		SetChargeStatus(service.SocialTaskChargeStatusNotCharged).
+		SaveX(ctx)
+	failedLog := client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(service.SocialTaskActionLoginCheck).
+		SetStatus(service.SocialTaskLogStatusFailed).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(0).
+		SetChargeStatus(service.SocialTaskChargeStatusNotCharged).
+		SaveX(ctx)
+	otherLog := client.SocialTaskLog.Create().
+		SetSocialAccountID(otherAccount.ID).
+		SetUserID(otherUser.ID).
+		SetAction(service.SocialTaskActionLogin).
+		SetStatus(service.SocialTaskLogStatusPending).
+		SetPrice(service.SocialTaskUnitPrice).
+		SetChargedAmount(0).
+		SetChargeStatus(service.SocialTaskChargeStatusNotCharged).
+		SaveX(ctx)
+	handler := newEncryptedAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 1.0}})
+
+	rec := httptest.NewRecorder()
+	ginCtx, _ := gin.CreateTestContext(rec)
+	ginCtx.Request = httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/accounts/tasks?log_ids="+formatID(pendingLog.ID)+","+formatID(failedLog.ID)+","+formatID(otherLog.ID)+"&account_ids="+formatID(account.ID)+"&statuses=pending,running",
+		nil,
+	)
+	ginCtx.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: user.ID})
+
+	handler.ListTaskLogs(ginCtx)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), `"id":`+formatID(pendingLog.ID))
+	require.Contains(t, rec.Body.String(), `"status":"pending"`)
+	require.NotContains(t, rec.Body.String(), `"id":`+formatID(failedLog.ID))
+	require.NotContains(t, rec.Body.String(), `"id":`+formatID(otherLog.ID))
+	require.NotContains(t, rec.Body.String(), "@task_log_other")
 }
 
 func TestAccountWorkbenchHandlerSubmitTaskUsesExecutorQueue(t *testing.T) {
@@ -309,15 +1012,16 @@ func TestAccountWorkbenchHandlerSubmitTaskUsesExecutorQueue(t *testing.T) {
 		Params: service.TaskTemplateParams{
 			Targets: []string{"@target"},
 		},
+		IsDefault: true,
 	})
 	require.NoError(t, err)
+	require.Equal(t, service.SocialTaskActionFollow, tmpl.Type)
 
 	rec := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(rec)
 	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", bytes.NewBufferString(`{
 		"account_ids": [`+formatID(account.ID)+`],
-		"action": "login_check",
-		"template_id": "`+tmpl.ID+`",
+		"action": "follow",
 		"client_request_id": "g008-submit-queue"
 	}`))
 	ginCtx.Request.Header.Set("Content-Type", "application/json")
@@ -370,42 +1074,38 @@ func TestAccountWorkbenchHandlerSubmitTaskRequiresTemplate(t *testing.T) {
 	handler.SubmitTask(ginCtx)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
-	require.Contains(t, rec.Body.String(), "TASK_TEMPLATE_REQUIRED")
+	require.Contains(t, rec.Body.String(), "TASK_DEFAULT_TEMPLATE_REQUIRED")
 	require.Zero(t, userRepo.deductCalls)
 	count, err := client.SocialTaskLog.Query().Count(ctx)
 	require.NoError(t, err)
 	require.Zero(t, count)
 }
 
-func TestAccountWorkbenchHandlerSubmitTaskAcceptsTemplateOnlyRequest(t *testing.T) {
+func TestAccountWorkbenchHandlerSubmitLoginCheckDoesNotRequireDefaultTemplate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx := context.Background()
 	client := newAccountWorkbenchHandlerTestClient(t)
-	user := createSocialHandlerUser(t, ctx, client, "submit-template-only@example.com")
+	user := createSocialHandlerUser(t, ctx, client, "submit-login-check-direct@example.com")
 	account := client.SocialAccount.Create().
-		SetName("@submit_template_only").
+		SetName("@submit_login_check_direct").
 		SetPlatform("x_twitter").
 		SetPlatformKey("x_twitter").
-		SetNameKey("submit_template_only").
+		SetNameKey("submit_login_check_direct").
 		SetAssignedUserID(user.ID).
 		SetAccountStatus(service.SocialAccountStatusAvailable).
 		SetTaskStatus(service.SocialTaskStatusStored).
 		SaveX(ctx)
-	assignHandlerDefaultProxy(t, ctx, client, user.ID, account.ID, "submit template only proxy")
-	tmpl, err := service.NewTaskSettingsService(client).SaveTemplate(ctx, user.ID, &service.TaskTemplateInput{
-		Name: "template-only login check",
-		Type: service.SocialTaskActionLoginCheck,
-	})
-	require.NoError(t, err)
+	assignHandlerDefaultProxy(t, ctx, client, user.ID, account.ID, "submit login check direct proxy")
 	userRepo := &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 1.0}}
 	handler := newAccountWorkbenchHandlerForTest(client, userRepo)
+	handler.templates = nil
 
 	rec := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(rec)
 	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", bytes.NewBufferString(`{
 		"account_ids": [`+formatID(account.ID)+`],
-		"template_id": "`+tmpl.ID+`",
-		"client_request_id": "template-only-submit"
+		"action": "login_check",
+		"client_request_id": "direct-login-check-submit"
 	}`))
 	ginCtx.Request.Header.Set("Content-Type", "application/json")
 	ginCtx.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: user.ID})
@@ -418,6 +1118,7 @@ func TestAccountWorkbenchHandlerSubmitTaskAcceptsTemplateOnlyRequest(t *testing.
 	require.NoError(t, err)
 	require.Len(t, logs, 1)
 	require.Equal(t, service.SocialTaskActionLoginCheck, logs[0].Action)
+	require.True(t, logs[0].TemplateSnapshot.IsZero())
 	require.Zero(t, userRepo.deductCalls)
 }
 
@@ -453,8 +1154,10 @@ func TestAccountWorkbenchHandlerSubmitTaskExpandsSavedTemplateParams(t *testing.
 		Params: service.TaskTemplateParams{
 			Targets: []string{"@target_one", "@target_two"},
 		},
+		IsDefault: true,
 	})
 	require.NoError(t, err)
+	require.Equal(t, service.SocialTaskActionFollow, tmpl.Type)
 	userRepo := &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 1.0}}
 	handler := newAccountWorkbenchHandlerForTest(client, userRepo)
 
@@ -462,8 +1165,7 @@ func TestAccountWorkbenchHandlerSubmitTaskExpandsSavedTemplateParams(t *testing.
 	ginCtx, _ := gin.CreateTestContext(rec)
 	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", bytes.NewBufferString(`{
 		"account_ids": [`+formatID(first.ID)+`, `+formatID(second.ID)+`],
-		"action": "login_check",
-		"template_id": "`+tmpl.ID+`",
+		"action": "follow",
 		"target": "@request_body_target_must_be_ignored",
 		"content": "request body content must be ignored",
 		"client_request_id": "g008-submit-template"
@@ -508,7 +1210,7 @@ func TestAccountWorkbenchHandlerSubmitTaskCapturesStructuredTemplateSnapshot(t *
 		Type: service.SocialTaskActionPost,
 		Params: service.TaskTemplateParams{
 			Contents:     []string{"hello structured handler"},
-			QuotePostURL: "https://x.com/openai/status/1",
+			QuotePostURL: "https://x.com/northwind/status/1",
 			Media: []service.SocialTaskMediaRef{
 				{
 					Source:      "inline",
@@ -518,6 +1220,7 @@ func TestAccountWorkbenchHandlerSubmitTaskCapturesStructuredTemplateSnapshot(t *
 				},
 			},
 		},
+		IsDefault: true,
 	})
 	require.NoError(t, err)
 	userRepo := &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 1.0}}
@@ -527,7 +1230,7 @@ func TestAccountWorkbenchHandlerSubmitTaskCapturesStructuredTemplateSnapshot(t *
 	ginCtx, _ := gin.CreateTestContext(rec)
 	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", bytes.NewBufferString(`{
 		"account_ids": [`+formatID(account.ID)+`],
-		"template_id": "`+tmpl.ID+`",
+		"action": "post",
 		"client_request_id": "structured-template-submit"
 	}`))
 	ginCtx.Request.Header.Set("Content-Type", "application/json")
@@ -583,7 +1286,7 @@ func TestAccountWorkbenchHandlerSubmitTaskCapturesStructuredTemplateSnapshot(t *
 	require.NotNil(t, body.Data.Logs[0].Payload)
 	require.NotNil(t, body.Data.Logs[0].Payload.Post)
 	require.Equal(t, "hello structured handler", body.Data.Logs[0].Payload.Post.Text)
-	require.Equal(t, "https://x.com/openai/status/1", body.Data.Logs[0].Payload.Post.QuotePostURL)
+	require.Equal(t, "https://x.com/northwind/status/1", body.Data.Logs[0].Payload.Post.QuotePostURL)
 	require.Len(t, body.Data.Logs[0].Payload.Post.Media, 1)
 	require.Equal(t, "inline", body.Data.Logs[0].Payload.Post.Media[0].Source)
 	require.Equal(t, "image/png", body.Data.Logs[0].Payload.Post.Media[0].ContentType)
@@ -595,7 +1298,7 @@ func TestAccountWorkbenchHandlerSubmitTaskCapturesStructuredTemplateSnapshot(t *
 	require.Equal(t, "structured post", body.Data.Logs[0].TemplateSnapshot.TemplateName)
 	require.Equal(t, service.SocialTaskActionPost, body.Data.Logs[0].TemplateSnapshot.TemplateType)
 	require.Equal(t, []string{"hello structured handler"}, body.Data.Logs[0].TemplateSnapshot.Params.Contents)
-	require.Equal(t, "https://x.com/openai/status/1", body.Data.Logs[0].TemplateSnapshot.Params.QuotePostURL)
+	require.Equal(t, "https://x.com/northwind/status/1", body.Data.Logs[0].TemplateSnapshot.Params.QuotePostURL)
 	require.Len(t, body.Data.Logs[0].TemplateSnapshot.Params.Media, 1)
 	require.Equal(t, "inline", body.Data.Logs[0].TemplateSnapshot.Params.Media[0].Source)
 	require.Equal(t, "image/png", body.Data.Logs[0].TemplateSnapshot.Params.Media[0].ContentType)
@@ -608,7 +1311,7 @@ func TestAccountWorkbenchHandlerSubmitTaskCapturesStructuredTemplateSnapshot(t *
 	require.Len(t, logs, 1)
 	require.NotNil(t, logs[0].Payload.Post)
 	require.Equal(t, "hello structured handler", logs[0].Payload.Post.Text)
-	require.Equal(t, "https://x.com/openai/status/1", logs[0].Payload.Post.QuotePostURL)
+	require.Equal(t, "https://x.com/northwind/status/1", logs[0].Payload.Post.QuotePostURL)
 	require.Len(t, logs[0].Payload.Post.Media, 1)
 	require.Equal(t, "library", logs[0].Payload.Post.Media[0].Source)
 	require.Equal(t, "image/png", logs[0].Payload.Post.Media[0].ContentType)
@@ -619,7 +1322,7 @@ func TestAccountWorkbenchHandlerSubmitTaskCapturesStructuredTemplateSnapshot(t *
 	require.Equal(t, "structured post", logs[0].TemplateSnapshot.TemplateName)
 	require.Equal(t, service.SocialTaskActionPost, logs[0].TemplateSnapshot.TemplateType)
 	require.Equal(t, []string{"hello structured handler"}, logs[0].TemplateSnapshot.Params.Contents)
-	require.Equal(t, "https://x.com/openai/status/1", logs[0].TemplateSnapshot.Params.QuotePostURL)
+	require.Equal(t, "https://x.com/northwind/status/1", logs[0].TemplateSnapshot.Params.QuotePostURL)
 	require.Len(t, logs[0].TemplateSnapshot.Params.Media, 1)
 	require.Equal(t, "library", logs[0].TemplateSnapshot.Params.Media[0].Source)
 	require.NotEmpty(t, logs[0].TemplateSnapshot.Params.Media[0].StorageKey)
@@ -656,6 +1359,7 @@ func TestAccountWorkbenchHandlerSubmitTaskCapturesMediaOnlyStructuredTemplateSna
 				},
 			},
 		},
+		IsDefault: true,
 	})
 	require.NoError(t, err)
 	userRepo := &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 1.0}}
@@ -665,7 +1369,7 @@ func TestAccountWorkbenchHandlerSubmitTaskCapturesMediaOnlyStructuredTemplateSna
 	ginCtx, _ := gin.CreateTestContext(rec)
 	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", bytes.NewBufferString(`{
 		"account_ids": [`+formatID(account.ID)+`],
-		"template_id": "`+tmpl.ID+`",
+		"action": "post",
 		"client_request_id": "media-only-template-submit"
 	}`))
 	ginCtx.Request.Header.Set("Content-Type", "application/json")
@@ -882,9 +1586,10 @@ func TestAccountWorkbenchHandlerSubmitTaskCapturesStructuredProfileMediaTemplate
 			assignHandlerDefaultProxy(t, ctx, client, user.ID, account.ID, tc.name+" proxy")
 			templateSvc := service.NewTaskSettingsService(client)
 			tmpl, err := templateSvc.SaveTemplate(ctx, user.ID, &service.TaskTemplateInput{
-				Name:   tc.templateName,
-				Type:   tc.taskType,
-				Params: tc.params,
+				Name:      tc.templateName,
+				Type:      tc.taskType,
+				Params:    tc.params,
+				IsDefault: true,
 			})
 			require.NoError(t, err)
 			userRepo := &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 1.0}}
@@ -894,7 +1599,7 @@ func TestAccountWorkbenchHandlerSubmitTaskCapturesStructuredProfileMediaTemplate
 			ginCtx, _ := gin.CreateTestContext(rec)
 			ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", bytes.NewBufferString(`{
 				"account_ids": [`+formatID(account.ID)+`],
-				"template_id": "`+tmpl.ID+`",
+				"action": "`+tc.taskType+`",
 				"client_request_id": "`+strings.ReplaceAll(tc.taskType, "_", "-")+`-submit"
 			}`))
 			ginCtx.Request.Header.Set("Content-Type", "application/json")
@@ -1052,14 +1757,13 @@ func TestAccountWorkbenchHandlerRejectsMixedPlatformBatchBeforeBilling(t *testin
 	assignHandlerDefaultProxy(t, ctx, client, user.ID, instagramAccount.ID, "mixed instagram proxy")
 	userRepo := &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 1.0}}
 	handler := newAccountWorkbenchHandlerForTest(client, userRepo)
-	tmpl := saveHandlerTaskTemplate(t, ctx, client, user.ID, service.SocialTaskActionFollow, service.TaskTemplateParams{Targets: []string{"@target"}})
+	saveHandlerTaskTemplate(t, ctx, client, user.ID, service.SocialTaskActionFollow, service.TaskTemplateParams{Targets: []string{"@target"}})
 
 	rec := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(rec)
 	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", bytes.NewBufferString(`{
 		"account_ids": [`+formatID(xAccount.ID)+`, `+formatID(instagramAccount.ID)+`],
-		"action": "login_check",
-		"template_id": "`+tmpl.ID+`"
+		"action": "follow"
 	}`))
 	ginCtx.Request.Header.Set("Content-Type", "application/json")
 	ginCtx.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: user.ID})
@@ -1074,36 +1778,68 @@ func TestAccountWorkbenchHandlerRejectsMixedPlatformBatchBeforeBilling(t *testin
 	require.Zero(t, count)
 }
 
-func TestAccountWorkbenchHandlerRejectsUnavailableMessageActionBeforeBilling(t *testing.T) {
+func TestAccountWorkbenchHandlerRejectsUnsupportedActionBeforeBilling(t *testing.T) {
+	cases := map[string]string{
+		"blank":               "",
+		"removed_tweet_alias": "tweet",
+		"removed_dm_alias":    "dm",
+		"message":             "message",
+		"unsupported":         "unsupported_action",
+	}
+	for name, action := range cases {
+		t.Run(name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			ctx := context.Background()
+			client := newAccountWorkbenchHandlerTestClient(t)
+			user := createSocialHandlerUser(t, ctx, client, name+"-unsupported-action@example.com")
+			account := client.SocialAccount.Create().
+				SetName("@" + name + "_unsupported_action").
+				SetPlatform("x_twitter").
+				SetPlatformKey("x_twitter").
+				SetNameKey(name + "_unsupported_action").
+				SetAssignedUserID(user.ID).
+				SetAccountStatus(service.SocialAccountStatusAvailable).
+				SetTaskStatus(service.SocialTaskStatusStored).
+				SaveX(ctx)
+			userRepo := &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 1.0}}
+			handler := newAccountWorkbenchHandlerForTestWithExecutor(client, userRepo)
+
+			body := `{
+				"account_ids": [` + formatID(account.ID) + `],
+				"action": "` + action + `",
+				"client_request_id": "unsupported-action"
+			}`
+			rec := httptest.NewRecorder()
+			ginCtx, _ := gin.CreateTestContext(rec)
+			ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", bytes.NewBufferString(body))
+			ginCtx.Request.Header.Set("Content-Type", "application/json")
+			ginCtx.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: user.ID})
+
+			handler.SubmitTask(ginCtx)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			require.Contains(t, rec.Body.String(), "SOCIAL_TASK_UNSUPPORTED_ACTION")
+			require.Zero(t, userRepo.deductCalls)
+			count, err := client.SocialTaskLog.Query().Count(ctx)
+			require.NoError(t, err)
+			require.Zero(t, count)
+		})
+	}
+}
+
+func TestAccountWorkbenchHandlerRejectsMissingActionWithUnsupportedActionCode(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx := context.Background()
 	client := newAccountWorkbenchHandlerTestClient(t)
-	user := createSocialHandlerUser(t, ctx, client, "message-unavailable@example.com")
-	account := client.SocialAccount.Create().
-		SetName("@message_unavailable").
-		SetPlatform("x_twitter").
-		SetPlatformKey("x_twitter").
-		SetNameKey("message_unavailable").
-		SetAssignedUserID(user.ID).
-		SetAccountStatus(service.SocialAccountStatusAvailable).
-		SetTaskStatus(service.SocialTaskStatusStored).
-		SaveX(ctx)
+	user := createSocialHandlerUser(t, ctx, client, "missing-task-action@example.com")
 	userRepo := &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 1.0}}
 	handler := newAccountWorkbenchHandlerForTestWithExecutor(client, userRepo)
-	messageTemplateID := "malicious_message_template"
-	now := time.Now().UTC().Format(time.RFC3339)
-	client.Setting.Create().
-		SetKey("socialops:task_settings:user:" + formatID(user.ID)).
-		SetValue(`{"templates":[{"id":"` + messageTemplateID + `","name":"message","type":"message","params":{"targets":["@target"],"contents":["hello"]},"is_default":false,"created_at":"` + now + `","updated_at":"` + now + `"}]}`).
-		SaveX(ctx)
 
 	rec := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(rec)
 	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", bytes.NewBufferString(`{
-		"account_ids": [`+formatID(account.ID)+`],
-		"action": "login_check",
-		"template_id": "`+messageTemplateID+`",
-		"client_request_id": "message-unavailable"
+		"account_ids": [1],
+		"client_request_id": "missing-action"
 	}`))
 	ginCtx.Request.Header.Set("Content-Type", "application/json")
 	ginCtx.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: user.ID})
@@ -1111,7 +1847,7 @@ func TestAccountWorkbenchHandlerRejectsUnavailableMessageActionBeforeBilling(t *
 	handler.SubmitTask(ginCtx)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
-	require.Contains(t, rec.Body.String(), "TASK_TEMPLATE_INVALID")
+	require.Contains(t, rec.Body.String(), "SOCIAL_TASK_UNSUPPORTED_ACTION")
 	require.Zero(t, userRepo.deductCalls)
 	count, err := client.SocialTaskLog.Query().Count(ctx)
 	require.NoError(t, err)
@@ -1139,14 +1875,14 @@ func TestAccountWorkbenchHandlerRejectsInvalidStoredTemplateBeforeBilling(t *tes
 	now := time.Now().UTC().Format(time.RFC3339)
 	client.Setting.Create().
 		SetKey("socialops:task_settings:user:" + formatID(user.ID)).
-		SetValue(`{"templates":[{"id":"` + templateID + `","name":"oversized","type":"post","params":{"contents":["` + strings.Repeat("a", 2049) + `"]},"is_default":false,"created_at":"` + now + `","updated_at":"` + now + `"}]}`).
+		SetValue(`{"templates":[{"id":"` + templateID + `","name":"oversized","type":"post","params":{"contents":["` + strings.Repeat("a", 2049) + `"]},"is_default":true,"created_at":"` + now + `","updated_at":"` + now + `"}]}`).
 		SaveX(ctx)
 
 	rec := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(rec)
 	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", bytes.NewBufferString(`{
 		"account_ids": [`+formatID(account.ID)+`],
-		"template_id": "`+templateID+`",
+		"action": "post",
 		"client_request_id": "invalid-stored-template"
 	}`))
 	ginCtx.Request.Header.Set("Content-Type", "application/json")
@@ -1162,7 +1898,7 @@ func TestAccountWorkbenchHandlerRejectsInvalidStoredTemplateBeforeBilling(t *tes
 	require.Zero(t, count)
 }
 
-func TestAccountWorkbenchHandlerRejectsInvalidStoredProfileMediaTemplatesBeforeBilling(t *testing.T) {
+func TestAccountWorkbenchHandlerRejectsStoredProfileMediaTemplatesWithInvalidDimensionsBeforeBilling(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx := context.Background()
 
@@ -1238,7 +1974,7 @@ func TestAccountWorkbenchHandlerRejectsInvalidStoredProfileMediaTemplatesBeforeB
 					Name:      tc.templateName,
 					Type:      tc.templateType,
 					Params:    tc.params,
-					IsDefault: false,
+					IsDefault: true,
 					CreatedAt: now,
 					UpdatedAt: now,
 				}},
@@ -1254,7 +1990,7 @@ func TestAccountWorkbenchHandlerRejectsInvalidStoredProfileMediaTemplatesBeforeB
 			ginCtx, _ := gin.CreateTestContext(rec)
 			ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", bytes.NewBufferString(`{
 				"account_ids": [`+formatID(account.ID)+`],
-				"template_id": "`+tc.templateID+`",
+				"action": "`+tc.templateType+`",
 				"client_request_id": "`+tc.templateID+`-submit"
 			}`))
 			ginCtx.Request.Header.Set("Content-Type", "application/json")
@@ -1300,7 +2036,7 @@ func TestAccountWorkbenchHandlerRejectsInvalidStoredPostMediaTemplatesBeforeBill
 					URL:         "data:video/mp4;base64,QUJD",
 				}},
 			},
-			expectedMessage: "video media is not implemented yet",
+			expectedMessage: "video media is not supported for SocialOps execution",
 		},
 		{
 			name:         "unsupported media type is blocked before submit",
@@ -1331,7 +2067,7 @@ func TestAccountWorkbenchHandlerRejectsInvalidStoredPostMediaTemplatesBeforeBill
 					ContentType: "image/jpeg",
 				}},
 			},
-			expectedMessage: "post media #1 media source is not supported yet",
+			expectedMessage: "post media #1 media source is not supported for SocialOps execution",
 		},
 	}
 
@@ -1360,7 +2096,7 @@ func TestAccountWorkbenchHandlerRejectsInvalidStoredPostMediaTemplatesBeforeBill
 					Name:      tc.templateName,
 					Type:      service.SocialTaskActionPost,
 					Params:    tc.params,
-					IsDefault: false,
+					IsDefault: true,
 					CreatedAt: now,
 					UpdatedAt: now,
 				}},
@@ -1376,7 +2112,7 @@ func TestAccountWorkbenchHandlerRejectsInvalidStoredPostMediaTemplatesBeforeBill
 			ginCtx, _ := gin.CreateTestContext(rec)
 			ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", bytes.NewBufferString(`{
 				"account_ids": [`+formatID(account.ID)+`],
-				"template_id": "`+tc.templateID+`",
+				"action": "post",
 				"client_request_id": "`+tc.templateID+`-submit"
 			}`))
 			ginCtx.Request.Header.Set("Content-Type", "application/json")
@@ -1424,7 +2160,7 @@ func TestAccountWorkbenchHandlerRejectsInvalidStoredProfileMediaSourcesBeforeBil
 					Height:      400,
 				},
 			},
-			expectedMessage: "avatar media source is not supported yet",
+			expectedMessage: "avatar media source is not supported for SocialOps execution",
 		},
 		{
 			name:         "banner library media source is blocked before submit",
@@ -1441,7 +2177,7 @@ func TestAccountWorkbenchHandlerRejectsInvalidStoredProfileMediaSourcesBeforeBil
 					Height:      500,
 				},
 			},
-			expectedMessage: "banner media source is not supported yet",
+			expectedMessage: "banner media source is not supported for SocialOps execution",
 		},
 	}
 
@@ -1470,7 +2206,7 @@ func TestAccountWorkbenchHandlerRejectsInvalidStoredProfileMediaSourcesBeforeBil
 					Name:      tc.templateName,
 					Type:      tc.templateType,
 					Params:    tc.params,
-					IsDefault: false,
+					IsDefault: true,
 					CreatedAt: now,
 					UpdatedAt: now,
 				}},
@@ -1486,7 +2222,7 @@ func TestAccountWorkbenchHandlerRejectsInvalidStoredProfileMediaSourcesBeforeBil
 			ginCtx, _ := gin.CreateTestContext(rec)
 			ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", bytes.NewBufferString(`{
 				"account_ids": [`+formatID(account.ID)+`],
-				"template_id": "`+tc.templateID+`",
+				"action": "`+tc.templateType+`",
 				"client_request_id": "`+tc.templateID+`-submit"
 			}`))
 			ginCtx.Request.Header.Set("Content-Type", "application/json")
@@ -1523,14 +2259,13 @@ func TestAccountWorkbenchHandlerSubmitTaskDeduplicatesAccountIDsWithoutIdempoten
 	assignHandlerDefaultProxy(t, ctx, client, user.ID, account.ID, "submit dedupe proxy")
 	userRepo := &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 1.0}}
 	handler := newAccountWorkbenchHandlerForTest(client, userRepo)
-	tmpl := saveHandlerTaskTemplate(t, ctx, client, user.ID, service.SocialTaskActionFollow, service.TaskTemplateParams{Targets: []string{"@target"}})
+	saveHandlerTaskTemplate(t, ctx, client, user.ID, service.SocialTaskActionFollow, service.TaskTemplateParams{Targets: []string{"@target"}})
 
 	rec := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(rec)
 	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", bytes.NewBufferString(`{
 		"account_ids": [`+formatID(account.ID)+`, `+formatID(account.ID)+`],
-		"action": "login_check",
-		"template_id": "`+tmpl.ID+`"
+		"action": "follow"
 	}`))
 	ginCtx.Request.Header.Set("Content-Type", "application/json")
 	ginCtx.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: user.ID})
@@ -1563,14 +2298,13 @@ func TestAccountWorkbenchHandlerSubmitTaskRejectsNonPositiveAccountIDWithoutLog(
 		SaveX(ctx)
 	userRepo := &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 1.0}}
 	handler := newAccountWorkbenchHandlerForTest(client, userRepo)
-	tmpl := saveHandlerTaskTemplate(t, ctx, client, user.ID, service.SocialTaskActionFollow, service.TaskTemplateParams{Targets: []string{"@target"}})
+	saveHandlerTaskTemplate(t, ctx, client, user.ID, service.SocialTaskActionFollow, service.TaskTemplateParams{Targets: []string{"@target"}})
 
 	rec := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(rec)
 	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", bytes.NewBufferString(`{
 		"account_ids": [-1, `+formatID(account.ID)+`],
-		"action": "login_check",
-		"template_id": "`+tmpl.ID+`"
+		"action": "follow"
 	}`))
 	ginCtx.Request.Header.Set("Content-Type", "application/json")
 	ginCtx.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: user.ID})
@@ -1601,14 +2335,13 @@ func TestAccountWorkbenchHandlerRejectsUnavailableAccountWithoutLogOrCharge(t *t
 		SaveX(ctx)
 	userRepo := &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 1.0}}
 	handler := newAccountWorkbenchHandlerForTest(client, userRepo)
-	tmpl := saveHandlerTaskTemplate(t, ctx, client, user.ID, service.SocialTaskActionFollow, service.TaskTemplateParams{Targets: []string{"@target"}})
+	saveHandlerTaskTemplate(t, ctx, client, user.ID, service.SocialTaskActionFollow, service.TaskTemplateParams{Targets: []string{"@target"}})
 
 	rec := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(rec)
 	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", bytes.NewBufferString(`{
 		"account_ids": [`+formatID(account.ID)+`],
-		"action": "login_check",
-		"template_id": "`+tmpl.ID+`"
+		"action": "follow"
 	}`))
 	ginCtx.Request.Header.Set("Content-Type", "application/json")
 	ginCtx.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: user.ID})
@@ -1640,14 +2373,13 @@ func TestAccountWorkbenchHandlerRejectsInsufficientFundsWithoutLog(t *testing.T)
 	assignHandlerDefaultProxy(t, ctx, client, user.ID, account.ID, "no funds proxy")
 	userRepo := &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 0}}
 	handler := newAccountWorkbenchHandlerForTest(client, userRepo)
-	tmpl := saveHandlerTaskTemplate(t, ctx, client, user.ID, service.SocialTaskActionFollow, service.TaskTemplateParams{Targets: []string{"@target"}})
+	saveHandlerTaskTemplate(t, ctx, client, user.ID, service.SocialTaskActionFollow, service.TaskTemplateParams{Targets: []string{"@target"}})
 
 	rec := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(rec)
 	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", bytes.NewBufferString(`{
 		"account_ids": [`+formatID(account.ID)+`],
-		"action": "login_check",
-		"template_id": "`+tmpl.ID+`"
+		"action": "follow"
 	}`))
 	ginCtx.Request.Header.Set("Content-Type", "application/json")
 	ginCtx.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: user.ID})
@@ -1687,14 +2419,13 @@ func TestAccountWorkbenchHandlerRejectsStaleDefaultProxyWithoutLogOrCharge(t *te
 		SaveX(ctx)
 	userRepo := &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 1.0}}
 	handler := newAccountWorkbenchHandlerForTestWithExecutor(client, userRepo)
-	tmpl := saveHandlerTaskTemplate(t, ctx, client, user.ID, service.SocialTaskActionFollow, service.TaskTemplateParams{Targets: []string{"@target"}})
+	saveHandlerTaskTemplate(t, ctx, client, user.ID, service.SocialTaskActionFollow, service.TaskTemplateParams{Targets: []string{"@target"}})
 
 	rec := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(rec)
 	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/accounts"+"/tasks", bytes.NewBufferString(`{
 		"account_ids": [`+formatID(account.ID)+`],
-		"action": "login_check",
-		"template_id": "`+tmpl.ID+`"
+		"action": "follow"
 	}`))
 	ginCtx.Request.Header.Set("Content-Type", "application/json")
 	ginCtx.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: user.ID})
@@ -1746,14 +2477,14 @@ func TestAccountWorkbenchHandlerListMyAccountsIncludesDeliveryFields(t *testing.
 	ctx := context.Background()
 	client := newAccountWorkbenchHandlerTestClient(t)
 	user := createSocialHandlerUser(t, ctx, client, "safe-list@example.com")
-	proxySnapshot := "http://user:pass@proxy.local:8080"
+	proxySnapshot := `{"id":301,"name":"delivery proxy","ip_type":"residential","endpoint":"http://user:pass@proxy.local:8080","status":"online"}`
 	accountID := "pool-account-id"
 	password := "pool-secret"
 	phone := "+15550000001"
 	email := "safe-list@example.com"
 	emailPassword := "mail-secret"
 	authCookieSecret := "ct0=list; auth_token=list"
-	executionAuthSecret := `{"access_token":"list","token_secret":"secret"}`
+	executionAuthSecret := "encrypted-list-execution-auth-ciphertext"
 
 	account := client.SocialAccount.Create().
 		SetName("@safe_list").
@@ -1772,7 +2503,7 @@ func TestAccountWorkbenchHandlerListMyAccountsIncludesDeliveryFields(t *testing.
 		SetAccountStatus(service.SocialAccountStatusAvailable).
 		SetTaskStatus(service.SocialTaskStatusStored).
 		SaveX(ctx)
-	handler := newAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 0}})
+	handler := newEncryptedAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 0}})
 
 	rec := invokeSocialHandlerAsUser(t, user.ID, http.MethodGet, "/api/v1/accounts", nil, handler.ListMyAccounts)
 
@@ -1786,9 +2517,106 @@ func TestAccountWorkbenchHandlerListMyAccountsIncludesDeliveryFields(t *testing.
 	require.Contains(t, body, `"email":"safe-list@example.com"`)
 	require.Contains(t, body, `"email_password":"mail-secret"`)
 	require.Contains(t, body, `"auth_cookie":"ct0=list; auth_token=list"`)
-	require.Contains(t, body, `"execution_auth":"{\"access_token\":\"list\",\"token_secret\":\"secret\"}"`)
-	require.Contains(t, body, `"default_proxy_snapshot":"http://user:pass@proxy.local:8080"`)
+	require.Contains(t, body, `"execution_auth":"encrypted-list-execution-auth-ciphertext"`)
+	require.NotContains(t, body, "access_token")
+	require.NotContains(t, body, "token_secret")
+	require.Contains(t, body, `http://user:pass@proxy.local:8080`)
 	require.Contains(t, body, `"default_proxy_configured":true`)
+}
+
+func TestAccountWorkbenchHandlerListMyAccountsTreatsStaleProxySnapshotsAsNotConfigured(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx := context.Background()
+	client := newAccountWorkbenchHandlerTestClient(t)
+	user := createSocialHandlerUser(t, ctx, client, "stale-proxy-list@example.com")
+	staleSnapshots := []string{
+		`http://proxy.local:8080`,
+		`{"id":301,"name":"offline proxy","ip_type":"residential","endpoint":"http://proxy.local:8080","status":"offline"}`,
+		`{"id":302,"name":"empty endpoint","ip_type":"residential","endpoint":"","status":"online"}`,
+	}
+	for index, snapshot := range staleSnapshots {
+		client.SocialAccount.Create().
+			SetName("@stale_proxy_" + strconv.Itoa(index)).
+			SetPlatform("x_twitter").
+			SetPlatformKey("x_twitter").
+			SetNameKey("stale_proxy_" + strconv.Itoa(index)).
+			SetDefaultProxySnapshot(snapshot).
+			SetAssignedUserID(user.ID).
+			SetAccountStatus(service.SocialAccountStatusAvailable).
+			SetTaskStatus(service.SocialTaskStatusStored).
+			SaveX(ctx)
+	}
+	handler := newEncryptedAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 0}})
+
+	rec := invokeSocialHandlerAsUser(t, user.ID, http.MethodGet, "/api/v1/accounts", nil, handler.ListMyAccounts)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp struct {
+		Code int `json:"code"`
+		Data struct {
+			Items []struct {
+				DefaultProxySnapshot   *string `json:"default_proxy_snapshot"`
+				DefaultProxyConfigured bool    `json:"default_proxy_configured"`
+			} `json:"items"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, 0, resp.Code)
+	require.Len(t, resp.Data.Items, len(staleSnapshots))
+	for _, item := range resp.Data.Items {
+		require.NotNil(t, item.DefaultProxySnapshot)
+		require.False(t, item.DefaultProxyConfigured)
+	}
+}
+
+func TestAccountWorkbenchHandlerListMyAccountsAppliesFilters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx := context.Background()
+	client := newAccountWorkbenchHandlerTestClient(t)
+	user := createSocialHandlerUser(t, ctx, client, "filtered-list@example.com")
+	other := createSocialHandlerUser(t, ctx, client, "filtered-list-other@example.com")
+	match := client.SocialAccount.Create().
+		SetName("@filtered_match").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("filtered_match").
+		SetAssignedUserID(user.ID).
+		SetPassword("list-filter-secret").
+		SetDefaultProxySnapshot(`{"id":301,"endpoint":"http://list-filter-proxy.example:8080"}`).
+		SetAccountStatus(service.SocialAccountStatusNotStored).
+		SetTaskStatus(service.SocialTaskStatusPending).
+		SaveX(ctx)
+	client.SocialAccount.Create().
+		SetName("@filtered_other").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("filtered_other").
+		SetAssignedUserID(user.ID).
+		SetPassword("other-secret").
+		SetAccountStatus(service.SocialAccountStatusAvailable).
+		SetTaskStatus(service.SocialTaskStatusStored).
+		SaveX(ctx)
+	client.SocialAccount.Create().
+		SetName("@filtered_cross_owner").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("filtered_cross_owner").
+		SetAssignedUserID(other.ID).
+		SetPassword("list-filter-secret").
+		SetAccountStatus(service.SocialAccountStatusNotStored).
+		SetTaskStatus(service.SocialTaskStatusPending).
+		SaveX(ctx)
+	handler := newEncryptedAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 0}})
+
+	rec := invokeSocialHandlerAsUser(t, user.ID, http.MethodGet, "/api/v1/accounts?search=list-filter-secret&platform=x_twitter&account_status=invalid&task_status=pending", nil, handler.ListMyAccounts)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	requireSinglePaginatedID(t, rec.Body.Bytes(), match.ID)
+	body := rec.Body.String()
+	require.Contains(t, body, `"password":"list-filter-secret"`)
+	require.Contains(t, body, `"default_proxy_snapshot":"{\"id\":301,\"endpoint\":\"http://list-filter-proxy.example:8080\"}"`)
+	require.NotContains(t, body, "@filtered_other")
+	require.NotContains(t, body, "@filtered_cross_owner")
 }
 
 func TestAccountWorkbenchHandlerListMyAccountsNormalizesInvalidPagination(t *testing.T) {
@@ -1846,9 +2674,9 @@ func TestAccountWorkbenchHandlerListMyAccountsSanitizesTaskMessage(t *testing.T)
 		SetTaskStatus(service.SocialTaskStatusManualReview).
 		SetTaskMessage(internalMessage).
 		SetAuthCookie("ct0=sensitive; auth_token=sensitive").
-		SetExecutionAuth("sensitive-cookie").
+		SetExecutionAuth("encrypted-task-message-execution-auth-ciphertext").
 		SaveX(ctx)
-	handler := newAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 1.0}})
+	handler := newEncryptedAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 1.0}})
 
 	rec := invokeSocialHandlerAsUser(t, user.ID, http.MethodGet, "/api/v1/accounts", nil, handler.ListMyAccounts)
 
@@ -1863,7 +2691,7 @@ func TestAccountWorkbenchHandlerListMyAccountsSanitizesTaskMessage(t *testing.T)
 	require.NotContains(t, body, "127.0.0.1")
 	require.NotContains(t, body, "trace-123")
 	require.Contains(t, body, `"auth_cookie":"ct0=sensitive; auth_token=sensitive"`)
-	require.Contains(t, body, `"execution_auth":"sensitive-cookie"`)
+	require.Contains(t, body, `"execution_auth":"encrypted-task-message-execution-auth-ciphertext"`)
 }
 
 func TestAccountWorkbenchHandlerSetDefaultProxyIncludesDeliveryFields(t *testing.T) {
@@ -1874,7 +2702,7 @@ func TestAccountWorkbenchHandlerSetDefaultProxyIncludesDeliveryFields(t *testing
 	password := "pool-secret"
 	emailPassword := "mail-secret"
 	authCookieSecret := "ct0=proxy; auth_token=proxy"
-	executionAuthSecret := "execution-secret"
+	executionAuthSecret := "encrypted-proxy-execution-auth-ciphertext"
 	endpoint := "http://user:pass@proxy.local:8080"
 	account := client.SocialAccount.Create().
 		SetName("@safe_proxy").
@@ -1896,7 +2724,7 @@ func TestAccountWorkbenchHandlerSetDefaultProxyIncludesDeliveryFields(t *testing
 		SetEndpoint(endpoint).
 		SetStatus(service.SocialIPStatusOnline).
 		SaveX(ctx)
-	handler := newAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 0}})
+	handler := newEncryptedAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 0}})
 
 	rec := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(rec)
@@ -1913,12 +2741,85 @@ func TestAccountWorkbenchHandlerSetDefaultProxyIncludesDeliveryFields(t *testing
 	require.Contains(t, body, `"password":"pool-secret"`)
 	require.Contains(t, body, `"email_password":"mail-secret"`)
 	require.Contains(t, body, `"auth_cookie":"ct0=proxy; auth_token=proxy"`)
-	require.Contains(t, body, `"execution_auth":"execution-secret"`)
+	require.Contains(t, body, `"execution_auth":"encrypted-proxy-execution-auth-ciphertext"`)
 	require.Contains(t, body, endpoint)
 
 	stored := client.SocialAccount.GetX(ctx, account.ID)
 	require.NotNil(t, stored.DefaultProxySnapshot)
 	require.Contains(t, *stored.DefaultProxySnapshot, endpoint)
+}
+
+func TestAccountWorkbenchHandlerSetDefaultProxyRejectsOnlineProxyWithoutEndpoint(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx := context.Background()
+	client := newAccountWorkbenchHandlerTestClient(t)
+	user := createSocialHandlerUser(t, ctx, client, "missing-endpoint-default-proxy@example.com")
+	account := client.SocialAccount.Create().
+		SetName("@missing_endpoint_proxy").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("missing_endpoint_proxy").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(service.SocialAccountStatusAvailable).
+		SetTaskStatus(service.SocialTaskStatusStored).
+		SaveX(ctx)
+	proxy := client.SocialIP.Create().
+		SetUserID(user.ID).
+		SetName("missing endpoint proxy").
+		SetIPType(service.SocialIPTypeResidential).
+		SetStatus(service.SocialIPStatusOnline).
+		SaveX(ctx)
+	handler := newAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 0}})
+
+	rec := httptest.NewRecorder()
+	ginCtx, _ := gin.CreateTestContext(rec)
+	ginCtx.Request = httptest.NewRequest(http.MethodPut, "/api/v1/accounts/"+formatID(account.ID)+"/default-proxy", bytes.NewBufferString(`{"proxy_id":`+formatID(proxy.ID)+`}`))
+	ginCtx.Request.Header.Set("Content-Type", "application/json")
+	ginCtx.Params = gin.Params{{Key: "id", Value: formatID(account.ID)}}
+	ginCtx.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: user.ID})
+
+	handler.SetDefaultProxy(ginCtx)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "SOCIAL_IP_NOT_AVAILABLE")
+	require.Contains(t, rec.Body.String(), "social IP endpoint is required for execution")
+	require.Nil(t, client.SocialAccount.GetX(ctx, account.ID).DefaultProxySnapshot)
+}
+
+func TestAccountWorkbenchHandlerSetDefaultProxyClearsSnapshot(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx := context.Background()
+	client := newAccountWorkbenchHandlerTestClient(t)
+	user := createSocialHandlerUser(t, ctx, client, "clear-proxy@example.com")
+	account := client.SocialAccount.Create().
+		SetName("@clear_proxy").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("clear_proxy").
+		SetAssignedUserID(user.ID).
+		SetDefaultProxySnapshot(`{"id":99,"name":"old","endpoint":"http://old-proxy.example:8080","status":"online"}`).
+		SetAccountStatus(service.SocialAccountStatusAvailable).
+		SetTaskStatus(service.SocialTaskStatusStored).
+		SaveX(ctx)
+	handler := newAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 0}})
+
+	rec := httptest.NewRecorder()
+	ginCtx, _ := gin.CreateTestContext(rec)
+	ginCtx.Request = httptest.NewRequest(http.MethodPut, "/api/v1/accounts/"+formatID(account.ID)+"/default-proxy", bytes.NewBufferString(`{"proxy_id":null}`))
+	ginCtx.Request.Header.Set("Content-Type", "application/json")
+	ginCtx.Params = gin.Params{{Key: "id", Value: formatID(account.ID)}}
+	ginCtx.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: user.ID})
+
+	handler.SetDefaultProxy(ginCtx)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	require.Contains(t, body, `"default_proxy_configured":false`)
+	require.NotContains(t, body, `"default_proxy_snapshot"`)
+	require.NotContains(t, body, "old-proxy.example")
+
+	stored := client.SocialAccount.GetX(ctx, account.ID)
+	require.Nil(t, stored.DefaultProxySnapshot)
 }
 
 func TestAccountWorkbenchHandlerBatchSetDefaultProxyRejectsInvalidModeWithContractCode(t *testing.T) {
@@ -1961,6 +2862,36 @@ func TestAccountWorkbenchHandlerBatchSetDefaultProxyRequiresProxyIDWithContractC
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	require.Contains(t, rec.Body.String(), "SOCIAL_IP_REQUIRED")
 	require.Contains(t, rec.Body.String(), "proxy is required for this assignment")
+}
+
+func TestAccountWorkbenchHandlerBatchSetDefaultProxyRejectsRandomWithoutOnlinePoolWithContractCode(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx := context.Background()
+	client := newAccountWorkbenchHandlerTestClient(t)
+	user := createSocialHandlerUser(t, ctx, client, "empty-random-proxy-pool@example.com")
+	account := client.SocialAccount.Create().
+		SetName("@empty_random_proxy_pool").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("empty_random_proxy_pool").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(service.SocialAccountStatusAvailable).
+		SetTaskStatus(service.SocialTaskStatusStored).
+		SaveX(ctx)
+	handler := newAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 0}})
+
+	rec := invokeJSONSocialHandlerAsUser(
+		t,
+		user.ID,
+		http.MethodPost,
+		"/api/v1/accounts/default-proxy",
+		[]byte(`{"account_ids":[`+formatID(account.ID)+`],"mode":"random"}`),
+		handler.BatchSetDefaultProxy,
+	)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "SOCIAL_IP_POOL_EMPTY")
+	require.Contains(t, rec.Body.String(), "no online proxy is available for assignment")
 }
 
 func TestAccountWorkbenchHandlerBatchSetDefaultProxyReturnsRowFailureForOfflineSpecificProxy(t *testing.T) {
@@ -2024,8 +2955,8 @@ func TestAccountWorkbenchHandlerHidesCrossUserAccountScopeErrors(t *testing.T) {
 		SaveX(ctx)
 	handler := newAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 1.0}})
 
-	tmpl := saveHandlerTaskTemplate(t, ctx, client, user.ID, service.SocialTaskActionFollow, service.TaskTemplateParams{Targets: []string{"@target"}})
-	taskBody := []byte(`{"account_ids":[` + formatID(otherAccount.ID) + `],"action":"login_check","template_id":"` + tmpl.ID + `"}`)
+	saveHandlerTaskTemplate(t, ctx, client, user.ID, service.SocialTaskActionFollow, service.TaskTemplateParams{Targets: []string{"@target"}})
+	taskBody := []byte(`{"account_ids":[` + formatID(otherAccount.ID) + `],"action":"follow"}`)
 	submitRec := invokeJSONSocialHandlerAsUser(t, user.ID, http.MethodPost, "/api/v1/accounts"+"/tasks", taskBody, handler.SubmitTask)
 	requireUserAccountNotFoundResponse(t, submitRec, otherAccount.ID, "@scope_other")
 
@@ -2038,7 +2969,14 @@ func TestAccountWorkbenchHandlerHidesCrossUserAccountScopeErrors(t *testing.T) {
 	handler.SetDefaultProxy(proxyCtx)
 	requireUserAccountNotFoundResponse(t, proxyRec, otherAccount.ID, "@scope_other")
 
-	require.Nil(t, client.SocialAccount.GetX(ctx, otherAccount.ID).UserWorkbenchDeletedAt)
+	batchProxyBody := []byte(`{"account_ids":[` + formatID(otherAccount.ID) + `],"mode":"clear"}`)
+	batchProxyRec := invokeJSONSocialHandlerAsUser(t, user.ID, http.MethodPost, "/api/v1/accounts/default-proxy", batchProxyBody, handler.BatchSetDefaultProxy)
+	require.Equal(t, http.StatusOK, batchProxyRec.Code)
+	require.Contains(t, batchProxyRec.Body.String(), `"failed":1`)
+	require.Contains(t, batchProxyRec.Body.String(), `"reason":"account_not_assigned"`)
+	require.NotContains(t, batchProxyRec.Body.String(), "@scope_other")
+	require.NotContains(t, batchProxyRec.Body.String(), "SOCIAL_ACCOUNT_NOT_ASSIGNED")
+
 	taskLogCount, err := client.SocialTaskLog.Query().Count(ctx)
 	require.NoError(t, err)
 	require.Zero(t, taskLogCount)
@@ -2075,9 +3013,9 @@ func TestAccountWorkbenchHandlerUpdateMyAccountKeepsIdentityReadOnly(t *testing.
 		SetNameKey("handler_other_identity").
 		SetAssignedUserID(other.ID).
 		SaveX(ctx)
-	handler := newAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 0}})
+	handler := newEncryptedAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 0}})
 
-	body := []byte(`{"name":"@renamed","platform_user_id":"fake-rest","registration_ip":"203.0.113.10","password":"new-password","email":" new@example.com ","two_factor":"","auth_cookie":"ct0=new; auth_token=new","account_status":"invalid","task_status":"manual_review","default_proxy_snapshot":"proxy","remark":"editable note"}`)
+	body := []byte(`{"name":"@renamed","platform_user_id":"fake-rest","registration_ip":"  203.0.113.10  ","password":"  new-password  ","email":" new@example.com ","email_password":"  mail-secret  ","two_factor":"  totp-secret  ","backup_code":"  backup-code  ","email_client_id":"  mail-client  ","email_token":"  mail-token  ","auth_cookie":"  ct0=new; auth_token=new  ","execution_auth":"  encrypted-new-execution-auth  ","account_status":"invalid","task_status":"manual_review","default_proxy_snapshot":"proxy","remark":"  editable note  "}`)
 	rec := invokeJSONSocialHandlerAsUser(t, user.ID, http.MethodPut, "/api/v1/accounts/"+formatID(account.ID), body, func(c *gin.Context) {
 		c.Params = gin.Params{{Key: "id", Value: formatID(account.ID)}}
 		handler.UpdateMyAccount(c)
@@ -2087,14 +3025,20 @@ func TestAccountWorkbenchHandlerUpdateMyAccountKeepsIdentityReadOnly(t *testing.
 	responseBody := rec.Body.String()
 	require.Contains(t, responseBody, `"name":"@handler_identity"`)
 	require.Contains(t, responseBody, `"platform_user_id":"rest-123"`)
-	require.Contains(t, responseBody, `"registration_ip":"198.51.100.20"`)
-	require.Contains(t, responseBody, `"password":"new-password"`)
+	require.Contains(t, responseBody, `"registration_ip":"203.0.113.10"`)
+	require.Contains(t, responseBody, `"password":"  new-password  "`)
 	require.Contains(t, responseBody, `"email":"new@example.com"`)
-	require.NotContains(t, responseBody, `"two_factor"`)
-	require.Contains(t, responseBody, `"auth_cookie":"ct0=new; auth_token=new"`)
-	require.Contains(t, responseBody, `"remark":"editable note"`)
+	require.Contains(t, responseBody, `"email_password":"  mail-secret  "`)
+	require.Contains(t, responseBody, `"two_factor":"  totp-secret  "`)
+	require.Contains(t, responseBody, `"backup_code":"  backup-code  "`)
+	require.Contains(t, responseBody, `"email_client_id":"  mail-client  "`)
+	require.Contains(t, responseBody, `"email_token":"  mail-token  "`)
+	require.Contains(t, responseBody, `"auth_cookie":"  ct0=new; auth_token=new  "`)
+	require.Contains(t, responseBody, `"execution_auth":"encrypted-new-execution-auth"`)
+	require.Contains(t, responseBody, `"remark":"  editable note  "`)
 	require.Contains(t, responseBody, `"account_status":"available"`)
 	require.Contains(t, responseBody, `"task_status":"stored"`)
+	require.NotContains(t, responseBody, `"default_proxy_snapshot"`)
 
 	stored := client.SocialAccount.GetX(ctx, account.ID)
 	require.Equal(t, "@handler_identity", stored.Name)
@@ -2104,9 +3048,54 @@ func TestAccountWorkbenchHandlerUpdateMyAccountKeepsIdentityReadOnly(t *testing.
 	require.NotNil(t, stored.PlatformUserID)
 	require.Equal(t, "rest-123", *stored.PlatformUserID)
 	require.NotNil(t, stored.RegistrationIP)
-	require.Equal(t, "198.51.100.20", *stored.RegistrationIP)
+	require.Equal(t, "203.0.113.10", *stored.RegistrationIP)
+	require.NotNil(t, stored.Password)
+	require.Equal(t, "  new-password  ", *stored.Password)
+	require.NotNil(t, stored.Email)
+	require.Equal(t, "new@example.com", *stored.Email)
+	require.NotNil(t, stored.EmailPassword)
+	require.Equal(t, "  mail-secret  ", *stored.EmailPassword)
+	require.NotNil(t, stored.TwoFactor)
+	require.Equal(t, "  totp-secret  ", *stored.TwoFactor)
+	require.NotNil(t, stored.BackupCode)
+	require.Equal(t, "  backup-code  ", *stored.BackupCode)
+	require.NotNil(t, stored.EmailClientID)
+	require.Equal(t, "  mail-client  ", *stored.EmailClientID)
+	require.NotNil(t, stored.EmailToken)
+	require.Equal(t, "  mail-token  ", *stored.EmailToken)
+	require.NotNil(t, stored.AuthCookie)
+	require.Equal(t, "  ct0=new; auth_token=new  ", *stored.AuthCookie)
+	require.NotNil(t, stored.ExecutionAuth)
+	require.Equal(t, "encrypted-new-execution-auth", *stored.ExecutionAuth)
+	require.NotNil(t, stored.Remark)
+	require.Equal(t, "  editable note  ", *stored.Remark)
 	require.Equal(t, service.SocialAccountStatusAvailable, stored.AccountStatus)
 	require.Equal(t, service.SocialTaskStatusStored, stored.TaskStatus)
+	require.Nil(t, stored.DefaultProxySnapshot)
+
+	clearTwoFactorRec := invokeJSONSocialHandlerAsUser(t, user.ID, http.MethodPut, "/api/v1/accounts/"+formatID(account.ID), []byte(`{"two_factor":" "}`), func(c *gin.Context) {
+		c.Params = gin.Params{{Key: "id", Value: formatID(account.ID)}}
+		handler.UpdateMyAccount(c)
+	})
+	require.Equal(t, http.StatusOK, clearTwoFactorRec.Code)
+	require.NotContains(t, clearTwoFactorRec.Body.String(), `"two_factor"`)
+	require.Nil(t, client.SocialAccount.GetX(ctx, account.ID).TwoFactor)
+
+	invalidExecutionAuthRec := invokeJSONSocialHandlerAsUser(t, user.ID, http.MethodPut, "/api/v1/accounts/"+formatID(account.ID), []byte(`{"password":"partially-written-password","execution_auth":"{\"access_token\":\"access\"}"}`), func(c *gin.Context) {
+		c.Params = gin.Params{{Key: "id", Value: formatID(account.ID)}}
+		handler.UpdateMyAccount(c)
+	})
+	require.Equal(t, http.StatusBadRequest, invalidExecutionAuthRec.Code)
+	require.Contains(t, invalidExecutionAuthRec.Body.String(), `"reason":"SOCIAL_ACCOUNT_EXECUTION_AUTH_INVALID"`)
+	require.Contains(t, invalidExecutionAuthRec.Body.String(), `"message":"account execution auth is invalid"`)
+	require.NotContains(t, invalidExecutionAuthRec.Body.String(), "access_token")
+	require.NotContains(t, invalidExecutionAuthRec.Body.String(), "token_secret")
+	require.NotContains(t, invalidExecutionAuthRec.Body.String(), "twitter execution auth")
+	storedAfterInvalidExecutionAuth := client.SocialAccount.GetX(ctx, account.ID)
+	require.NotNil(t, storedAfterInvalidExecutionAuth.Password)
+	require.Equal(t, "  new-password  ", *storedAfterInvalidExecutionAuth.Password)
+	require.NotNil(t, storedAfterInvalidExecutionAuth.ExecutionAuth)
+	require.Equal(t, *stored.ExecutionAuth, *storedAfterInvalidExecutionAuth.ExecutionAuth)
 
 	crossUserRec := invokeJSONSocialHandlerAsUser(t, user.ID, http.MethodPut, "/api/v1/accounts/"+formatID(otherAccount.ID), []byte(`{"remark":"cross"}`), func(c *gin.Context) {
 		c.Params = gin.Params{{Key: "id", Value: formatID(otherAccount.ID)}}
@@ -2122,10 +3111,18 @@ func TestAccountWorkbenchHandlerExportMyAccountsIncludesDeliveryFields(t *testin
 	client := newAccountWorkbenchHandlerTestClient(t)
 	user := createSocialHandlerUser(t, ctx, client, "safe-export@example.com")
 	password := "pool-secret"
+	phone := "+15550004444"
+	email := "export@example.com"
 	emailPassword := "mail-secret"
+	twoFactor := "JBSWY3DPEHPK3PXP"
+	backupCode := "backup-1"
+	emailClientID := "client-id"
+	emailToken := "mail-token"
+	registrationIP := "198.51.100.44"
 	authCookieSecret := "ct0=export; auth_token=export"
-	executionAuthSecret := "execution-secret"
+	executionAuthSecret := "encrypted-export-execution-auth-ciphertext"
 	proxySnapshot := "http://user:pass@proxy.local:8080"
+	remark := "delivery export note"
 
 	client.SocialAccount.Create().
 		SetName("@safe_export").
@@ -2133,35 +3130,170 @@ func TestAccountWorkbenchHandlerExportMyAccountsIncludesDeliveryFields(t *testin
 		SetPlatformKey("x_twitter").
 		SetNameKey("safe_export").
 		SetPassword(password).
+		SetPhone(phone).
+		SetEmail(email).
 		SetEmailPassword(emailPassword).
+		SetTwoFactor(twoFactor).
+		SetBackupCode(backupCode).
+		SetEmailClientID(emailClientID).
+		SetEmailToken(emailToken).
+		SetRegistrationIP(registrationIP).
 		SetAuthCookie(authCookieSecret).
 		SetExecutionAuth(executionAuthSecret).
 		SetDefaultProxySnapshot(proxySnapshot).
+		SetRemark(remark).
 		SetAssignedUserID(user.ID).
 		SetAccountStatus(service.SocialAccountStatusAvailable).
 		SetTaskStatus(service.SocialTaskStatusStored).
 		SaveX(ctx)
-	handler := newAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 0}})
+	for i := 0; i < 1001; i++ {
+		name := "bulk_export_" + strconv.Itoa(i)
+		client.SocialAccount.Create().
+			SetName("@" + name).
+			SetPlatform("x_twitter").
+			SetPlatformKey("x_twitter").
+			SetNameKey(name).
+			SetPassword("bulk-secret").
+			SetAssignedUserID(user.ID).
+			SetAccountStatus(service.SocialAccountStatusAvailable).
+			SetTaskStatus(service.SocialTaskStatusStored).
+			SaveX(ctx)
+	}
+	handler := newEncryptedAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 0}})
 
 	rec := invokeSocialHandlerAsUser(t, user.ID, http.MethodGet, "/api/v1/accounts/export", nil, handler.ExportMyAccounts)
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 	require.Contains(t, body, "@safe_export")
-	require.Contains(t, body, "account_status")
-	require.Contains(t, body, "password")
-	require.Contains(t, body, "email_password")
-	require.Contains(t, body, "auth_cookie")
-	require.Contains(t, body, "execution_auth")
-	require.Contains(t, body, "default_proxy_snapshot")
-	require.Contains(t, body, password)
-	require.Contains(t, body, emailPassword)
-	require.Contains(t, body, authCookieSecret)
-	require.Contains(t, body, executionAuthSecret)
-	require.Contains(t, body, proxySnapshot)
+	records, err := csv.NewReader(strings.NewReader(body)).ReadAll()
+	require.NoError(t, err)
+	require.Len(t, records, 1003)
+	require.GreaterOrEqual(t, len(records), 2)
+	header := records[0]
+	require.Equal(t, []string{"platform", "username", "name", "platform_user_id", "password", "phone", "email", "email_password", "two_factor", "backup_code", "email_client_id", "email_token", "registration_ip", "auth_cookie", "execution_auth", "default_proxy_snapshot", "account_status", "task_status", "remark", "created_at", "updated_at"}, header)
+	var safeRecord []string
+	for _, record := range records[1:] {
+		if len(record) > 2 && record[2] == "@safe_export" {
+			safeRecord = record
+			break
+		}
+	}
+	require.NotNil(t, safeRecord)
+	require.Len(t, safeRecord, len(header))
+	exported := make(map[string]string, len(header))
+	for index, name := range header {
+		exported[name] = safeRecord[index]
+	}
+	require.Equal(t, "x_twitter", exported["platform"])
+	require.Equal(t, "@safe_export", exported["name"])
+	require.Equal(t, password, exported["password"])
+	require.Equal(t, phone, exported["phone"])
+	require.Equal(t, email, exported["email"])
+	require.Equal(t, emailPassword, exported["email_password"])
+	require.Equal(t, twoFactor, exported["two_factor"])
+	require.Equal(t, backupCode, exported["backup_code"])
+	require.Equal(t, emailClientID, exported["email_client_id"])
+	require.Equal(t, emailToken, exported["email_token"])
+	require.Equal(t, registrationIP, exported["registration_ip"])
+	require.Equal(t, authCookieSecret, exported["auth_cookie"])
+	require.Equal(t, executionAuthSecret, exported["execution_auth"])
+	require.Equal(t, proxySnapshot, exported["default_proxy_snapshot"])
+	require.Equal(t, service.SocialAccountStatusAvailable, exported["account_status"])
+	require.Equal(t, service.SocialTaskStatusStored, exported["task_status"])
+	require.Equal(t, remark, exported["remark"])
+	require.Contains(t, body, "@bulk_export_1000")
 }
 
-func TestAccountWorkbenchHandlerDeleteMyAccountHidesOnlyCurrentUserAccount(t *testing.T) {
+func TestAccountWorkbenchHandlerExportMyAccountsAppliesListFilters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx := context.Background()
+	client := newAccountWorkbenchHandlerTestClient(t)
+	user := createSocialHandlerUser(t, ctx, client, "filtered-export@example.com")
+	otherUser := createSocialHandlerUser(t, ctx, client, "filtered-export-other@example.com")
+
+	create := func(name, platform, accountStatus, taskStatus string, ownerID int64) {
+		normalizedName := strings.TrimPrefix(name, "@")
+		client.SocialAccount.Create().
+			SetName(name).
+			SetPlatform(platform).
+			SetPlatformKey(platform).
+			SetNameKey(normalizedName).
+			SetAssignedUserID(ownerID).
+			SetAccountStatus(accountStatus).
+			SetTaskStatus(taskStatus).
+			SaveX(ctx)
+	}
+	create("@filtered_export_keep", "x_twitter", service.SocialAccountStatusAvailable, service.SocialTaskStatusStored, user.ID)
+	create("@filtered_export_wrong_platform", "instagram", service.SocialAccountStatusAvailable, service.SocialTaskStatusStored, user.ID)
+	create("@filtered_export_wrong_status", "x_twitter", service.SocialAccountStatusLimited, service.SocialTaskStatusStored, user.ID)
+	create("@filtered_export_wrong_task", "x_twitter", service.SocialAccountStatusAvailable, service.SocialTaskStatusPending, user.ID)
+	create("@filtered_export_other_owner", "x_twitter", service.SocialAccountStatusAvailable, service.SocialTaskStatusStored, otherUser.ID)
+
+	handler := newAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 0}})
+
+	rec := invokeSocialHandlerAsUser(t, user.ID, http.MethodGet, "/api/v1/accounts/export?search=filtered_export&platform=x_twitter&account_status=available&task_status=stored", nil, handler.ExportMyAccounts)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	records, err := csv.NewReader(strings.NewReader(rec.Body.String())).ReadAll()
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(records), 2)
+	header := records[0]
+	nameIndex := -1
+	for index, name := range header {
+		if name == "name" {
+			nameIndex = index
+			break
+		}
+	}
+	require.NotEqual(t, -1, nameIndex)
+	require.Len(t, records, 2)
+	require.Equal(t, "@filtered_export_keep", records[1][nameIndex])
+	body := rec.Body.String()
+	require.NotContains(t, body, "@filtered_export_wrong_platform")
+	require.NotContains(t, body, "@filtered_export_wrong_status")
+	require.NotContains(t, body, "@filtered_export_wrong_task")
+	require.NotContains(t, body, "@filtered_export_other_owner")
+}
+
+func TestAccountWorkbenchHandlerExportMyAccountsAppliesSelectedAccountIDs(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx := context.Background()
+	client := newAccountWorkbenchHandlerTestClient(t)
+	user := createSocialHandlerUser(t, ctx, client, "selected-export@example.com")
+	otherUser := createSocialHandlerUser(t, ctx, client, "selected-export-other@example.com")
+
+	create := func(name string, ownerID int64) int64 {
+		normalizedName := strings.TrimPrefix(name, "@")
+		return client.SocialAccount.Create().
+			SetName(name).
+			SetPlatform("x_twitter").
+			SetPlatformKey("x_twitter").
+			SetNameKey(normalizedName).
+			SetAssignedUserID(ownerID).
+			SetAccountStatus(service.SocialAccountStatusAvailable).
+			SetTaskStatus(service.SocialTaskStatusStored).
+			SaveX(ctx).
+			ID
+	}
+	selectedID := create("@selected_export_keep", user.ID)
+	unselectedID := create("@selected_export_skip", user.ID)
+	otherID := create("@selected_export_other_owner", otherUser.ID)
+
+	handler := newAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 0}})
+
+	target := fmt.Sprintf("/api/v1/accounts/export?account_ids=%d,%d", selectedID, otherID)
+	rec := invokeSocialHandlerAsUser(t, user.ID, http.MethodGet, target, nil, handler.ExportMyAccounts)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	require.Contains(t, body, "@selected_export_keep")
+	require.NotContains(t, body, "@selected_export_skip")
+	require.NotContains(t, body, "@selected_export_other_owner")
+	require.NotContains(t, body, strconv.FormatInt(unselectedID, 10))
+}
+
+func TestAccountWorkbenchHandlerDeleteMyAccountDeletesOnlyCurrentUserAccount(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx := context.Background()
 	client := newAccountWorkbenchHandlerTestClient(t)
@@ -2175,6 +3307,36 @@ func TestAccountWorkbenchHandlerDeleteMyAccountHidesOnlyCurrentUserAccount(t *te
 		SetAssignedUserID(user.ID).
 		SetAccountStatus(service.SocialAccountStatusAvailable).
 		SetTaskStatus(service.SocialTaskStatusStored).
+		SaveX(ctx)
+	taskLog := client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(service.SocialTaskActionLoginCheck).
+		SetStatus(service.SocialTaskLogStatusSuccess).
+		SetChargeStatus(service.SocialTaskChargeStatusCharged).
+		SetChargedAmount(service.SocialTaskUnitPrice).
+		SetPrice(service.SocialTaskUnitPrice).
+		SaveX(ctx)
+	ledgerRequestID := "social-task:" + formatID(taskLog.ID) + ":wallet"
+	ledger := client.UsageLog.Create().
+		SetUserID(user.ID).
+		SetRequestID(ledgerRequestID).
+		SetModel("social-action").
+		SetTotalCost(service.SocialTaskUnitPrice).
+		SetActualCost(service.SocialTaskUnitPrice).
+		SaveX(ctx)
+	unrelatedLedgerRequestID := "social-task:" + formatID(taskLog.ID+999) + ":wallet"
+	unrelatedLedger := client.UsageLog.Create().
+		SetUserID(user.ID).
+		SetRequestID(unrelatedLedgerRequestID).
+		SetModel("social-action").
+		SetTotalCost(service.SocialTaskUnitPrice).
+		SetActualCost(service.SocialTaskUnitPrice).
+		SaveX(ctx)
+	proxy := client.SocialIP.Create().
+		SetUserID(user.ID).
+		SetName("delete workbench bound proxy").
+		SetBoundSocialAccountID(account.ID).
 		SaveX(ctx)
 	otherAccount := client.SocialAccount.Create().
 		SetName("@delete_workbench_other").
@@ -2194,12 +3356,37 @@ func TestAccountWorkbenchHandlerDeleteMyAccountHidesOnlyCurrentUserAccount(t *te
 	handler.DeleteMyAccount(ginCtx)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	stored := client.SocialAccount.GetX(ctx, account.ID)
-	require.Nil(t, stored.DeletedAt)
-	require.NotNil(t, stored.AssignedUserID)
-	require.Equal(t, user.ID, int64(*stored.AssignedUserID))
-	require.NotNil(t, stored.UserWorkbenchDeletedAt)
-	require.Nil(t, client.SocialAccount.GetX(ctx, otherAccount.ID).UserWorkbenchDeletedAt)
+	var deleteResp map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &deleteResp))
+	require.JSONEq(t, "0", string(deleteResp["code"]))
+	if data, ok := deleteResp["data"]; ok {
+		require.Equal(t, "null", strings.TrimSpace(string(data)))
+	}
+	require.NotContains(t, rec.Body.String(), `"deleted"`)
+	_, err := client.SocialAccount.Get(ctx, account.ID)
+	require.True(t, dbent.IsNotFound(err))
+	_, err = client.SocialAccount.Get(mixins.SkipSoftDelete(ctx), account.ID)
+	require.True(t, dbent.IsNotFound(err), "deleted account must be physically removed")
+	taskLogExists, err := client.SocialTaskLog.Query().
+		Where(socialtasklog.IDEQ(taskLog.ID), socialtasklog.SocialAccountIDEQ(account.ID)).
+		Exist(ctx)
+	require.NoError(t, err)
+	require.False(t, taskLogExists, "deleted account task logs must be physically removed")
+	ledgerExists, err := client.UsageLog.Query().
+		Where(usagelog.IDEQ(ledger.ID), usagelog.RequestIDEQ(ledgerRequestID)).
+		Exist(ctx)
+	require.NoError(t, err)
+	require.False(t, ledgerExists, "deleted account usage projection rows must be removed")
+	unrelatedLedgerExists, err := client.UsageLog.Query().
+		Where(usagelog.IDEQ(unrelatedLedger.ID), usagelog.RequestIDEQ(unrelatedLedgerRequestID)).
+		Exist(ctx)
+	require.NoError(t, err)
+	require.True(t, unrelatedLedgerExists, "unrelated usage projection rows must be retained")
+	storedProxy := client.SocialIP.Query().
+		Where(socialip.IDEQ(proxy.ID)).
+		OnlyX(ctx)
+	require.Nil(t, storedProxy.BoundSocialAccountID)
+	require.Equal(t, otherAccount.ID, client.SocialAccount.GetX(ctx, otherAccount.ID).ID)
 
 	listRec := invokeSocialHandlerAsUser(t, user.ID, http.MethodGet, "/api/v1/accounts", nil, handler.ListMyAccounts)
 	require.Equal(t, http.StatusOK, listRec.Code)
@@ -2214,7 +3401,7 @@ func TestAccountWorkbenchHandlerDeleteMyAccountHidesOnlyCurrentUserAccount(t *te
 	handler.DeleteMyAccount(crossUserCtx)
 
 	require.Equal(t, http.StatusNotFound, crossUserRec.Code)
-	require.Nil(t, client.SocialAccount.GetX(ctx, otherAccount.ID).UserWorkbenchDeletedAt)
+	require.Equal(t, otherAccount.ID, client.SocialAccount.GetX(ctx, otherAccount.ID).ID)
 	require.NotContains(t, crossUserRec.Body.String(), "SOCIAL_ACCOUNT_NOT_ASSIGNED")
 	require.NotContains(t, crossUserRec.Body.String(), formatID(otherAccount.ID))
 	require.NotContains(t, crossUserRec.Body.String(), "@delete_workbench_other")
@@ -2228,18 +3415,19 @@ func TestAccountWorkbenchHandlerBatchImportAndDeleteSanitizesResponses(t *testin
 	other := createSocialHandlerUser(t, ctx, client, "batch-handler-other@example.com")
 	password := "pool-secret"
 	authCookieSecret := "ct0=batch; auth_token=batch"
-	executionAuthSecret := "execution-secret"
-	hidden := client.SocialAccount.Create().
-		SetName("@handler_hidden").
+	executionAuthSecret := "encrypted-batch-execution-auth-ciphertext"
+	removed := client.SocialAccount.Create().
+		SetName("@handler_removed").
 		SetPlatform("x_twitter").
 		SetPlatformKey("x_twitter").
-		SetNameKey("handler_hidden").
+		SetNameKey("handler_removed").
 		SetPassword(password).
 		SetAuthCookie(authCookieSecret).
 		SetExecutionAuth(executionAuthSecret).
 		SetAssignedUserID(user.ID).
-		SetUserWorkbenchDeletedAt(time.Now()).
 		SaveX(ctx)
+	require.NoError(t, service.NewSocialAccountService(client).DeleteForUser(ctx, user.ID, removed.ID))
+	poolDefaultProxySnapshot := `{"id":999,"name":"pool-proxy","endpoint":"http://pool-proxy.example:8080","status":"online"}`
 	fresh := client.SocialAccount.Create().
 		SetName("@handler_fresh").
 		SetPlatform("x_twitter").
@@ -2248,6 +3436,7 @@ func TestAccountWorkbenchHandlerBatchImportAndDeleteSanitizesResponses(t *testin
 		SetPassword(password).
 		SetAuthCookie(authCookieSecret).
 		SetExecutionAuth(executionAuthSecret).
+		SetDefaultProxySnapshot(poolDefaultProxySnapshot).
 		SaveX(ctx)
 	otherAccount := client.SocialAccount.Create().
 		SetName("@handler_other").
@@ -2259,9 +3448,9 @@ func TestAccountWorkbenchHandlerBatchImportAndDeleteSanitizesResponses(t *testin
 		SetExecutionAuth(executionAuthSecret).
 		SetAssignedUserID(other.ID).
 		SaveX(ctx)
-	handler := newAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 0}})
+	handler := newEncryptedAccountWorkbenchHandlerForTest(client, &socialHandlerBillingUserRepo{user: &service.User{ID: user.ID, Balance: 0}})
 
-	importBody := []byte(`{"accounts":[{"platform":"x_twitter","name":"@handler_hidden","password":"typed-secret","two_factor":"JBSWY3DPEHPK3PXP"},{"platform":"x_twitter","name":"@handler_fresh","password":"typed-secret","auth_cookie":"ct0=typed; auth_token=typed"}]}`)
+	importBody := []byte(`{"accounts":[{"platform":"x_twitter","name":"@handler_removed","password":"typed-secret","two_factor":"JBSWY3DPEHPK3PXP"},{"platform":"x_twitter","name":"@handler_fresh","password":"typed-secret","auth_cookie":"ct0=typed; auth_token=typed"}]}`)
 	importRec := invokeJSONSocialHandlerAsUser(t, user.ID, http.MethodPost, "/api/v1/accounts/batch-import", importBody, handler.BatchImportMyAccounts)
 
 	require.Equal(t, http.StatusOK, importRec.Code)
@@ -2272,21 +3461,34 @@ func TestAccountWorkbenchHandlerBatchImportAndDeleteSanitizesResponses(t *testin
 	require.Contains(t, importRec.Body.String(), `"duplicates":0`)
 	require.Contains(t, importRec.Body.String(), `"items":[`)
 	require.Contains(t, importRec.Body.String(), `"status":"succeeded"`)
-	require.Contains(t, importRec.Body.String(), `"id":`+formatID(hidden.ID))
+	require.NotContains(t, importRec.Body.String(), `"id":`+formatID(removed.ID))
 	require.Contains(t, importRec.Body.String(), `"id":`+formatID(fresh.ID))
 	require.Contains(t, importRec.Body.String(), `"password":"pool-secret"`)
 	require.Contains(t, importRec.Body.String(), `"auth_cookie":"ct0=batch; auth_token=batch"`)
-	require.Contains(t, importRec.Body.String(), `"execution_auth":"execution-secret"`)
+	require.Contains(t, importRec.Body.String(), `"execution_auth":"encrypted-batch-execution-auth-ciphertext"`)
+	require.Contains(t, importRec.Body.String(), `"default_proxy_configured":false`)
+	require.NotContains(t, importRec.Body.String(), `"default_proxy_configured":true`)
+	require.NotContains(t, importRec.Body.String(), "pool-proxy.example")
+	require.Nil(t, client.SocialAccount.GetX(ctx, fresh.ID).DefaultProxySnapshot)
+	importedRemoved := client.SocialAccount.Query().
+		Where(socialaccount.NameKeyEQ("handler_removed")).
+		OnlyX(ctx)
+	require.NotEqual(t, removed.ID, importedRemoved.ID)
 
-	deleteBody := []byte(`{"ids":[` + formatID(hidden.ID) + `,` + formatID(fresh.ID) + `]}`)
+	deleteBody := []byte(`{"ids":[` + formatID(importedRemoved.ID) + `,` + formatID(fresh.ID) + `,` + formatID(fresh.ID) + `]}`)
 	deleteRec := invokeJSONSocialHandlerAsUser(t, user.ID, http.MethodPost, "/api/v1/accounts/batch-delete", deleteBody, handler.BatchDeleteMyAccounts)
 
 	require.Equal(t, http.StatusOK, deleteRec.Code)
+	require.Contains(t, deleteRec.Body.String(), `"total":3`)
 	require.Contains(t, deleteRec.Body.String(), `"removed":2`)
-	require.NotNil(t, client.SocialAccount.GetX(ctx, hidden.ID).UserWorkbenchDeletedAt)
-	require.NotNil(t, client.SocialAccount.GetX(ctx, fresh.ID).UserWorkbenchDeletedAt)
+	require.Contains(t, deleteRec.Body.String(), `"skipped":1`)
+	require.Contains(t, deleteRec.Body.String(), `"reason":"duplicate_in_batch"`)
+	_, err := client.SocialAccount.Get(mixins.SkipSoftDelete(ctx), importedRemoved.ID)
+	require.True(t, dbent.IsNotFound(err))
+	_, err = client.SocialAccount.Get(mixins.SkipSoftDelete(ctx), fresh.ID)
+	require.True(t, dbent.IsNotFound(err))
 
-	missingImportBody := []byte(`{"accounts":[{"platform":"x_twitter","name":"@missing_secret_token","password":"account-secret","email":"mail@example.com","email_password":"mail-secret","email_client_id":"client-id","email_token":"mail-token"}]}`)
+	missingImportBody := []byte(`{"accounts":[{"platform":"x_twitter","name":"@missing_secret_token","password":"account-secret","phone":"+15550003333","email":"mail@example.com","email_password":"mail-secret","email_client_id":"client-id","email_token":"mail-token","remark":"fresh response note"}]}`)
 	missingImportRec := invokeJSONSocialHandlerAsUser(t, user.ID, http.MethodPost, "/api/v1/accounts/batch-import", missingImportBody, handler.BatchImportMyAccounts)
 	require.Equal(t, http.StatusOK, missingImportRec.Code)
 	require.Contains(t, missingImportRec.Body.String(), `"succeeded":1`)
@@ -2295,20 +3497,59 @@ func TestAccountWorkbenchHandlerBatchImportAndDeleteSanitizesResponses(t *testin
 	require.Contains(t, missingImportRec.Body.String(), `"failed":0`)
 	require.Contains(t, missingImportRec.Body.String(), `"duplicates":0`)
 	require.Contains(t, missingImportRec.Body.String(), `"items":[`)
+	require.Contains(t, missingImportRec.Body.String(), `"reason":"staged_not_stored"`)
 	require.Contains(t, missingImportRec.Body.String(), `"name":"@missing_secret_token"`)
 	require.Contains(t, missingImportRec.Body.String(), `"password":"account-secret"`)
+	require.Contains(t, missingImportRec.Body.String(), `"phone":"+15550003333"`)
 	require.Contains(t, missingImportRec.Body.String(), `"email":"mail@example.com"`)
 	require.Contains(t, missingImportRec.Body.String(), `"email_password":"mail-secret"`)
 	require.Contains(t, missingImportRec.Body.String(), `"email_client_id":"client-id"`)
 	require.Contains(t, missingImportRec.Body.String(), `"email_token":"mail-token"`)
+	require.Contains(t, missingImportRec.Body.String(), `"remark":"fresh response note"`)
 	require.NotContains(t, missingImportRec.Body.String(), `"remark":"Email Client ID: client-id`)
 	require.Contains(t, missingImportRec.Body.String(), `"account_status":"not_stored"`)
 	require.NotContains(t, missingImportRec.Body.String(), "SOCIAL_ACCOUNT_POOL_MATCH_NOT_FOUND")
 
+	whitespaceImportBody := []byte(`{"accounts":[{"platform":"x_twitter","name":"@handler_whitespace","password":"  account-secret  ","email":"  whitespace@example.com  ","email_password":"  mail-secret  ","two_factor":"  totp-secret  ","backup_code":"  backup-code  ","email_client_id":"  mail-client  ","email_token":"  mail-token  ","auth_cookie":"  ct0=whitespace; auth_token=whitespace  ","execution_auth":"  encrypted-import-execution-auth  ","registration_ip":"  203.0.113.44  ","remark":"  fresh response note  "}]}`)
+	whitespaceImportRec := invokeJSONSocialHandlerAsUser(t, user.ID, http.MethodPost, "/api/v1/accounts/batch-import", whitespaceImportBody, handler.BatchImportMyAccounts)
+	require.Equal(t, http.StatusOK, whitespaceImportRec.Code)
+	require.Contains(t, whitespaceImportRec.Body.String(), `"succeeded":1`)
+	require.Contains(t, whitespaceImportRec.Body.String(), `"password":"  account-secret  "`)
+	require.Contains(t, whitespaceImportRec.Body.String(), `"email":"whitespace@example.com"`)
+	require.Contains(t, whitespaceImportRec.Body.String(), `"email_password":"  mail-secret  "`)
+	require.Contains(t, whitespaceImportRec.Body.String(), `"two_factor":"  totp-secret  "`)
+	require.Contains(t, whitespaceImportRec.Body.String(), `"backup_code":"  backup-code  "`)
+	require.Contains(t, whitespaceImportRec.Body.String(), `"email_client_id":"  mail-client  "`)
+	require.Contains(t, whitespaceImportRec.Body.String(), `"email_token":"  mail-token  "`)
+	require.Contains(t, whitespaceImportRec.Body.String(), `"auth_cookie":"  ct0=whitespace; auth_token=whitespace  "`)
+	require.Contains(t, whitespaceImportRec.Body.String(), `"execution_auth":"encrypted-import-execution-auth"`)
+	require.Contains(t, whitespaceImportRec.Body.String(), `"registration_ip":"203.0.113.44"`)
+	require.Contains(t, whitespaceImportRec.Body.String(), `"remark":"  fresh response note  "`)
+
+	invalidExecutionAuthBody := []byte(`{"accounts":[{"platform":"x_twitter","name":"@handler_invalid_execution_auth","password":"typed-secret","auth_cookie":"ct0=typed; auth_token=typed","execution_auth":"{\"access_token\":\"access\"}"}]}`)
+	invalidExecutionAuthRec := invokeJSONSocialHandlerAsUser(t, user.ID, http.MethodPost, "/api/v1/accounts/batch-import", invalidExecutionAuthBody, handler.BatchImportMyAccounts)
+	require.Equal(t, http.StatusOK, invalidExecutionAuthRec.Code)
+	require.Contains(t, invalidExecutionAuthRec.Body.String(), `"total":1`)
+	require.Contains(t, invalidExecutionAuthRec.Body.String(), `"succeeded":0`)
+	require.Contains(t, invalidExecutionAuthRec.Body.String(), `"imported":0`)
+	require.Contains(t, invalidExecutionAuthRec.Body.String(), `"failed":1`)
+	require.Contains(t, invalidExecutionAuthRec.Body.String(), `"reason":"invalid_input"`)
+	require.Contains(t, invalidExecutionAuthRec.Body.String(), `"error":"account import data is invalid"`)
+	require.NotContains(t, invalidExecutionAuthRec.Body.String(), "access_token")
+	require.NotContains(t, invalidExecutionAuthRec.Body.String(), "token_secret")
+	require.NotContains(t, invalidExecutionAuthRec.Body.String(), "twitter execution auth")
+	invalidExecutionAuthExists, err := client.SocialAccount.Query().
+		Where(socialaccount.NameKeyEQ("handler_invalid_execution_auth")).
+		Exist(ctx)
+	require.NoError(t, err)
+	require.False(t, invalidExecutionAuthExists)
+
 	failedDeleteBody := []byte(`{"ids":[` + formatID(otherAccount.ID) + `,0]}`)
 	failedDeleteRec := invokeJSONSocialHandlerAsUser(t, user.ID, http.MethodPost, "/api/v1/accounts/batch-delete", failedDeleteBody, handler.BatchDeleteMyAccounts)
 	require.Equal(t, http.StatusOK, failedDeleteRec.Code)
-	require.Contains(t, failedDeleteRec.Body.String(), `"skipped":2`)
+	require.Contains(t, failedDeleteRec.Body.String(), `"skipped":0`)
+	require.Contains(t, failedDeleteRec.Body.String(), `"failed":2`)
+	require.Contains(t, failedDeleteRec.Body.String(), `"status":"failed"`)
 	require.Contains(t, failedDeleteRec.Body.String(), "account could not be deleted")
 	require.NotContains(t, failedDeleteRec.Body.String(), "error: code=")
 	require.NotContains(t, failedDeleteRec.Body.String(), "SOCIAL_ACCOUNT_NOT_ASSIGNED")
@@ -2326,6 +3567,35 @@ func newAccountWorkbenchHandlerForTest(client *dbent.Client, userRepo *socialHan
 		nil,
 		service.NewTaskSettingsService(client),
 	)
+}
+
+func newEncryptedAccountWorkbenchHandlerForTest(client *dbent.Client, userRepo *socialHandlerBillingUserRepo) *AccountWorkbenchHandler {
+	subRepo := &socialHandlerSubscriptionRepo{}
+	billing := service.NewSocialBillingService(userRepo, subRepo, nil, nil)
+	return NewAccountWorkbenchHandler(
+		service.NewSocialAccountServiceWithCredentialEncryptor(client, handlerExecutionAuthEncryptor{}),
+		service.NewSocialIPService(client),
+		billing,
+		nil,
+		service.NewTaskSettingsService(client),
+	)
+}
+
+type handlerExecutionAuthEncryptor struct{}
+
+func (handlerExecutionAuthEncryptor) Encrypt(plaintext string) (string, error) {
+	return "enc:" + base64.StdEncoding.EncodeToString([]byte(plaintext)), nil
+}
+
+func (handlerExecutionAuthEncryptor) Decrypt(ciphertext string) (string, error) {
+	if !strings.HasPrefix(ciphertext, "enc:") {
+		return "", errors.New("execution auth ciphertext is not encrypted")
+	}
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(ciphertext, "enc:"))
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
 }
 
 func newAccountWorkbenchHandlerForTestWithExecutor(client *dbent.Client, userRepo *socialHandlerBillingUserRepo) *AccountWorkbenchHandler {
@@ -2402,6 +3672,39 @@ func invokeJSONSocialHandlerAsUser(t *testing.T, userID int64, method, path stri
 	return rec
 }
 
+func invokeJSONSocialHandlerAsUserWithPathID(t *testing.T, userID int64, method, path, pathID string, body []byte, fn gin.HandlerFunc) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	ginCtx, _ := gin.CreateTestContext(rec)
+	ginCtx.Request = httptest.NewRequest(method, path, bytes.NewReader(body))
+	ginCtx.Request.Header.Set("Content-Type", "application/json")
+	if pathID != "" {
+		ginCtx.Params = gin.Params{{Key: "id", Value: pathID}}
+	}
+	ginCtx.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: userID})
+	fn(ginCtx)
+	return rec
+}
+
+func requireStructuredAccountWorkbenchInputError(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	body := rec.Body.String()
+	require.Contains(t, body, "SOCIAL_ACCOUNT_INPUT_REQUIRED")
+	require.Contains(t, body, "social account input is required")
+	require.NotContains(t, body, "unexpected EOF")
+	require.NotContains(t, body, "invalid character")
+	require.NotContains(t, body, "cannot unmarshal")
+}
+
+func requireAccountWorkbenchServiceUnavailableError(t *testing.T, rec *httptest.ResponseRecorder, reason string) {
+	t.Helper()
+	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	body := rec.Body.String()
+	require.Contains(t, body, reason)
+	require.Contains(t, body, "service is unavailable")
+}
+
 func requireSinglePaginatedID(t *testing.T, raw []byte, want int64) {
 	t.Helper()
 	requirePaginatedIDs(t, raw, []int64{want})
@@ -2445,7 +3748,7 @@ func requireNoDeliveryFieldsInFailedBatchResponse(t *testing.T, body string) {
 		"pool-secret",
 		"mail-secret",
 		"ct0=batch; auth_token=batch",
-		"execution-secret",
+		"encrypted-batch-execution-auth-ciphertext",
 		"http://user:pass@proxy.local:8080",
 	} {
 		require.NotContains(t, body, forbidden)
@@ -2465,9 +3768,10 @@ func requireUserAccountNotFoundResponse(t *testing.T, rec *httptest.ResponseReco
 func saveHandlerTaskTemplate(t *testing.T, ctx context.Context, client *dbent.Client, userID int64, taskType string, params service.TaskTemplateParams) *service.TaskTemplate {
 	t.Helper()
 	tmpl, err := service.NewTaskSettingsService(client).SaveTemplate(ctx, userID, &service.TaskTemplateInput{
-		Name:   "handler task template",
-		Type:   taskType,
-		Params: params,
+		Name:      "handler task template",
+		Type:      taskType,
+		Params:    params,
+		IsDefault: true,
 	})
 	require.NoError(t, err)
 	return tmpl

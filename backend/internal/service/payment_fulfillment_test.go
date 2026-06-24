@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -311,17 +312,27 @@ func TestValidateProviderNotificationMetadataAllowsLegacyOrdersWithoutSnapshotFi
 	assert.NoError(t, err)
 }
 
-func TestParseLegacyPaymentOrderID(t *testing.T) {
+func TestGenerateOutTradeNoUsesCurrentProductPrefix(t *testing.T) {
 	t.Parallel()
 
-	oid, ok := parseLegacyPaymentOrderID("sub2_42", &dbent.NotFoundError{})
+	outTradeNo := generateOutTradeNo()
+
+	assert.True(t, strings.HasPrefix(outTradeNo, currentOrderIDPrefix))
+	assert.False(t, strings.HasPrefix(outTradeNo, historicalOrderIDPrefix))
+	assert.Len(t, strings.TrimPrefix(outTradeNo, currentOrderIDPrefix), 16)
+}
+
+func TestParseHistoricalPaymentOrderID(t *testing.T) {
+	t.Parallel()
+
+	oid, ok := parseHistoricalPaymentOrderID("sub2_42", &dbent.NotFoundError{})
 	assert.True(t, ok)
 	assert.EqualValues(t, 42, oid)
 
-	_, ok = parseLegacyPaymentOrderID("42", &dbent.NotFoundError{})
+	_, ok = parseHistoricalPaymentOrderID("42", &dbent.NotFoundError{})
 	assert.False(t, ok)
 
-	_, ok = parseLegacyPaymentOrderID("sub2_42", errors.New("db down"))
+	_, ok = parseHistoricalPaymentOrderID("sub2_42", errors.New("db down"))
 	assert.False(t, ok)
 }
 
@@ -461,7 +472,7 @@ func TestHandlePaymentNotificationAcksDuplicateWhileOrderIsRecharging(t *testing
 		SetPayAmount(25).
 		SetFeeRate(0).
 		SetRechargeCode("RECHARGING-DUPLICATE").
-		SetOutTradeNo("sub2_recharging_duplicate").
+		SetOutTradeNo("socialops_recharging_duplicate").
 		SetPaymentType(payment.TypeStripe).
 		SetPaymentTradeNo("pi_recharging_duplicate").
 		SetOrderType(payment.OrderTypeBalance).
@@ -508,7 +519,7 @@ func TestExecuteSubscriptionFulfillmentDoesNotExtendAgainWhenOrderNoteAlreadyApp
 		SetPayAmount(30).
 		SetFeeRate(0).
 		SetRechargeCode("SUBSCRIPTION-RETRY-NOTE").
-		SetOutTradeNo("sub2_subscription_retry_note").
+		SetOutTradeNo("socialops_subscription_retry_note").
 		SetPaymentType(payment.TypeStripe).
 		SetPaymentTradeNo("pi_subscription_retry").
 		SetOrderType(payment.OrderTypeSubscription).

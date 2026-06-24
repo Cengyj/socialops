@@ -23,12 +23,13 @@ func ProvideEmailQueueService(emailService *EmailService) *EmailQueueService {
 	return NewEmailQueueService(emailService, 4)
 }
 
-func ProvideIdempotencyCleanupService(repo IdempotencyRepository, _ *config.Config) *IdempotencyCleanupService {
-	SetDefaultIdempotencyCoordinator(NewIdempotencyCoordinator(repo, DefaultIdempotencyConfig()))
-	return &IdempotencyCleanupService{}
+func ProvideIdempotencyCoordinator(repo IdempotencyRepository, _ *config.Config) *IdempotencyCoordinator {
+	coordinator := NewIdempotencyCoordinator(repo, DefaultIdempotencyConfig())
+	SetDefaultIdempotencyCoordinator(coordinator)
+	return coordinator
 }
 
-func ProvideSystemOperationLockService(repo IdempotencyRepository, cfg *config.Config) *SystemOperationLockService {
+func ProvideSystemOperationLockService(repo IdempotencyRepository, _ *config.Config) *SystemOperationLockService {
 	return NewSystemOperationLockService(repo, DefaultIdempotencyConfig())
 }
 
@@ -42,16 +43,11 @@ func ProvideSettingService(settingRepo SettingRepository, groupRepo GroupReposit
 	svc := NewSettingService(settingRepo, cfg)
 	svc.SetDefaultSubscriptionGroupReader(groupRepo)
 	svc.SetDefaultSubscriptionPlanReader(paymentConfigService)
-	_ = svc.LoadAPIKeyACLTrustForwardedIPSetting(context.Background())
 	return svc
 }
 
 func ProvidePaymentConfigService(entClient *dbent.Client, settingRepo SettingRepository, key payment.EncryptionKey) *PaymentConfigService {
 	return NewPaymentConfigService(entClient, settingRepo, key)
-}
-
-func ProvideBalanceNotifyService(_ *EmailService, _ SettingRepository, _ *NotificationEmailService) *BalanceNotifyService {
-	return nil
 }
 
 func ProvidePaymentService(entClient *dbent.Client, registry *payment.Registry, loadBalancer payment.LoadBalancer, redeemService *RedeemService, subscriptionSvc *SubscriptionService, configService *PaymentConfigService, userRepo UserRepository, groupRepo GroupRepository, affiliateService *AffiliateService, notificationEmailService *NotificationEmailService) *PaymentService {
@@ -81,78 +77,50 @@ func ProvideBillingCacheService() *BillingCacheService {
 	return &BillingCacheService{}
 }
 
-func ProvideAPIKeyService(apiKeyRepo APIKeyRepository, userRepo UserRepository, groupRepo GroupRepository, userSubRepo UserSubscriptionRepository, userGroupRateRepo UserGroupRateRepository, cache APIKeyCache, cfg *config.Config, billingCacheService *BillingCacheService) *APIKeyService {
-	svc := NewAPIKeyService(apiKeyRepo, userRepo, groupRepo, userSubRepo, userGroupRateRepo, cache, cfg)
-	svc.SetRateLimitCacheInvalidator(billingCacheService)
-	return svc
-}
-
-func ProvideAPIKeyAuthCacheInvalidator(apiKeyService *APIKeyService) APIKeyAuthCacheInvalidator {
-	apiKeyService.StartAuthCacheInvalidationSubscriber(context.Background())
-	return apiKeyService
-}
-
 func ProvideAdminService(
 	userRepo UserRepository,
 	groupRepo GroupRepository,
-	apiKeyRepo APIKeyRepository,
 	redeemCodeRepo RedeemCodeRepository,
 	userGroupRateRepo UserGroupRateRepository,
 	billingCacheService *BillingCacheService,
-	authCacheInvalidator APIKeyAuthCacheInvalidator,
 	entClient *dbent.Client,
 	settingService *SettingService,
 	defaultSubAssigner DefaultSubscriptionAssigner,
-	userSubRepo UserSubscriptionRepository,
 ) AdminService {
 	return NewAdminService(
 		userRepo,
 		groupRepo,
-		apiKeyRepo,
 		redeemCodeRepo,
 		userGroupRateRepo,
 		billingCacheService,
-		authCacheInvalidator,
 		entClient,
 		settingService,
 		defaultSubAssigner,
-		userSubRepo,
 	)
-}
-
-type GroupCapacityService struct{}
-
-func ProvideGroupCapacityService() *GroupCapacityService { return &GroupCapacityService{} }
-
-func ProvideUsageCleanupService(repo UsageCleanupRepository, cfg *config.Config) *UsageCleanupService {
-	return NewUsageCleanupService(repo, nil, nil, cfg)
 }
 
 type DashboardService struct {
 	repo UsageLogRepository
 }
-type DashboardStatsCache any
 
-func ProvideDashboardService(repo UsageLogRepository, _ DashboardStatsCache, _ *config.Config) *DashboardService {
+func ProvideDashboardService(repo UsageLogRepository) *DashboardService {
 	return &DashboardService{repo: repo}
 }
 
-func ProvideUsageService(repo UsageLogRepository, authCacheInvalidator APIKeyAuthCacheInvalidator, entClient *dbent.Client) *UsageService {
-	return NewUsageService(repo, authCacheInvalidator).WithMediaResolver(NewSocialTaskMediaService(entClient))
-}
-
-type socialOpsDashboardStatsCacheSkeleton struct{}
-
-func ProvideDashboardStatsCache() DashboardStatsCache {
-	return socialOpsDashboardStatsCacheSkeleton{}
+func ProvideUsageService(repo UsageLogRepository, entClient *dbent.Client) *UsageService {
+	return NewUsageService(repo).WithMediaResolver(NewSocialTaskMediaService(entClient))
 }
 
 func ProvideConcurrencyService() *ConcurrencyService {
 	return NewConcurrencyService(nil)
 }
 
-func ProvideSocialTaskExecutor(entClient *dbent.Client, billing *SocialBillingService, cfg *config.Config) *SocialTaskExecutor {
-	svc := NewSocialTaskExecutor(entClient, billing, SocialTaskExecutorConfig{})
+func ProvideSocialTaskExecutor(entClient *dbent.Client, billing *SocialBillingService, cfg *config.Config, encryptor ExecutionAuthEncryptor) *SocialTaskExecutor {
+	svc := NewSocialTaskExecutor(entClient, billing, SocialTaskExecutorConfig{}).WithCredentialEncryptor(encryptor)
+	ipSvc := NewSocialIPService(entClient)
+	proxyHealthReporter := func(ctx context.Context, proxyID int64) {
+		_ = ipSvc.MarkExecutionReachable(ctx, proxyID)
+	}
 	registrar := NewTwitterAccountCredentialRegistrar().
 		WithDeviceParamProvider(NewHTTPDeviceParamProvider(TwitterDeviceParamConfig{
 			URL:        cfg.TwitterLogin.DeviceParamsURL,
@@ -160,24 +128,25 @@ func ProvideSocialTaskExecutor(entClient *dbent.Client, billing *SocialBillingSe
 		})).
 		WithEmailCodeResolver(NewHTTPEmailCodeResolver(TwitterEmailCodeConfig{
 			URL: cfg.TwitterLogin.EmailCodeURL,
-		}))
+		})).
+		WithProxyHealthReporter(proxyHealthReporter)
 	twitter := NewTwitterExecutor().
 		WithMediaResolver(NewSocialTaskMediaService(entClient)).
-		WithLoginRegistrar(registrar)
+		WithLoginRegistrar(registrar).
+		WithCredentialEncryptor(encryptor).
+		WithProxyHealthReporter(proxyHealthReporter)
 	svc.RegisterPlatformExecutor("x_twitter", twitter)
 	svc.Start()
 	return svc
 }
 
-func ProvideSocialAccountService(entClient *dbent.Client) *SocialAccountService {
-	return NewSocialAccountService(entClient)
+func ProvideSocialAccountService(entClient *dbent.Client, encryptor ExecutionAuthEncryptor) *SocialAccountService {
+	return NewSocialAccountServiceWithCredentialEncryptor(entClient, encryptor)
 }
 
 var ProviderSet = wire.NewSet(
 	NewAuthService,
 	NewUserService,
-	ProvideAPIKeyService,
-	ProvideAPIKeyAuthCacheInvalidator,
 	NewRedeemService,
 	NewPromoService,
 	ProvideUsageService,
@@ -185,7 +154,6 @@ var ProviderSet = wire.NewSet(
 	ProvideBillingCacheService,
 	NewAnnouncementService,
 	ProvideAdminService,
-	NewDataManagementService,
 	NewEmailService,
 	ProvideEmailQueueService,
 	NewTurnstileService,
@@ -198,21 +166,17 @@ var ProviderSet = wire.NewSet(
 	ProvidePaymentOrderExpiryService,
 	ProvideSubscriptionService,
 	ProvideSubscriptionExpiryService,
-	ProvideBalanceNotifyService,
 	NewAffiliateService,
 	NewUserAttributeService,
 	NewNotificationEmailService,
-	ProvideIdempotencyCleanupService,
+	ProvideIdempotencyCoordinator,
 	ProvideSystemOperationLockService,
-	ProvideGroupCapacityService,
-	ProvideUsageCleanupService,
-	ProvideDashboardStatsCache,
 	ProvideConcurrencyService,
 	ProvideSocialAccountService,
 	NewSocialBillingService,
 	NewSocialIPService,
+	NewGlobalProxyService,
 	ProvideSocialTaskExecutor,
 	NewSocialIPChecker,
-	NewPlanService,
 	wire.Bind(new(DefaultSubscriptionAssigner), new(*SubscriptionService)),
 )

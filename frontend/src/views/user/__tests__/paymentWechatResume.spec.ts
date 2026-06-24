@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseWechatResumeRoute, stripWechatResumeQuery } from '../paymentWechatResume'
 
 describe('parseWechatResumeRoute', () => {
-  it('prefers the opaque resume token over legacy openid query params', () => {
+  it('prefers the opaque resume token over public openid query params', () => {
     expect(parseWechatResumeRoute({
       wechat_resume: '1',
       wechat_resume_token: 'resume-token-123',
@@ -20,7 +20,7 @@ describe('parseWechatResumeRoute', () => {
     })
   })
 
-  it('falls back to legacy openid-based resume when opaque token is absent', () => {
+  it('falls back to public openid-based resume when opaque token is absent', () => {
     expect(parseWechatResumeRoute({
       wechat_resume: '1',
       openid: 'openid-123',
@@ -38,7 +38,7 @@ describe('parseWechatResumeRoute', () => {
 })
 
 describe('stripWechatResumeQuery', () => {
-  it('removes both opaque-token and legacy resume params from the route query', () => {
+  it('removes both opaque-token and public resume params from the route query', () => {
     expect(stripWechatResumeQuery({
       foo: 'bar',
       wechat_resume: '1',

@@ -545,23 +545,6 @@ func (s *SettingService) SetDefaultSubscriptionPlanReader(reader DefaultSubscrip
 	s.defaultSubPlanReader = reader
 }
 
-func (s *SettingService) LoadAPIKeyACLTrustForwardedIPSetting(ctx context.Context) error {
-	if s == nil || s.cfg == nil || s.settingRepo == nil {
-		return nil
-	}
-	value, err := s.settingRepo.GetValue(ctx, SettingKeyAPIKeyACLTrustForwardedIP)
-	if err != nil {
-		if errors.Is(err, ErrSettingNotFound) {
-			s.cfg.SetTrustForwardedIPForAPIKeyACL(s.cfg.Security.TrustForwardedIPForAPIKeyACL)
-			return nil
-		}
-		return fmt.Errorf("get api key acl forwarded ip setting: %w", err)
-	}
-	enabled := value == "true"
-	s.cfg.SetTrustForwardedIPForAPIKeyACL(enabled)
-	return nil
-}
-
 // GetAllSettings 获取所有系统设置
 func (s *SettingService) GetAllSettings(ctx context.Context) (*SystemSettings, error) {
 	settings, err := s.settingRepo.GetAll(ctx)
@@ -598,7 +581,6 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyLoginAgreementDocuments,
 		SettingKeyTurnstileEnabled,
 		SettingKeyTurnstileSiteKey,
-		SettingKeyAPIKeyACLTrustForwardedIP,
 		SettingKeySiteName,
 		SettingKeySiteLogo,
 		SettingKeySiteSubtitle,
@@ -645,7 +627,6 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyBalanceLowNotifyRechargeURL,
 		SettingKeyAccountQuotaNotifyEnabled,
 		SettingKeyAffiliateEnabled,
-		SettingKeyRiskControlEnabled,
 	}
 
 	settings, err := s.settingRepo.GetMultiple(ctx, keys)
@@ -749,8 +730,6 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		BalanceLowNotifyThreshold:        balanceLowNotifyThreshold,
 		BalanceLowNotifyRechargeURL:      settings[SettingKeyBalanceLowNotifyRechargeURL],
 		AffiliateEnabled:                 settings[SettingKeyAffiliateEnabled] == "true",
-
-		RiskControlEnabled: settings[SettingKeyRiskControlEnabled] == "true",
 	}, nil
 }
 
@@ -827,19 +806,18 @@ type PublicSettingsInjectionPayload struct {
 
 	// Feature flags — MUST match the opt-in/opt-out registry in
 	// frontend/src/utils/featureFlags.ts.
-	AffiliateEnabled   bool `json:"affiliate_enabled"`
-	RiskControlEnabled bool `json:"risk_control_enabled"`
+	AffiliateEnabled bool `json:"affiliate_enabled"`
 }
 
-// GetPublicSettingsForInjection returns public settings in a format suitable for HTML injection.
+// GetPublicSettingsForInjection returns public settings JSON suitable for HTML injection.
 // This implements the web.PublicSettingsProvider interface.
-func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any, error) {
+func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (json.RawMessage, error) {
 	settings, err := s.GetPublicSettings(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	return &PublicSettingsInjectionPayload{
+	payload := &PublicSettingsInjectionPayload{
 		RegistrationEnabled:              settings.RegistrationEnabled,
 		EmailVerifyEnabled:               settings.EmailVerifyEnabled,
 		ForceEmailOnThirdPartySignup:     settings.ForceEmailOnThirdPartySignup,
@@ -886,8 +864,12 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		BalanceLowNotifyThreshold:        settings.BalanceLowNotifyThreshold,
 		BalanceLowNotifyRechargeURL:      settings.BalanceLowNotifyRechargeURL,
 		AffiliateEnabled:                 settings.AffiliateEnabled,
-		RiskControlEnabled:               settings.RiskControlEnabled,
-	}, nil
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	return raw, nil
 }
 
 func DefaultWeChatConnectScopesForMode(mode string) string {
@@ -1352,7 +1334,6 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	if settings.TurnstileSecretKey != "" {
 		updates[SettingKeyTurnstileSecretKey] = settings.TurnstileSecretKey
 	}
-	updates[SettingKeyAPIKeyACLTrustForwardedIP] = strconv.FormatBool(settings.APIKeyACLTrustForwardedIP)
 
 	// LinuxDo Connect OAuth 登录
 	updates[SettingKeyLinuxDoConnectEnabled] = strconv.FormatBool(settings.LinuxDoConnectEnabled)
@@ -1506,9 +1487,6 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	// Affiliate (邀请返利) feature switch
 	updates[SettingKeyAffiliateEnabled] = strconv.FormatBool(settings.AffiliateEnabled)
 
-	// 风控中心功能开关
-	updates[SettingKeyRiskControlEnabled] = strconv.FormatBool(settings.RiskControlEnabled)
-
 	// Backend Mode
 	updates[SettingKeyBackendModeEnabled] = strconv.FormatBool(settings.BackendModeEnabled)
 
@@ -1569,9 +1547,6 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 		value:     settings.BackendModeEnabled,
 		expiresAt: time.Now().Add(backendModeCacheTTL).UnixNano(),
 	})
-	if s.cfg != nil {
-		s.cfg.SetTrustForwardedIPForAPIKeyACL(settings.APIKeyACLTrustForwardedIP)
-	}
 	if s.onUpdate != nil {
 		s.onUpdate() // Invalidate cache after settings update
 	}
@@ -2115,7 +2090,6 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyLoginAgreementMode:                        defaultLoginAgreementMode,
 		SettingKeyLoginAgreementUpdatedAt:                   defaultLoginAgreementDate,
 		SettingKeyLoginAgreementDocuments:                   loginAgreementDocumentsJSON,
-		SettingKeyAPIKeyACLTrustForwardedIP:                 "false",
 		SettingKeySiteName:                                  "SocialOps",
 		SettingKeySiteLogo:                                  "",
 		SettingKeyPurchaseSubscriptionEnabled:               "false",
@@ -2221,9 +2195,6 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		// Affiliate (邀请返利) feature (default disabled; opt-in)
 		SettingKeyAffiliateEnabled: "false",
 
-		// 风控中心功能（默认关闭，显式启用）
-		SettingKeyRiskControlEnabled: "false",
-
 		SettingPaymentVisibleMethodAlipaySource:  "",
 		SettingPaymentVisibleMethodWxpaySource:   "",
 		SettingPaymentVisibleMethodAlipayEnabled: "false",
@@ -2240,12 +2211,6 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	loginAgreementUpdatedAt := strings.TrimSpace(settings[SettingKeyLoginAgreementUpdatedAt])
 	if loginAgreementUpdatedAt == "" {
 		loginAgreementUpdatedAt = defaultLoginAgreementDate
-	}
-	apiKeyACLTrustForwardedIP := false
-	if value, ok := settings[SettingKeyAPIKeyACLTrustForwardedIP]; ok {
-		apiKeyACLTrustForwardedIP = value == "true"
-	} else if s != nil && s.cfg != nil {
-		apiKeyACLTrustForwardedIP = s.cfg.Security.TrustForwardedIPForAPIKeyACL
 	}
 	result := &SystemSettings{
 		RegistrationEnabled:              settings[SettingKeyRegistrationEnabled] == "true",
@@ -2269,7 +2234,6 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		TurnstileEnabled:                 settings[SettingKeyTurnstileEnabled] == "true",
 		TurnstileSiteKey:                 settings[SettingKeyTurnstileSiteKey],
 		TurnstileSecretKeyConfigured:     settings[SettingKeyTurnstileSecretKey] != "",
-		APIKeyACLTrustForwardedIP:        apiKeyACLTrustForwardedIP,
 		SiteName:                         s.getStringOrDefault(settings, SettingKeySiteName, "SocialOps"),
 		SiteLogo:                         settings[SettingKeySiteLogo],
 		SiteSubtitle:                     s.getStringOrDefault(settings, SettingKeySiteSubtitle, defaultSocialOpsSiteSubtitle),
@@ -2674,9 +2638,6 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 
 	// Affiliate (邀请返利) feature (default: disabled; strict true)
 	result.AffiliateEnabled = settings[SettingKeyAffiliateEnabled] == "true"
-
-	// 风控中心功能（默认关闭，严格 true 才启用）
-	result.RiskControlEnabled = settings[SettingKeyRiskControlEnabled] == "true"
 
 	result.PaymentVisibleMethodAlipaySource = NormalizeVisibleMethodSource("alipay", settings[SettingPaymentVisibleMethodAlipaySource])
 	result.PaymentVisibleMethodWxpaySource = NormalizeVisibleMethodSource("wxpay", settings[SettingPaymentVisibleMethodWxpaySource])

@@ -300,7 +300,7 @@ const emailSubmitActionLabel = computed(() =>
     ? t('profile.authBindings.confirmEmailReplaceAction')
     : t('profile.authBindings.confirmEmailBindAction')
 )
-const legacyBindingNoteKeys: Record<string, string> = {
+const bindingNoteLocaleKeysByRawMessage: Record<string, string> = {
   'Primary account email is managed from the profile form.':
     'profile.authBindings.notes.emailManagedFromProfile',
   'You can unbind this sign-in method.': 'profile.authBindings.notes.canUnbind',
@@ -308,7 +308,7 @@ const legacyBindingNoteKeys: Record<string, string> = {
     'profile.authBindings.notes.bindAnotherBeforeUnbind',
 }
 
-function resolveLegacyCompatibleWeChatSettings(
+function resolveCompleteWeChatOAuthSettings(
   settings: WeChatOAuthPublicSettings | null | undefined
 ): (WeChatOAuthPublicSettings & {
   wechat_oauth_open_enabled: boolean
@@ -334,12 +334,12 @@ function resolveLegacyCompatibleWeChatSettings(
 }
 
 const wechatOAuthSettings = computed<WeChatOAuthPublicSettings | null>(() => {
-  const cachedSettings = resolveLegacyCompatibleWeChatSettings(appStore.cachedPublicSettings)
+  const cachedSettings = resolveCompleteWeChatOAuthSettings(appStore.cachedPublicSettings)
   if (cachedSettings) {
     return cachedSettings
   }
 
-  return resolveLegacyCompatibleWeChatSettings({
+  return resolveCompleteWeChatOAuthSettings({
     wechat_oauth_enabled: props.wechatEnabled,
     wechat_oauth_open_enabled: props.wechatOpenEnabled,
     wechat_oauth_mp_enabled: props.wechatMpEnabled,
@@ -523,7 +523,7 @@ function bindingNote(details: UserAuthBindingStatus | null): string {
     return ''
   }
 
-  const noteKey = details.note_key?.trim() || legacyBindingNoteKeys[details.note?.trim() || ''] || ''
+  const noteKey = details.note_key?.trim() || bindingNoteLocaleKeysByRawMessage[details.note?.trim() || ''] || ''
   if (noteKey) {
     const translated = t(noteKey)
     if (translated !== noteKey) {

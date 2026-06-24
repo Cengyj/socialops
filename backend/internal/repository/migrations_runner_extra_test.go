@@ -104,6 +104,7 @@ func TestMigrationChecksumCompatibilityRules_CoverEditedUpgradeCompatibilityMigr
 		"118_wechat_dual_mode_and_auth_source_defaults.sql",
 		"120_enforce_payment_orders_out_trade_no_unique_notx.sql",
 		"123_fix_legacy_auth_source_grant_on_signup_defaults.sql",
+		"165_convert_workbench_deleted_social_accounts.sql",
 	} {
 		rule, ok := migrationChecksumCompatibilityRules[name]
 		require.Truef(t, ok, "missing compatibility rule for %s", name)
@@ -113,7 +114,7 @@ func TestMigrationChecksumCompatibilityRules_CoverEditedUpgradeCompatibilityMigr
 }
 
 func TestEnsureAtlasBaselineAligned(t *testing.T) {
-	t.Run("skip_when_no_legacy_table", func(t *testing.T) {
+	t.Run("skip_when_no_historical_schema_migrations_table", func(t *testing.T) {
 		db, mock, err := sqlmock.New()
 		require.NoError(t, err)
 		defer func() { _ = db.Close() }()
@@ -155,7 +156,7 @@ func TestEnsureAtlasBaselineAligned(t *testing.T) {
 		require.NoError(t, mock.ExpectationsWereMet())
 	})
 
-	t.Run("error_when_checking_legacy_table", func(t *testing.T) {
+	t.Run("error_when_checking_historical_schema_migrations_table", func(t *testing.T) {
 		db, mock, err := sqlmock.New()
 		require.NoError(t, err)
 		defer func() { _ = db.Close() }()

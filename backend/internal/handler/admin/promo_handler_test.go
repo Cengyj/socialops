@@ -32,7 +32,7 @@ func TestPromoHandlerUpdateClearsExpiresAtWithZeroTimestamp(t *testing.T) {
 			UpdatedAt:   time.Now().UTC().Add(-time.Hour),
 		},
 	}
-	handler := NewPromoHandler(service.NewPromoService(repo, nil, nil, nil, nil))
+	handler := NewPromoHandler(service.NewPromoService(repo, nil, nil, nil))
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)

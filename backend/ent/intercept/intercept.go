@@ -13,6 +13,7 @@ import (
 	"github.com/Wei-Shaw/socialops/ent/apikey"
 	"github.com/Wei-Shaw/socialops/ent/authidentity"
 	"github.com/Wei-Shaw/socialops/ent/authidentitychannel"
+	"github.com/Wei-Shaw/socialops/ent/globalproxy"
 	"github.com/Wei-Shaw/socialops/ent/group"
 	"github.com/Wei-Shaw/socialops/ent/identityadoptiondecision"
 	"github.com/Wei-Shaw/socialops/ent/paymentauditlog"
@@ -227,6 +228,33 @@ func (f TraverseAuthIdentityChannel) Traverse(ctx context.Context, q ent.Query) 
 		return f(ctx, q)
 	}
 	return fmt.Errorf("unexpected query type %T. expect *ent.AuthIdentityChannelQuery", q)
+}
+
+// The GlobalProxyFunc type is an adapter to allow the use of ordinary function as a Querier.
+type GlobalProxyFunc func(context.Context, *ent.GlobalProxyQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f GlobalProxyFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.GlobalProxyQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.GlobalProxyQuery", q)
+}
+
+// The TraverseGlobalProxy type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseGlobalProxy func(context.Context, *ent.GlobalProxyQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseGlobalProxy) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseGlobalProxy) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.GlobalProxyQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.GlobalProxyQuery", q)
 }
 
 // The GroupFunc type is an adapter to allow the use of ordinary function as a Querier.
@@ -836,6 +864,8 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.AuthIdentityQuery, predicate.AuthIdentity, authidentity.OrderOption]{typ: ent.TypeAuthIdentity, tq: q}, nil
 	case *ent.AuthIdentityChannelQuery:
 		return &query[*ent.AuthIdentityChannelQuery, predicate.AuthIdentityChannel, authidentitychannel.OrderOption]{typ: ent.TypeAuthIdentityChannel, tq: q}, nil
+	case *ent.GlobalProxyQuery:
+		return &query[*ent.GlobalProxyQuery, predicate.GlobalProxy, globalproxy.OrderOption]{typ: ent.TypeGlobalProxy, tq: q}, nil
 	case *ent.GroupQuery:
 		return &query[*ent.GroupQuery, predicate.Group, group.OrderOption]{typ: ent.TypeGroup, tq: q}, nil
 	case *ent.IdentityAdoptionDecisionQuery:

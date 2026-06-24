@@ -65,11 +65,6 @@ func UpdatedAt(v time.Time) predicate.SocialAccount {
 	return predicate.SocialAccount(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
-// DeletedAt applies equality check predicate on the "deleted_at" field. It's identical to DeletedAtEQ.
-func DeletedAt(v time.Time) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldEQ(FieldDeletedAt, v))
-}
-
 // Name applies equality check predicate on the "name" field. It's identical to NameEQ.
 func Name(v string) predicate.SocialAccount {
 	return predicate.SocialAccount(sql.FieldEQ(FieldName, v))
@@ -185,11 +180,6 @@ func AssignedUserID(v int64) predicate.SocialAccount {
 	return predicate.SocialAccount(sql.FieldEQ(FieldAssignedUserID, v))
 }
 
-// UserWorkbenchDeletedAt applies equality check predicate on the "user_workbench_deleted_at" field. It's identical to UserWorkbenchDeletedAtEQ.
-func UserWorkbenchDeletedAt(v time.Time) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldEQ(FieldUserWorkbenchDeletedAt, v))
-}
-
 // Remark applies equality check predicate on the "remark" field. It's identical to RemarkEQ.
 func Remark(v string) predicate.SocialAccount {
 	return predicate.SocialAccount(sql.FieldEQ(FieldRemark, v))
@@ -273,56 +263,6 @@ func UpdatedAtLT(v time.Time) predicate.SocialAccount {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.SocialAccount {
 	return predicate.SocialAccount(sql.FieldLTE(FieldUpdatedAt, v))
-}
-
-// DeletedAtEQ applies the EQ predicate on the "deleted_at" field.
-func DeletedAtEQ(v time.Time) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldEQ(FieldDeletedAt, v))
-}
-
-// DeletedAtNEQ applies the NEQ predicate on the "deleted_at" field.
-func DeletedAtNEQ(v time.Time) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldNEQ(FieldDeletedAt, v))
-}
-
-// DeletedAtIn applies the In predicate on the "deleted_at" field.
-func DeletedAtIn(vs ...time.Time) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldIn(FieldDeletedAt, vs...))
-}
-
-// DeletedAtNotIn applies the NotIn predicate on the "deleted_at" field.
-func DeletedAtNotIn(vs ...time.Time) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldNotIn(FieldDeletedAt, vs...))
-}
-
-// DeletedAtGT applies the GT predicate on the "deleted_at" field.
-func DeletedAtGT(v time.Time) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldGT(FieldDeletedAt, v))
-}
-
-// DeletedAtGTE applies the GTE predicate on the "deleted_at" field.
-func DeletedAtGTE(v time.Time) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldGTE(FieldDeletedAt, v))
-}
-
-// DeletedAtLT applies the LT predicate on the "deleted_at" field.
-func DeletedAtLT(v time.Time) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldLT(FieldDeletedAt, v))
-}
-
-// DeletedAtLTE applies the LTE predicate on the "deleted_at" field.
-func DeletedAtLTE(v time.Time) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldLTE(FieldDeletedAt, v))
-}
-
-// DeletedAtIsNil applies the IsNil predicate on the "deleted_at" field.
-func DeletedAtIsNil() predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldIsNull(FieldDeletedAt))
-}
-
-// DeletedAtNotNil applies the NotNil predicate on the "deleted_at" field.
-func DeletedAtNotNil() predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldNotNull(FieldDeletedAt))
 }
 
 // NameEQ applies the EQ predicate on the "name" field.
@@ -1923,56 +1863,6 @@ func AssignedUserIDIsNil() predicate.SocialAccount {
 // AssignedUserIDNotNil applies the NotNil predicate on the "assigned_user_id" field.
 func AssignedUserIDNotNil() predicate.SocialAccount {
 	return predicate.SocialAccount(sql.FieldNotNull(FieldAssignedUserID))
-}
-
-// UserWorkbenchDeletedAtEQ applies the EQ predicate on the "user_workbench_deleted_at" field.
-func UserWorkbenchDeletedAtEQ(v time.Time) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldEQ(FieldUserWorkbenchDeletedAt, v))
-}
-
-// UserWorkbenchDeletedAtNEQ applies the NEQ predicate on the "user_workbench_deleted_at" field.
-func UserWorkbenchDeletedAtNEQ(v time.Time) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldNEQ(FieldUserWorkbenchDeletedAt, v))
-}
-
-// UserWorkbenchDeletedAtIn applies the In predicate on the "user_workbench_deleted_at" field.
-func UserWorkbenchDeletedAtIn(vs ...time.Time) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldIn(FieldUserWorkbenchDeletedAt, vs...))
-}
-
-// UserWorkbenchDeletedAtNotIn applies the NotIn predicate on the "user_workbench_deleted_at" field.
-func UserWorkbenchDeletedAtNotIn(vs ...time.Time) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldNotIn(FieldUserWorkbenchDeletedAt, vs...))
-}
-
-// UserWorkbenchDeletedAtGT applies the GT predicate on the "user_workbench_deleted_at" field.
-func UserWorkbenchDeletedAtGT(v time.Time) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldGT(FieldUserWorkbenchDeletedAt, v))
-}
-
-// UserWorkbenchDeletedAtGTE applies the GTE predicate on the "user_workbench_deleted_at" field.
-func UserWorkbenchDeletedAtGTE(v time.Time) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldGTE(FieldUserWorkbenchDeletedAt, v))
-}
-
-// UserWorkbenchDeletedAtLT applies the LT predicate on the "user_workbench_deleted_at" field.
-func UserWorkbenchDeletedAtLT(v time.Time) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldLT(FieldUserWorkbenchDeletedAt, v))
-}
-
-// UserWorkbenchDeletedAtLTE applies the LTE predicate on the "user_workbench_deleted_at" field.
-func UserWorkbenchDeletedAtLTE(v time.Time) predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldLTE(FieldUserWorkbenchDeletedAt, v))
-}
-
-// UserWorkbenchDeletedAtIsNil applies the IsNil predicate on the "user_workbench_deleted_at" field.
-func UserWorkbenchDeletedAtIsNil() predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldIsNull(FieldUserWorkbenchDeletedAt))
-}
-
-// UserWorkbenchDeletedAtNotNil applies the NotNil predicate on the "user_workbench_deleted_at" field.
-func UserWorkbenchDeletedAtNotNil() predicate.SocialAccount {
-	return predicate.SocialAccount(sql.FieldNotNull(FieldUserWorkbenchDeletedAt))
 }
 
 // RemarkEQ applies the EQ predicate on the "remark" field.

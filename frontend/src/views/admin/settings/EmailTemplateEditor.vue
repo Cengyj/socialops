@@ -251,42 +251,17 @@ const fallbackPlaceholders = [
   "{{expires_in_minutes}}",
   "{{reset_url}}",
   "{{subscription_group}}",
-  "{{subscription_days}}",
+  "{{plan_name}}",
+  "{{expires_at}}",
   "{{expiry_time}}",
   "{{days_remaining}}",
   "{{current_balance}}",
+  "{{balance}}",
   "{{threshold}}",
   "{{recharge_url}}",
   "{{recharge_amount}}",
-  "{{order_id}}",
+  "{{amount}}",
   "{{unsubscribe_url}}",
-  "{{account_id}}",
-  "{{account_name}}",
-  "{{platform}}",
-  "{{quota_dimension}}",
-  "{{quota_used}}",
-  "{{quota_limit}}",
-  "{{quota_remaining}}",
-  "{{quota_threshold}}",
-  "{{triggered_at}}",
-  "{{group_name}}",
-  "{{moderation_category}}",
-  "{{moderation_score}}",
-  "{{violation_count}}",
-  "{{ban_threshold}}",
-  "{{rule_name}}",
-  "{{severity}}",
-  "{{alert_status}}",
-  "{{metric_type}}",
-  "{{operator}}",
-  "{{metric_value}}",
-  "{{threshold_value}}",
-  "{{alert_description}}",
-  "{{report_name}}",
-  "{{report_type}}",
-  "{{report_start_time}}",
-  "{{report_end_time}}",
-  "{{report_html}}",
 ];
 
 const loadingList = ref(true);
@@ -352,31 +327,6 @@ const eventDisplayMeta: Record<string, EventDisplayMeta> = {
     timing: "余额充值订单支付完成并入账后发送。",
     categoryLabel: "计费",
   },
-  "account.quota_alert": {
-    label: "账号限额告警",
-    timing: "上游账号的用量达到配置的额度告警阈值时发送给管理员通知邮箱。",
-    categoryLabel: "管理告警",
-  },
-  "content_moderation.violation_notice": {
-    label: "内容审计违规提醒",
-    timing: "用户请求命中内容审计或风控规则、但尚未被禁用时发送。",
-    categoryLabel: "风控",
-  },
-  "content_moderation.account_disabled": {
-    label: "内容审计禁用账号",
-    timing: "内容审计违规次数达到封禁阈值并自动禁用用户账号时发送。",
-    categoryLabel: "风控",
-  },
-  "ops.alert": {
-    label: "运维告警",
-    timing: "运维监控规则触发告警并满足邮件通知配置时发送给运维收件人。",
-    categoryLabel: "运维",
-  },
-  "ops.scheduled_report": {
-    label: "运维定时报表",
-    timing: "运维日报、周报、错误摘要或账号健康报表到达配置的发送时间时发送。",
-    categoryLabel: "运维",
-  },
 };
 
 const eventDisplayMetaEn: Record<string, EventDisplayMeta> = {
@@ -414,31 +364,6 @@ const eventDisplayMetaEn: Record<string, EventDisplayMeta> = {
     label: "Balance Recharge Success",
     timing: "Sent after a balance recharge order is paid and credited.",
     categoryLabel: "Billing",
-  },
-  "account.quota_alert": {
-    label: "Account Quota Alert",
-    timing: "Sent to admin notification emails when an upstream account reaches the configured quota alert threshold.",
-    categoryLabel: "Admin",
-  },
-  "content_moderation.violation_notice": {
-    label: "Risk Control Violation Notice",
-    timing: "Sent when a user request triggers content moderation or risk-control rules but the account is not disabled yet.",
-    categoryLabel: "Risk Control",
-  },
-  "content_moderation.account_disabled": {
-    label: "Risk Control Account Disabled",
-    timing: "Sent when content moderation reaches the ban threshold and automatically disables the user account.",
-    categoryLabel: "Risk Control",
-  },
-  "ops.alert": {
-    label: "Ops Alert",
-    timing: "Sent to ops recipients when an ops monitoring rule fires and email notification settings allow it.",
-    categoryLabel: "Ops",
-  },
-  "ops.scheduled_report": {
-    label: "Ops Scheduled Report",
-    timing: "Sent when a configured daily, weekly, error digest, or account health report reaches its scheduled send time.",
-    categoryLabel: "Ops",
   },
 };
 
@@ -481,9 +406,6 @@ function formatCategory(category: string): string {
     auth: { zh: "认证安全", en: "Auth" },
     subscription: { zh: "订阅", en: "Subscription" },
     billing: { zh: "计费", en: "Billing" },
-    admin: { zh: "管理告警", en: "Admin" },
-    risk_control: { zh: "风控", en: "Risk Control" },
-    ops: { zh: "运维", en: "Ops" },
   };
   const item = labels[normalized];
   return item ? localText(item.zh, item.en) : category;

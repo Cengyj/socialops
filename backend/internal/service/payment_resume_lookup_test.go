@@ -61,7 +61,7 @@ func TestGetPublicOrderByResumeTokenReturnsMatchingOrder(t *testing.T) {
 		SetPayAmount(88).
 		SetFeeRate(0).
 		SetRechargeCode("RESUME-ORDER").
-		SetOutTradeNo("sub2_resume_lookup").
+		SetOutTradeNo("socialops_resume_lookup").
 		SetPaymentType(payment.TypeAlipay).
 		SetPaymentTradeNo("trade-1").
 		SetOrderType(payment.OrderTypeBalance).
@@ -113,7 +113,7 @@ func TestGetPublicOrderByResumeTokenRejectsSnapshotMismatch(t *testing.T) {
 		SetPayAmount(88).
 		SetFeeRate(0).
 		SetRechargeCode("RESUME-MISMATCH").
-		SetOutTradeNo("sub2_resume_lookup_mismatch").
+		SetOutTradeNo("socialops_resume_lookup_mismatch").
 		SetPaymentType(payment.TypeAlipay).
 		SetPaymentTradeNo("trade-2").
 		SetOrderType(payment.OrderTypeBalance).
@@ -165,7 +165,7 @@ func TestGetPublicOrderByResumeTokenUsesSnapshotAuthorityWhenColumnsDiffer(t *te
 		SetPayAmount(88).
 		SetFeeRate(0).
 		SetRechargeCode("RESUME-SNAPSHOT-AUTHORITY").
-		SetOutTradeNo("sub2_resume_snapshot_authority").
+		SetOutTradeNo("socialops_resume_snapshot_authority").
 		SetPaymentType(payment.TypeAlipay).
 		SetPaymentTradeNo("trade-snapshot-authority").
 		SetOrderType(payment.OrderTypeBalance).
@@ -173,7 +173,7 @@ func TestGetPublicOrderByResumeTokenUsesSnapshotAuthorityWhenColumnsDiffer(t *te
 		SetExpiresAt(time.Now().Add(time.Hour)).
 		SetClientIP("127.0.0.1").
 		SetSrcHost("api.example.com").
-		SetProviderInstanceID("legacy-column-instance").
+		SetProviderInstanceID("stored-column-instance").
 		SetProviderKey(payment.TypeAlipay).
 		SetProviderSnapshot(map[string]any{
 			"schema_version":       2,
@@ -222,7 +222,7 @@ func TestGetPublicOrderByResumeTokenChecksUpstreamForPendingOrder(t *testing.T) 
 		SetPayAmount(88).
 		SetFeeRate(0).
 		SetRechargeCode("RESUME-PENDING").
-		SetOutTradeNo("sub2_resume_lookup_pending").
+		SetOutTradeNo("socialops_resume_lookup_pending").
 		SetPaymentType(payment.TypeAlipay).
 		SetPaymentTradeNo("trade-pending").
 		SetOrderType(payment.OrderTypeBalance).
@@ -277,7 +277,7 @@ func TestVerifyOrderPublicDoesNotCheckUpstreamForPendingOrder(t *testing.T) {
 		SetPayAmount(88).
 		SetFeeRate(0).
 		SetRechargeCode("PUBLIC-VERIFY").
-		SetOutTradeNo("sub2_public_verify_pending").
+		SetOutTradeNo("socialops_public_verify_pending").
 		SetPaymentType(payment.TypeAlipay).
 		SetPaymentTradeNo("trade-public-verify").
 		SetOrderType(payment.OrderTypeBalance).

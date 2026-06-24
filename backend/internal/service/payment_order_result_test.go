@@ -23,13 +23,13 @@ func TestBuildCreateOrderResponseDefaultsToOrderCreated(t *testing.T) {
 			Amount:     12.34,
 			FeeRate:    0.03,
 			ExpiresAt:  expiresAt,
-			OutTradeNo: "sub2_42",
+			OutTradeNo: "socialops_42",
 		},
 		CreateOrderRequest{PaymentType: payment.TypeWxpay},
 		12.71,
 		&payment.InstanceSelection{PaymentMode: "qrcode"},
 		&payment.CreatePaymentResponse{
-			TradeNo: "sub2_42",
+			TradeNo: "socialops_42",
 			QRCode:  "weixin://wxpay/bizpayurl?pr=test",
 		},
 		payment.CreatePaymentResultOrderCreated,
@@ -38,8 +38,8 @@ func TestBuildCreateOrderResponseDefaultsToOrderCreated(t *testing.T) {
 	if resp.ResultType != payment.CreatePaymentResultOrderCreated {
 		t.Fatalf("result type = %q, want %q", resp.ResultType, payment.CreatePaymentResultOrderCreated)
 	}
-	if resp.OutTradeNo != "sub2_42" {
-		t.Fatalf("out_trade_no = %q, want %q", resp.OutTradeNo, "sub2_42")
+	if resp.OutTradeNo != "socialops_42" {
+		t.Fatalf("out_trade_no = %q, want %q", resp.OutTradeNo, "socialops_42")
 	}
 	if resp.QRCode != "weixin://wxpay/bizpayurl?pr=test" {
 		t.Fatalf("qr_code = %q, want %q", resp.QRCode, "weixin://wxpay/bizpayurl?pr=test")
@@ -69,13 +69,13 @@ func TestBuildCreateOrderResponseCopiesJSAPIPayload(t *testing.T) {
 			Amount:     66.88,
 			FeeRate:    0.01,
 			ExpiresAt:  time.Date(2026, 4, 16, 13, 0, 0, 0, time.UTC),
-			OutTradeNo: "sub2_88",
+			OutTradeNo: "socialops_88",
 		},
 		CreateOrderRequest{PaymentType: payment.TypeWxpay},
 		67.55,
 		&payment.InstanceSelection{PaymentMode: "popup"},
 		&payment.CreatePaymentResponse{
-			TradeNo:    "sub2_88",
+			TradeNo:    "socialops_88",
 			ResultType: payment.CreatePaymentResultJSAPIReady,
 			JSAPI:      jsapiPayload,
 		},
@@ -383,7 +383,7 @@ func TestMaybeBuildWeChatOAuthRequiredResponseRequiresResumeSigningKey(t *testin
 	}
 }
 
-func TestMaybeBuildWeChatOAuthRequiredResponseFallsBackToConfiguredLegacySigningKey(t *testing.T) {
+func TestMaybeBuildWeChatOAuthRequiredResponseFallsBackToConfiguredHistoricalSigningKey(t *testing.T) {
 	svc := &PaymentService{
 		configService: &PaymentConfigService{
 			settingRepo: &paymentConfigSettingRepoStub{values: map[string]string{
@@ -395,7 +395,7 @@ func TestMaybeBuildWeChatOAuthRequiredResponseFallsBackToConfiguredLegacySigning
 				SettingKeyWeChatConnectRedirectURL:         "https://api.example.com/api/v1/auth/oauth/wechat/callback",
 				SettingKeyWeChatConnectFrontendRedirectURL: "/auth/wechat/callback",
 			}},
-			// Legacy stable signing key remains available for no-config upgrade compatibility.
+			// Historical stable signing key remains available for no-config upgrade recovery.
 			encryptionKey: []byte("0123456789abcdef0123456789abcdef"),
 		},
 	}

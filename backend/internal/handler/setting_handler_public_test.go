@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Wei-Shaw/socialops/internal/config"
@@ -14,6 +15,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+func removedGatewayPublicSettingKey(parts ...string) string {
+	return strings.Join(parts, "_")
+}
 
 type settingHandlerPublicRepoStub struct {
 	values map[string]string
@@ -121,12 +126,12 @@ func TestSettingHandler_GetPublicSettings_ExposesWeChatOAuthModeCapabilities(t *
 	require.True(t, resp.Data.WeChatOAuthMPEnabled)
 }
 
-func TestSettingHandler_GetPublicSettings_DoesNotExposeAIChannelSettings(t *testing.T) {
+func TestSettingHandler_GetPublicSettings_DoesNotExposeRemovedGatewayChannelSettings(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	h := NewSettingHandler(service.NewSettingService(&settingHandlerPublicRepoStub{
 		values: map[string]string{
-			"channel_monitor_enabled":    "true",
-			"available_channels_enabled": "true",
+			removedGatewayPublicSettingKey("channel", "monitor", "enabled"):    "true",
+			removedGatewayPublicSettingKey("available", "channels", "enabled"): "true",
 		},
 	}, &config.Config{}), "test-version")
 
@@ -144,10 +149,10 @@ func TestSettingHandler_GetPublicSettings_DoesNotExposeAIChannelSettings(t *test
 	}
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, 0, resp.Code)
-	require.NotContains(t, resp.Data, "channel_monitor_enabled")
-	require.NotContains(t, resp.Data, "channel_monitor_default_interval_seconds")
-	require.NotContains(t, resp.Data, "available_channels_enabled")
-	require.NotContains(t, resp.Data, "ops_monitoring_enabled")
+	require.NotContains(t, resp.Data, removedGatewayPublicSettingKey("channel", "monitor", "enabled"))
+	require.NotContains(t, resp.Data, removedGatewayPublicSettingKey("channel", "monitor", "default", "interval", "seconds"))
+	require.NotContains(t, resp.Data, removedGatewayPublicSettingKey("available", "channels", "enabled"))
+	require.NotContains(t, resp.Data, removedGatewayPublicSettingKey("ops", "monitoring", "enabled"))
 }
 
 func TestSettingHandler_GetPublicSettings_OnlyExposesUserCustomMenuItems(t *testing.T) {

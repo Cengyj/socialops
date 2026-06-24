@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { once } from 'node:events'
+import { readFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { resolve } from 'node:path'
 
@@ -18,6 +19,7 @@ interface MockProxy {
   endpoint: string
   status: string
   latency_ms?: number | null
+  error?: string
   remark: string
 }
 
@@ -33,6 +35,15 @@ interface MockSocialAccount {
   id: number
   default_proxy_snapshot: string
   default_proxy_configured: boolean
+}
+
+interface MockBatchDefaultProxyResult {
+  total: number
+  succeeded: number
+  skipped: number
+  failed: number
+  errors?: string[]
+  items: Array<{ id: number; status: string; reason?: string; error?: string }>
 }
 
 interface MockTaskTemplate {
@@ -59,6 +70,19 @@ afterEach(async () => {
 })
 
 describe('mock API user proxy contract', () => {
+  it('keeps proxy deletion aligned with backend task-log reference cleanup', () => {
+    const projectRoot = resolve(__dirname, '../../../..')
+    const source = readFileSync(resolve(projectRoot, 'tools/mock-api.mjs'), 'utf8')
+    const deleteStart = source.indexOf('function deleteMockProxy(id)')
+    const deleteEnd = source.indexOf('function createMockSocialAccount', deleteStart)
+    const deleteSource = source.slice(deleteStart, deleteEnd)
+
+    expect(deleteSource).toContain('for (const log of mockSocialTaskLogs)')
+    expect(deleteSource).toContain('if (Number(log.proxy_id) === numericId)')
+    expect(deleteSource).toContain('log.proxy_id = null')
+    expect(deleteSource).not.toContain('log.proxy_snapshot =')
+  })
+
   it('serves user-scoped proxy CRUD, usable proxies, connectivity tests, and snapshot cleanup', async () => {
     const baseUrl = await startMockApi()
     const auth = { Authorization: 'Bearer dev-mock-user-token' }
@@ -80,6 +104,19 @@ describe('mock API user proxy contract', () => {
     expect(rejected.status).toBe(400)
     const rejectedPayload = await rejected.json()
     expect(rejectedPayload.code).toBe('SOCIAL_IP_USER_ID_NOT_ACCEPTED')
+
+    const rejectedBlankName = await fetch(`${baseUrl}/api/v1/proxies`, {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: '   ',
+        ip_type: 'residential',
+        endpoint: 'http://8.8.8.8:8080',
+      }),
+    })
+    expect(rejectedBlankName.status).toBe(400)
+    const rejectedBlankNamePayload = await rejectedBlankName.json()
+    expect(rejectedBlankNamePayload.code).toBe('SOCIAL_IP_NAME_REQUIRED')
 
     const created = await requestJson<MockProxy>(`${baseUrl}/api/v1/proxies`, {
       method: 'POST',
@@ -123,13 +160,36 @@ describe('mock API user proxy contract', () => {
     expect(JSON.parse(accountWithProxy.data.default_proxy_snapshot)).toMatchObject({ id: created.data.id })
     expect(accountWithProxy.data.default_proxy_configured).toBe(true)
 
+    const rejectedUpdate = await fetch(`${baseUrl}/api/v1/proxies/${created.data.id}`, {
+      method: 'PUT',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: 1,
+        name: 'bad proxy owner update',
+      }),
+    })
+    expect(rejectedUpdate.status).toBe(400)
+    const rejectedUpdatePayload = await rejectedUpdate.json()
+    expect(rejectedUpdatePayload.code).toBe('SOCIAL_IP_USER_ID_NOT_ACCEPTED')
+
+    const rejectedBlankNameUpdate = await fetch(`${baseUrl}/api/v1/proxies/${created.data.id}`, {
+      method: 'PUT',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: '   ',
+      }),
+    })
+    expect(rejectedBlankNameUpdate.status).toBe(400)
+    const rejectedBlankNameUpdatePayload = await rejectedBlankNameUpdate.json()
+    expect(rejectedBlankNameUpdatePayload.code).toBe('SOCIAL_IP_NAME_REQUIRED')
+
     const updated = await requestJson<MockProxy>(`${baseUrl}/api/v1/proxies/${created.data.id}`, {
       method: 'PUT',
       headers: auth,
       body: {
         name: 'qa proxy renamed',
         ip_type: 'static',
-        endpoint: '',
+        endpoint: 'http://8.8.8.8:8080',
         remark: '',
       },
     })
@@ -137,10 +197,41 @@ describe('mock API user proxy contract', () => {
       id: created.data.id,
       name: 'qa proxy renamed',
       ip_type: 'static',
-      endpoint: '',
-      status: 'unknown',
+      endpoint: 'http://8.8.8.8:8080',
+      status: 'online',
       remark: '',
     })
+
+    const accountAfterUpdate = await requestJson<MockPage<MockSocialAccount>>(`${baseUrl}/api/v1/accounts?page=1&page_size=1`, { headers: auth })
+    expect(JSON.parse(accountAfterUpdate.data.items[0].default_proxy_snapshot)).toMatchObject({
+      id: created.data.id,
+      name: 'qa proxy renamed',
+      ip_type: 'static',
+      endpoint: 'http://8.8.8.8:8080',
+      status: 'online',
+    })
+    expect(accountAfterUpdate.data.items[0].default_proxy_configured).toBe(true)
+
+    const endpointCleared = await requestJson<MockProxy>(`${baseUrl}/api/v1/proxies/${created.data.id}`, {
+      method: 'PUT',
+      headers: auth,
+      body: {
+        endpoint: '',
+      },
+    })
+    expect(endpointCleared.data).toMatchObject({
+      id: created.data.id,
+      endpoint: '',
+      status: 'unknown',
+    })
+
+    const accountAfterEndpointClear = await requestJson<MockPage<MockSocialAccount>>(`${baseUrl}/api/v1/accounts?page=1&page_size=1`, { headers: auth })
+    expect(JSON.parse(accountAfterEndpointClear.data.items[0].default_proxy_snapshot)).toMatchObject({
+      id: created.data.id,
+      endpoint: '',
+      status: 'unknown',
+    })
+    expect(accountAfterEndpointClear.data.items[0].default_proxy_configured).toBe(true)
 
     const deleted = await requestJson<null>(`${baseUrl}/api/v1/proxies/${created.data.id}`, { method: 'DELETE', headers: auth })
     expect(deleted.code).toBe(0)
@@ -151,6 +242,64 @@ describe('mock API user proxy contract', () => {
 
     const missingTest = await fetch(`${baseUrl}/api/v1/proxies/${created.data.id}/test`, { method: 'POST', headers: auth })
     expect(missingTest.status).toBe(404)
+    await expect(missingTest.json()).resolves.toMatchObject({ code: 'SOCIAL_IP_NOT_FOUND' })
+
+    const missingUpdate = await fetch(`${baseUrl}/api/v1/proxies/${created.data.id}`, {
+      method: 'PUT',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'deleted proxy' }),
+    })
+    expect(missingUpdate.status).toBe(404)
+    await expect(missingUpdate.json()).resolves.toMatchObject({ code: 'SOCIAL_IP_NOT_FOUND' })
+
+    const missingDelete = await fetch(`${baseUrl}/api/v1/proxies/${created.data.id}`, { method: 'DELETE', headers: auth })
+    expect(missingDelete.status).toBe(404)
+    await expect(missingDelete.json()).resolves.toMatchObject({ code: 'SOCIAL_IP_NOT_FOUND' })
+  })
+
+  it('uses backend-aligned safe errors for mock proxy tests without endpoints', async () => {
+    const baseUrl = await startMockApi()
+    const auth = { Authorization: 'Bearer dev-mock-user-token' }
+
+    const created = await requestJson<MockProxy>(`${baseUrl}/api/v1/proxies`, {
+      method: 'POST',
+      headers: auth,
+      body: {
+        name: 'no endpoint proxy',
+        ip_type: 'residential',
+      },
+    })
+    expect(created.data).toMatchObject({
+      name: 'no endpoint proxy',
+      endpoint: '',
+      status: 'unknown',
+    })
+
+    const singleResult = await requestJson<Pick<MockProxy, 'id' | 'status' | 'latency_ms' | 'error'>>(`${baseUrl}/api/v1/proxies/${created.data.id}/test`, {
+      method: 'POST',
+      headers: auth,
+    })
+    expect(singleResult.data).toMatchObject({
+      id: created.data.id,
+      status: 'unknown',
+      latency_ms: 0,
+      error: 'proxy endpoint is not ready for connectivity check',
+    })
+    expect(singleResult.data.error).not.toContain('no endpoint configured')
+
+    const allResults = await requestJson<Array<Pick<MockProxy, 'id' | 'status' | 'latency_ms' | 'error'>>>(`${baseUrl}/api/v1/proxies/test`, {
+      method: 'POST',
+      headers: auth,
+    })
+    expect(allResults.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: created.data.id,
+        status: 'unknown',
+        latency_ms: 0,
+        error: 'proxy endpoint is not ready for connectivity check',
+      }),
+    ]))
+    expect(JSON.stringify(allResults.data)).not.toContain('no endpoint configured')
   })
 
   it('ignores proxy fields during user workbench import', async () => {
@@ -217,6 +366,193 @@ describe('mock API user proxy contract', () => {
 
     expect(response.status).toBe(400)
     expect(payload.code).toBe('SOCIAL_IP_REQUIRED')
+  })
+
+  it('reports unavailable specific batch proxy assignment as row failures', async () => {
+    const baseUrl = await startMockApi()
+    const auth = { Authorization: 'Bearer dev-mock-user-token' }
+    const accounts = await requestJson<MockPage<MockSocialAccount>>(`${baseUrl}/api/v1/accounts?page=1&page_size=1`, { headers: auth })
+    const account = accounts.data.items[0]
+    const proxy = await requestJson<MockProxy>(`${baseUrl}/api/v1/proxies`, {
+      method: 'POST',
+      headers: auth,
+      body: {
+        name: 'untested batch proxy',
+        ip_type: 'residential',
+        endpoint: 'http://8.8.4.4:8080',
+      },
+    })
+    expect(proxy.data.status).toBe('unknown')
+
+    const result = await requestJson<MockBatchDefaultProxyResult>(`${baseUrl}/api/v1/accounts/default-proxy`, {
+      method: 'POST',
+      headers: auth,
+      body: {
+        account_ids: [account.id],
+        mode: 'specific',
+        proxy_id: proxy.data.id,
+      },
+    })
+
+    expect(result.code).toBe(0)
+    expect(result.data).toMatchObject({
+      total: 1,
+      succeeded: 0,
+      skipped: 0,
+      failed: 1,
+    })
+    expect(result.data.items).toEqual([
+      expect.objectContaining({
+        id: account.id,
+        status: 'failed',
+        reason: 'proxy_not_available',
+      }),
+    ])
+  })
+
+  it('uses the backend contract code when random batch assignment has no online proxy pool', async () => {
+    const baseUrl = await startMockApi()
+    const auth = { Authorization: 'Bearer dev-mock-user-token' }
+    const usable = await requestJson<MockProxy[]>(`${baseUrl}/api/v1/proxies/usable`, { headers: auth })
+    for (const proxy of usable.data) {
+      await requestJson<null>(`${baseUrl}/api/v1/proxies/${proxy.id}`, { method: 'DELETE', headers: auth })
+    }
+    const accounts = await requestJson<MockPage<MockSocialAccount>>(`${baseUrl}/api/v1/accounts?page=1&page_size=1`, { headers: auth })
+    const account = accounts.data.items[0]
+
+    const response = await fetch(`${baseUrl}/api/v1/accounts/default-proxy`, {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        account_ids: [account.id],
+        mode: 'random',
+        proxy_id: null,
+      }),
+    })
+    const payload = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(payload.code).toBe('SOCIAL_IP_POOL_EMPTY')
+  })
+
+  it('tests all current-user proxies even when query filters are present', async () => {
+    const baseUrl = await startMockApi()
+    const auth = { Authorization: 'Bearer dev-mock-user-token' }
+    const first = await requestJson<MockProxy>(`${baseUrl}/api/v1/proxies`, {
+      method: 'POST',
+      headers: auth,
+      body: {
+        name: 'bulk test first',
+        ip_type: 'residential',
+        endpoint: 'http://8.8.8.8:8080',
+      },
+    })
+    const second = await requestJson<MockProxy>(`${baseUrl}/api/v1/proxies`, {
+      method: 'POST',
+      headers: auth,
+      body: {
+        name: 'bulk test second',
+        ip_type: 'static',
+        endpoint: 'http://1.1.1.1:8080',
+      },
+    })
+
+    const result = await requestJson<Array<Pick<MockProxy, 'id' | 'status' | 'latency_ms'>>>(
+      `${baseUrl}/api/v1/proxies/test?status=offline&search=definitely-no-match`,
+      { method: 'POST', headers: auth },
+    )
+
+    expect(result.data.map((proxy) => proxy.id)).toEqual(expect.arrayContaining([first.data.id, second.data.id]))
+    expect(result.data.map((proxy) => proxy.id)).toEqual([...result.data.map((proxy) => proxy.id)].sort((a, b) => a - b))
+    expect(result.data.find((proxy) => proxy.id === first.data.id)?.status).toBe('online')
+    expect(result.data.find((proxy) => proxy.id === second.data.id)?.status).toBe('online')
+  })
+
+  it('serves all current-user usable proxies independent of accidental query filters', async () => {
+    const baseUrl = await startMockApi()
+    const auth = { Authorization: 'Bearer dev-mock-user-token' }
+    const first = await requestJson<MockProxy>(`${baseUrl}/api/v1/proxies`, {
+      method: 'POST',
+      headers: auth,
+      body: {
+        name: 'usable first',
+        ip_type: 'residential',
+        endpoint: 'http://8.8.4.4:8080',
+      },
+    })
+    const second = await requestJson<MockProxy>(`${baseUrl}/api/v1/proxies`, {
+      method: 'POST',
+      headers: auth,
+      body: {
+        name: 'usable second',
+        ip_type: 'static',
+        endpoint: 'http://1.0.0.1:8080',
+      },
+    })
+    await requestJson<Pick<MockProxy, 'id' | 'status' | 'latency_ms'>>(`${baseUrl}/api/v1/proxies/${first.data.id}/test`, {
+      method: 'POST',
+      headers: auth,
+    })
+    await requestJson<Pick<MockProxy, 'id' | 'status' | 'latency_ms'>>(`${baseUrl}/api/v1/proxies/${second.data.id}/test`, {
+      method: 'POST',
+      headers: auth,
+    })
+
+    const usable = await requestJson<MockProxy[]>(
+      `${baseUrl}/api/v1/proxies/usable?status=offline&search=definitely-no-match`,
+      { headers: auth },
+    )
+
+    expect(usable.data.map((proxy) => proxy.id)).toEqual(expect.arrayContaining([first.data.id, second.data.id]))
+    expect(usable.data.map((proxy) => proxy.id)).toEqual([...usable.data.map((proxy) => proxy.id)].sort((a, b) => a - b))
+    expect(usable.data.find((proxy) => proxy.id === first.data.id)).toMatchObject({ status: 'online', endpoint: 'http://8.8.4.4:8080' })
+    expect(usable.data.find((proxy) => proxy.id === second.data.id)).toMatchObject({ status: 'online', endpoint: 'http://1.0.0.1:8080' })
+  })
+
+  it('reports duplicate and invalid account IDs in batch default-proxy assignment', async () => {
+    const baseUrl = await startMockApi()
+    const auth = { Authorization: 'Bearer dev-mock-user-token' }
+    const accountPage = await requestJson<MockPage<MockSocialAccount>>(`${baseUrl}/api/v1/accounts?page=1&page_size=1`, { headers: auth })
+    const account = accountPage.data.items[0]
+    const proxy = await requestJson<MockProxy>(`${baseUrl}/api/v1/proxies`, {
+      method: 'POST',
+      headers: auth,
+      body: {
+        name: 'batch proxy',
+        ip_type: 'residential',
+        endpoint: 'http://8.8.4.4:8080',
+      },
+    })
+    await requestJson<MockProxy>(`${baseUrl}/api/v1/proxies/${proxy.data.id}/test`, {
+      method: 'POST',
+      headers: auth,
+    })
+
+    const result = await requestJson<MockBatchDefaultProxyResult>(`${baseUrl}/api/v1/accounts/default-proxy`, {
+      method: 'POST',
+      headers: auth,
+      body: {
+        account_ids: [account.id, account.id, 0],
+        mode: 'specific',
+        proxy_id: proxy.data.id,
+      },
+    })
+
+    expect(result.data).toMatchObject({
+      total: 3,
+      succeeded: 1,
+      skipped: 1,
+      failed: 1,
+    })
+    expect(result.data.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: account.id, status: 'succeeded' }),
+      expect.objectContaining({ id: account.id, status: 'skipped', reason: 'duplicate_in_batch' }),
+      expect.objectContaining({ id: 0, status: 'failed', reason: 'invalid_id' }),
+    ]))
+
+    const refreshed = await requestJson<MockPage<MockSocialAccount>>(`${baseUrl}/api/v1/accounts?page=1&page_size=1`, { headers: auth })
+    expect(JSON.parse(refreshed.data.items[0].default_proxy_snapshot)).toMatchObject({ id: proxy.data.id })
+    expect(refreshed.data.items[0].default_proxy_configured).toBe(true)
   })
 
   it('serves user-scoped task setting templates used by accounts', async () => {

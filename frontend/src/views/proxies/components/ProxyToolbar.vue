@@ -22,21 +22,31 @@
         />
       </div>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:flex xl:items-center">
-        <button type="button" class="btn btn-secondary btn-sm h-10 justify-center" :disabled="loading" @click="emit('refresh')">
+        <div
+          class="flex h-10 min-w-0 max-w-full items-center justify-center rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm font-medium text-gray-700 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-200"
+          data-testid="proxy-selected-count"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          :title="t('proxies.selection.selectedCount', { count: selectedCount })"
+        >
+          <span class="min-w-0 truncate">{{ t('proxies.selection.selectedCount', { count: selectedCount }) }}</span>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm h-10 min-w-0 max-w-full justify-center" :aria-label="refreshButtonTitle" :title="refreshButtonTitle" :disabled="loading" @click="emit('refresh')">
           <Icon name="refresh" size="sm" :class="loading ? 'animate-spin' : ''" />
-          <span>{{ t('common.refresh') }}</span>
+          <span class="min-w-0 truncate">{{ t('common.refresh') }}</span>
         </button>
-        <button type="button" class="btn btn-secondary btn-sm h-10 justify-center" :disabled="selectedCount === 0 || testing" @click="emit('testSelected')">
+        <button type="button" class="btn btn-secondary btn-sm h-10 min-w-0 max-w-full justify-center" :aria-label="testSelectedButtonTitle" :title="testSelectedButtonTitle" :disabled="selectedCount === 0 || loading || testing" @click="emit('testSelected')">
           <Icon name="play" size="sm" />
-          <span>{{ t('proxies.testSelected') }}</span>
+          <span class="min-w-0 truncate">{{ t('proxies.testSelected') }}</span>
         </button>
-        <button type="button" class="btn btn-secondary btn-sm h-10 justify-center" :disabled="testing || !hasProxies" @click="emit('testAll')">
+        <button type="button" class="btn btn-secondary btn-sm h-10 min-w-0 max-w-full justify-center" :aria-label="testAllButtonTitle" :title="testAllButtonTitle" :disabled="loading || testing || !hasProxies" @click="emit('testAll')">
           <Icon name="checkCircle" size="sm" />
-          <span>{{ t('proxies.testAll') }}</span>
+          <span class="min-w-0 truncate">{{ t('proxies.testAll') }}</span>
         </button>
-        <button type="button" class="btn btn-primary btn-sm h-10 justify-center" @click="emit('create')">
+        <button type="button" class="btn btn-primary btn-sm h-10 min-w-0 max-w-full justify-center" :aria-label="createButtonTitle" :title="createButtonTitle" :disabled="testing" @click="emit('create')">
           <Icon name="plus" size="sm" />
-          <span>{{ t('proxies.addProxy') }}</span>
+          <span class="min-w-0 truncate">{{ t('proxies.addProxy') }}</span>
         </button>
       </div>
     </div>
@@ -44,15 +54,22 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import SearchInput from '@/components/common/SearchInput.vue'
 import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import type { SelectOption } from '@/types'
+import {
+  proxyCreateButtonTitle as buildCreateButtonTitle,
+  proxyRefreshButtonTitle as buildRefreshButtonTitle,
+  proxyTestAllButtonTitle as buildTestAllButtonTitle,
+  proxyTestSelectedButtonTitle as buildTestSelectedButtonTitle,
+} from '../proxyActionTitles'
 
 type SelectValue = string | number | boolean | null
 
-defineProps<{
+const props = defineProps<{
   hasProxies: boolean
   loading: boolean
   searchQuery: string
@@ -75,4 +92,17 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+
+const refreshButtonTitle = computed(() => buildRefreshButtonTitle(t, { loading: props.loading }))
+const testSelectedButtonTitle = computed(() => buildTestSelectedButtonTitle(t, {
+  loading: props.loading,
+  testing: props.testing,
+  selectedCount: props.selectedCount,
+}))
+const testAllButtonTitle = computed(() => buildTestAllButtonTitle(t, {
+  loading: props.loading,
+  testing: props.testing,
+  hasProxies: props.hasProxies,
+}))
+const createButtonTitle = computed(() => buildCreateButtonTitle(t, { testing: props.testing }))
 </script>

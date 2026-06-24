@@ -89,9 +89,9 @@ func (s *TaskSettingsService) ListTemplates(ctx context.Context, userID int64) (
 }
 
 func (s *TaskSettingsService) GetTemplate(ctx context.Context, userID int64, id string) (*TaskTemplate, error) {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return nil, infraerrors.BadRequest("TASK_TEMPLATE_ID_REQUIRED", "task template id is required")
+	id, err := normalizeTaskTemplateID(id)
+	if err != nil {
+		return nil, err
 	}
 	doc, err := s.load(ctx, userID)
 	if err != nil {
@@ -120,6 +120,107 @@ func (s *TaskSettingsService) GetDefaultTemplate(ctx context.Context, userID int
 		}
 	}
 	return nil, infraerrors.NotFound("TASK_TEMPLATE_NOT_FOUND", "task template not found")
+}
+
+func (s *TaskSettingsService) ApplyDefaultTemplateToTaskInput(ctx context.Context, userID int64, input *AccountWorkbenchTaskInput) error {
+	if input == nil {
+		return infraerrors.BadRequest("SOCIAL_TASK_INPUT_REQUIRED", "social task input is required")
+	}
+	action, ok := NormalizeSocialTaskAction(input.Action)
+	if !ok {
+		return ErrSocialTaskUnsupportedAction
+	}
+	input.Action = action
+	if !accountWorkbenchTaskActionRequiresDefaultTemplate(action) {
+		return nil
+	}
+	if s == nil {
+		return infraerrors.ServiceUnavailable("TASK_TEMPLATE_SERVICE_UNAVAILABLE", "task template service is unavailable")
+	}
+	tmpl, err := s.GetDefaultTemplate(ctx, userID, action)
+	if err != nil {
+		if infraerrors.IsNotFound(err) {
+			return infraerrors.BadRequest("TASK_DEFAULT_TEMPLATE_REQUIRED", "default task template is required for this action")
+		}
+		return err
+	}
+	if result := ValidateTaskTemplate(tmpl); !result.Valid {
+		return infraerrors.BadRequest("TASK_TEMPLATE_INVALID", strings.Join(result.Errors, "; "))
+	}
+	applyTaskTemplateToAccountWorkbenchInput(input, tmpl)
+	return nil
+}
+
+func accountWorkbenchTaskActionRequiresDefaultTemplate(action string) bool {
+	return action != SocialTaskActionLogin && action != SocialTaskActionLoginCheck
+}
+
+func applyTaskTemplateToAccountWorkbenchInput(input *AccountWorkbenchTaskInput, tmpl *TaskTemplate) {
+	if input == nil || tmpl == nil {
+		return
+	}
+	cloned := cloneTaskTemplate(tmpl)
+	input.Action = cloned.Type
+	input.TargetPool = append([]string(nil), cloned.Params.Targets...)
+	input.ContentPool = append([]string(nil), cloned.Params.Contents...)
+	input.Payload = socialTaskPayloadFromTemplate(cloned)
+	input.TemplateSnapshot = &SocialTaskTemplateSnapshot{
+		TemplateID:   cloned.ID,
+		TemplateName: cloned.Name,
+		TemplateType: cloned.Type,
+		Params:       cloned.Params,
+	}
+}
+
+func socialTaskPayloadFromTemplate(tmpl *TaskTemplate) *SocialTaskPayload {
+	if tmpl == nil {
+		return nil
+	}
+	switch tmpl.Type {
+	case SocialTaskActionPost:
+		payload := &SocialTaskPayload{
+			Post: &SocialPostPayload{
+				QuotePostURL: tmpl.Params.QuotePostURL,
+				Media:        append([]SocialTaskMediaRef(nil), tmpl.Params.Media...),
+			},
+		}
+		if payload.IsZero() {
+			return nil
+		}
+		return payload
+	case SocialTaskActionUpdateProfile:
+		if tmpl.Params.Profile == nil {
+			return nil
+		}
+		profile := *tmpl.Params.Profile
+		payload := &SocialTaskPayload{Profile: &profile}
+		if payload.IsZero() {
+			return nil
+		}
+		return payload
+	case SocialTaskActionUpdateAvatar:
+		if tmpl.Params.Avatar == nil {
+			return nil
+		}
+		avatar := *tmpl.Params.Avatar
+		payload := &SocialTaskPayload{Avatar: &avatar}
+		if payload.IsZero() {
+			return nil
+		}
+		return payload
+	case SocialTaskActionUpdateBanner:
+		if tmpl.Params.Banner == nil {
+			return nil
+		}
+		banner := *tmpl.Params.Banner
+		payload := &SocialTaskPayload{Banner: &banner}
+		if payload.IsZero() {
+			return nil
+		}
+		return payload
+	default:
+		return nil
+	}
 }
 
 func (s *TaskSettingsService) SaveTemplate(ctx context.Context, userID int64, input *TaskTemplateInput) (*TaskTemplate, error) {
@@ -237,11 +338,14 @@ func (s *TaskSettingsService) PreviewTemplateMedia(ctx context.Context, userID i
 }
 
 func (s *TaskSettingsService) DeleteTemplate(ctx context.Context, userID int64, id string) error {
+	id, err := normalizeTaskTemplateID(id)
+	if err != nil {
+		return err
+	}
 	doc, err := s.load(ctx, userID)
 	if err != nil {
 		return err
 	}
-	id = strings.TrimSpace(id)
 	for index, tmpl := range doc.Templates {
 		if tmpl != nil && tmpl.ID == id {
 			doc.Templates = append(doc.Templates[:index], doc.Templates[index+1:]...)
@@ -268,11 +372,14 @@ func (s *TaskSettingsService) CopyTemplate(ctx context.Context, userID int64, id
 }
 
 func (s *TaskSettingsService) SetDefaultTemplate(ctx context.Context, userID int64, id string) (*TaskTemplate, error) {
+	id, err := normalizeTaskTemplateID(id)
+	if err != nil {
+		return nil, err
+	}
 	doc, err := s.load(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	id = strings.TrimSpace(id)
 	var selected *TaskTemplate
 	for _, tmpl := range doc.Templates {
 		if tmpl != nil && tmpl.ID == id {
@@ -323,7 +430,6 @@ func ValidateTaskTemplate(tmpl *TaskTemplate) TaskTemplateValidationResult {
 		}
 	}
 	switch tmpl.Type {
-	case SocialTaskActionLogin, SocialTaskActionLoginCheck:
 	case SocialTaskActionFollow, SocialTaskActionLike, SocialTaskActionRetweet:
 		if result.Targets == 0 {
 			result.Errors = append(result.Errors, "target list is required")
@@ -346,6 +452,8 @@ func ValidateTaskTemplate(tmpl *TaskTemplate) TaskTemplateValidationResult {
 			result.Errors = append(result.Errors, err.Error())
 		} else if err := validateSocialTaskImageMedia("avatar", params.Avatar); err != nil {
 			result.Errors = append(result.Errors, err.Error())
+		} else if err := validateSocialTaskExactImageDimensions("avatar", params.Avatar, socialTaskAvatarImageWidth, socialTaskAvatarImageHeight); err != nil {
+			result.Errors = append(result.Errors, err.Error())
 		}
 	case SocialTaskActionUpdateBanner:
 		if params.Banner == nil || params.Banner.IsZero() {
@@ -353,6 +461,8 @@ func ValidateTaskTemplate(tmpl *TaskTemplate) TaskTemplateValidationResult {
 		} else if err := validateSocialTaskExecutableInlineMediaSource("banner", params.Banner); err != nil {
 			result.Errors = append(result.Errors, err.Error())
 		} else if err := validateSocialTaskImageMedia("banner", params.Banner); err != nil {
+			result.Errors = append(result.Errors, err.Error())
+		} else if err := validateSocialTaskExactImageDimensions("banner", params.Banner, socialTaskBannerImageWidth, socialTaskBannerImageHeight); err != nil {
 			result.Errors = append(result.Errors, err.Error())
 		}
 	default:
@@ -368,6 +478,10 @@ func ValidateTaskTemplateInput(input *TaskTemplateInput) TaskTemplateValidationR
 		return TaskTemplateValidationResult{Valid: false, Errors: []string{err.Error()}}
 	}
 	return ValidateTaskTemplate(tmpl)
+}
+
+func (s *TaskSettingsService) ValidateTemplateInput(input *TaskTemplateInput) TaskTemplateValidationResult {
+	return ValidateTaskTemplateInput(input)
 }
 
 func normalizeTaskTemplateInput(input *TaskTemplateInput) (*TaskTemplate, error) {
@@ -388,12 +502,18 @@ func normalizeTaskTemplateInput(input *TaskTemplateInput) (*TaskTemplate, error)
 	}, nil
 }
 
+func normalizeTaskTemplateID(raw string) (string, error) {
+	id := strings.TrimSpace(raw)
+	if id == "" {
+		return "", infraerrors.BadRequest("TASK_TEMPLATE_ID_REQUIRED", "task template id is required")
+	}
+	return id, nil
+}
+
 func normalizeTaskTemplateType(raw string) (string, error) {
 	action := strings.TrimSpace(raw)
 	switch action {
-	case SocialTaskActionLogin,
-		SocialTaskActionLoginCheck,
-		SocialTaskActionPost,
+	case SocialTaskActionPost,
 		SocialTaskActionLike,
 		SocialTaskActionRetweet,
 		SocialTaskActionFollow,
@@ -437,8 +557,6 @@ func normalizeTaskTemplateParams(params TaskTemplateParams) TaskTemplateParams {
 func normalizeTaskTemplateParamsForType(templateType string, params TaskTemplateParams) TaskTemplateParams {
 	normalized := normalizeTaskTemplateParams(params)
 	switch templateType {
-	case SocialTaskActionLogin, SocialTaskActionLoginCheck:
-		return TaskTemplateParams{}
 	case SocialTaskActionFollow, SocialTaskActionLike, SocialTaskActionRetweet:
 		return TaskTemplateParams{Targets: normalized.Targets}
 	case SocialTaskActionPost:
@@ -495,7 +613,7 @@ func (s *TaskSettingsService) load(ctx context.Context, userID int64) (*taskTemp
 			tmpl.Type = templateType
 			tmpl.Params = normalizeTaskTemplateParamsForType(templateType, tmpl.Params)
 		} else {
-			tmpl.Params = normalizeTaskTemplateParams(tmpl.Params)
+			continue
 		}
 		clean = append(clean, tmpl)
 	}

@@ -9,10 +9,6 @@ import {
 export interface SubscriptionQuotaPackage {
   key: string
   platform: string
-  /**
-   * @deprecated Use title. Kept for older tests/components during the package model migration.
-   */
-  familyName: string
   title: string
   description: string
   validityDays: number
@@ -21,9 +17,6 @@ export interface SubscriptionQuotaPackage {
   defaultPlan: SubscriptionPlan
   bestValuePlanID: number | null
 }
-
-/** @deprecated Use SubscriptionQuotaPackage. */
-export type SubscriptionPlanFamily = SubscriptionQuotaPackage
 
 export interface SubscriptionQuotaChoice {
   plan: SubscriptionPlan
@@ -52,7 +45,6 @@ export function buildSubscriptionQuotaPackages(plans: SubscriptionPlan[]): Subsc
       return {
         key,
         platform: getPlanPlatform(defaultPlan),
-        familyName: title,
         title,
         description: firstNonEmpty(sortedPlans.map((plan) => plan.description)),
         validityDays: computePlanValidityDays(defaultPlan),
@@ -63,11 +55,6 @@ export function buildSubscriptionQuotaPackages(plans: SubscriptionPlan[]): Subsc
       }
     })
     .sort(compareSubscriptionQuotaPackages)
-}
-
-/** @deprecated Use buildSubscriptionQuotaPackages. */
-export function buildSubscriptionPlanFamilies(plans: SubscriptionPlan[]): SubscriptionPlanFamily[] {
-  return buildSubscriptionQuotaPackages(plans)
 }
 
 export function getSubscriptionQuotaChoices(quotaPackage: SubscriptionQuotaPackage): SubscriptionQuotaChoice[] {
@@ -99,11 +86,6 @@ export function subscriptionQuotaPackageKey(plan: SubscriptionPlan): string {
     Number(plan.validity_days || 0),
     normalizePackageToken(plan.product_name || plan.name),
   ].join(':')
-}
-
-/** @deprecated Use subscriptionQuotaPackageKey. */
-export function subscriptionPlanFamilyKey(plan: SubscriptionPlan): string {
-  return subscriptionQuotaPackageKey(plan)
 }
 
 export function getSubscriptionPlanDiscountPercent(plan: SubscriptionPlan): number {

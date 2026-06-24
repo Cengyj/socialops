@@ -36,26 +36,6 @@ func (_u *SocialAccountUpdate) SetUpdatedAt(v time.Time) *SocialAccountUpdate {
 	return _u
 }
 
-// SetDeletedAt sets the "deleted_at" field.
-func (_u *SocialAccountUpdate) SetDeletedAt(v time.Time) *SocialAccountUpdate {
-	_u.mutation.SetDeletedAt(v)
-	return _u
-}
-
-// SetNillableDeletedAt sets the "deleted_at" field if the given value is not nil.
-func (_u *SocialAccountUpdate) SetNillableDeletedAt(v *time.Time) *SocialAccountUpdate {
-	if v != nil {
-		_u.SetDeletedAt(*v)
-	}
-	return _u
-}
-
-// ClearDeletedAt clears the value of the "deleted_at" field.
-func (_u *SocialAccountUpdate) ClearDeletedAt() *SocialAccountUpdate {
-	_u.mutation.ClearDeletedAt()
-	return _u
-}
-
 // SetName sets the "name" field.
 func (_u *SocialAccountUpdate) SetName(v string) *SocialAccountUpdate {
 	_u.mutation.SetName(v)
@@ -468,26 +448,6 @@ func (_u *SocialAccountUpdate) ClearAssignedUserID() *SocialAccountUpdate {
 	return _u
 }
 
-// SetUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field.
-func (_u *SocialAccountUpdate) SetUserWorkbenchDeletedAt(v time.Time) *SocialAccountUpdate {
-	_u.mutation.SetUserWorkbenchDeletedAt(v)
-	return _u
-}
-
-// SetNillableUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field if the given value is not nil.
-func (_u *SocialAccountUpdate) SetNillableUserWorkbenchDeletedAt(v *time.Time) *SocialAccountUpdate {
-	if v != nil {
-		_u.SetUserWorkbenchDeletedAt(*v)
-	}
-	return _u
-}
-
-// ClearUserWorkbenchDeletedAt clears the value of the "user_workbench_deleted_at" field.
-func (_u *SocialAccountUpdate) ClearUserWorkbenchDeletedAt() *SocialAccountUpdate {
-	_u.mutation.ClearUserWorkbenchDeletedAt()
-	return _u
-}
-
 // SetRemark sets the "remark" field.
 func (_u *SocialAccountUpdate) SetRemark(v string) *SocialAccountUpdate {
 	_u.mutation.SetRemark(v)
@@ -707,12 +667,6 @@ func (_u *SocialAccountUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(socialaccount.FieldUpdatedAt, field.TypeTime, value)
 	}
-	if value, ok := _u.mutation.DeletedAt(); ok {
-		_spec.SetField(socialaccount.FieldDeletedAt, field.TypeTime, value)
-	}
-	if _u.mutation.DeletedAtCleared() {
-		_spec.ClearField(socialaccount.FieldDeletedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(socialaccount.FieldName, field.TypeString, value)
 	}
@@ -821,12 +775,6 @@ func (_u *SocialAccountUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if _u.mutation.DefaultProxySnapshotCleared() {
 		_spec.ClearField(socialaccount.FieldDefaultProxySnapshot, field.TypeString)
 	}
-	if value, ok := _u.mutation.UserWorkbenchDeletedAt(); ok {
-		_spec.SetField(socialaccount.FieldUserWorkbenchDeletedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UserWorkbenchDeletedAtCleared() {
-		_spec.ClearField(socialaccount.FieldUserWorkbenchDeletedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.Remark(); ok {
 		_spec.SetField(socialaccount.FieldRemark, field.TypeString, value)
 	}
@@ -930,26 +878,6 @@ type SocialAccountUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *SocialAccountUpdateOne) SetUpdatedAt(v time.Time) *SocialAccountUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// SetDeletedAt sets the "deleted_at" field.
-func (_u *SocialAccountUpdateOne) SetDeletedAt(v time.Time) *SocialAccountUpdateOne {
-	_u.mutation.SetDeletedAt(v)
-	return _u
-}
-
-// SetNillableDeletedAt sets the "deleted_at" field if the given value is not nil.
-func (_u *SocialAccountUpdateOne) SetNillableDeletedAt(v *time.Time) *SocialAccountUpdateOne {
-	if v != nil {
-		_u.SetDeletedAt(*v)
-	}
-	return _u
-}
-
-// ClearDeletedAt clears the value of the "deleted_at" field.
-func (_u *SocialAccountUpdateOne) ClearDeletedAt() *SocialAccountUpdateOne {
-	_u.mutation.ClearDeletedAt()
 	return _u
 }
 
@@ -1365,26 +1293,6 @@ func (_u *SocialAccountUpdateOne) ClearAssignedUserID() *SocialAccountUpdateOne 
 	return _u
 }
 
-// SetUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field.
-func (_u *SocialAccountUpdateOne) SetUserWorkbenchDeletedAt(v time.Time) *SocialAccountUpdateOne {
-	_u.mutation.SetUserWorkbenchDeletedAt(v)
-	return _u
-}
-
-// SetNillableUserWorkbenchDeletedAt sets the "user_workbench_deleted_at" field if the given value is not nil.
-func (_u *SocialAccountUpdateOne) SetNillableUserWorkbenchDeletedAt(v *time.Time) *SocialAccountUpdateOne {
-	if v != nil {
-		_u.SetUserWorkbenchDeletedAt(*v)
-	}
-	return _u
-}
-
-// ClearUserWorkbenchDeletedAt clears the value of the "user_workbench_deleted_at" field.
-func (_u *SocialAccountUpdateOne) ClearUserWorkbenchDeletedAt() *SocialAccountUpdateOne {
-	_u.mutation.ClearUserWorkbenchDeletedAt()
-	return _u
-}
-
 // SetRemark sets the "remark" field.
 func (_u *SocialAccountUpdateOne) SetRemark(v string) *SocialAccountUpdateOne {
 	_u.mutation.SetRemark(v)
@@ -1634,12 +1542,6 @@ func (_u *SocialAccountUpdateOne) sqlSave(ctx context.Context) (_node *SocialAcc
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(socialaccount.FieldUpdatedAt, field.TypeTime, value)
 	}
-	if value, ok := _u.mutation.DeletedAt(); ok {
-		_spec.SetField(socialaccount.FieldDeletedAt, field.TypeTime, value)
-	}
-	if _u.mutation.DeletedAtCleared() {
-		_spec.ClearField(socialaccount.FieldDeletedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(socialaccount.FieldName, field.TypeString, value)
 	}
@@ -1747,12 +1649,6 @@ func (_u *SocialAccountUpdateOne) sqlSave(ctx context.Context) (_node *SocialAcc
 	}
 	if _u.mutation.DefaultProxySnapshotCleared() {
 		_spec.ClearField(socialaccount.FieldDefaultProxySnapshot, field.TypeString)
-	}
-	if value, ok := _u.mutation.UserWorkbenchDeletedAt(); ok {
-		_spec.SetField(socialaccount.FieldUserWorkbenchDeletedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UserWorkbenchDeletedAtCleared() {
-		_spec.ClearField(socialaccount.FieldUserWorkbenchDeletedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.Remark(); ok {
 		_spec.SetField(socialaccount.FieldRemark, field.TypeString, value)

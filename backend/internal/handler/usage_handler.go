@@ -20,12 +20,41 @@ import (
 )
 
 type UsageHandler struct {
-	usageService  *service.UsageService
-	apiKeyService *service.APIKeyService
+	usageService *service.UsageService
 }
 
-func NewUsageHandler(usageService *service.UsageService, apiKeyService *service.APIKeyService) *UsageHandler {
-	return &UsageHandler{usageService: usageService, apiKeyService: apiKeyService}
+type usageStatsResponse struct {
+	TotalOperations int64   `json:"total_operations"`
+	SuccessCount    int64   `json:"success_count"`
+	FailedCount     int64   `json:"failed_count"`
+	TotalCharged    float64 `json:"total_charged"`
+}
+
+type userDashboardStatsResponse struct {
+	TotalOperations           int64                            `json:"total_operations"`
+	TodayOperations           int64                            `json:"today_operations"`
+	TotalCharged              float64                          `json:"total_charged"`
+	TodayCharged              float64                          `json:"today_charged"`
+	RecentOperationsPerMinute int64                            `json:"recent_operations_per_minute"`
+	ByPlatform                []platformDashboardStatsResponse `json:"by_platform,omitempty"`
+}
+
+type platformDashboardStatsResponse struct {
+	Platform        string  `json:"platform"`
+	TotalOperations int64   `json:"total_operations"`
+	TotalCharged    float64 `json:"total_charged"`
+	TodayOperations int64   `json:"today_operations"`
+	TodayCharged    float64 `json:"today_charged"`
+}
+
+type dashboardTrendPointResponse struct {
+	Date       string  `json:"date"`
+	Operations int64   `json:"operations"`
+	Charged    float64 `json:"charged"`
+}
+
+func NewUsageHandler(usageService *service.UsageService) *UsageHandler {
+	return &UsageHandler{usageService: usageService}
 }
 
 func (h *UsageHandler) List(c *gin.Context) {
@@ -111,7 +140,7 @@ func (h *UsageHandler) PreviewTaskMedia(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	c.Header("Content-Disposition", `inline; filename="`+resolved.FileName+`"`)
+	c.Header("Content-Disposition", inlineMediaContentDisposition(resolved.FileName))
 	c.Data(http.StatusOK, resolved.ContentType, resolved.Body)
 }
 
@@ -131,7 +160,7 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, stats)
+	response.Success(c, usageStatsResponseFromUsageStats(stats))
 }
 
 func (h *UsageHandler) DashboardStats(c *gin.Context) {
@@ -145,7 +174,7 @@ func (h *UsageHandler) DashboardStats(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, stats)
+	response.Success(c, userDashboardStatsResponseFromUsageStats(stats))
 }
 
 func (h *UsageHandler) DashboardTrend(c *gin.Context) {
@@ -160,66 +189,66 @@ func (h *UsageHandler) DashboardTrend(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, trend)
-}
-
-func (h *UsageHandler) DashboardAPIKeysUsage(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
-	if !ok {
-		response.Unauthorized(c, "User not authenticated")
-		return
-	}
-	var req struct {
-		APIKeyIDs []int64 `json:"api_key_ids"`
-	}
-	_ = c.ShouldBindJSON(&req)
-	start, end := parseUsageWindow()
-	items, err := h.usageService.GetUserAPIKeysUsage(c.Request.Context(), subject.UserID, req.APIKeyIDs, start, end)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	response.Success(c, items)
-}
-
-func (h *UsageHandler) GetMyAPIKeyDailyUsage(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
-	if !ok {
-		response.Unauthorized(c, "User not authenticated")
-		return
-	}
-	keyID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "Invalid key ID")
-		return
-	}
-	if h.apiKeyService != nil {
-		key, err := h.apiKeyService.GetByID(c.Request.Context(), keyID)
-		if err != nil {
-			response.ErrorFrom(c, err)
-			return
-		}
-		if key.UserID != subject.UserID {
-			response.Forbidden(c, "Not authorized to access this key")
-			return
-		}
-	}
-	days := 30
-	if raw := c.Query("days"); raw != "" {
-		parsed, err := strconv.Atoi(raw)
-		if err != nil || parsed < 1 || parsed > 90 {
-			response.BadRequest(c, "Invalid days")
-			return
-		}
-		days = parsed
-	}
-	response.Success(c, gin.H{"items": []usagestats.APIKeyDailyUsagePoint{}, "days": days})
+	response.Success(c, dashboardTrendResponseFromUsageTrend(trend))
 }
 
 func parseUsageWindow() (time.Time, time.Time) {
 	end := time.Now().UTC()
 	start := end.AddDate(0, 0, -30)
 	return start, end
+}
+
+func usageStatsResponseFromUsageStats(stats *usagestats.UsageStats) usageStatsResponse {
+	if stats == nil {
+		return usageStatsResponse{}
+	}
+	return usageStatsResponse{
+		TotalOperations: stats.TotalOperations,
+		SuccessCount:    stats.SuccessCount,
+		FailedCount:     stats.FailedCount,
+		TotalCharged:    stats.TotalCharged,
+	}
+}
+
+func userDashboardStatsResponseFromUsageStats(stats *usagestats.UserDashboardStats) userDashboardStatsResponse {
+	if stats == nil {
+		return userDashboardStatsResponse{}
+	}
+	out := userDashboardStatsResponse{
+		TotalOperations:           stats.TotalOperations,
+		TodayOperations:           stats.TodayOperations,
+		TotalCharged:              stats.TotalCharged,
+		TodayCharged:              stats.TodayCharged,
+		RecentOperationsPerMinute: stats.RecentOperationsPerMinute,
+	}
+	if len(stats.ByPlatform) > 0 {
+		out.ByPlatform = make([]platformDashboardStatsResponse, 0, len(stats.ByPlatform))
+		for _, item := range stats.ByPlatform {
+			out.ByPlatform = append(out.ByPlatform, platformDashboardStatsResponse{
+				Platform:        item.Platform,
+				TotalOperations: item.TotalOperations,
+				TotalCharged:    item.TotalCharged,
+				TodayOperations: item.TodayOperations,
+				TodayCharged:    item.TodayCharged,
+			})
+		}
+	}
+	return out
+}
+
+func dashboardTrendResponseFromUsageTrend(trend []usagestats.TrendDataPoint) []dashboardTrendPointResponse {
+	if len(trend) == 0 {
+		return []dashboardTrendPointResponse{}
+	}
+	out := make([]dashboardTrendPointResponse, 0, len(trend))
+	for _, point := range trend {
+		out = append(out, dashboardTrendPointResponse{
+			Date:       point.Date,
+			Operations: point.Operations,
+			Charged:    point.Charged,
+		})
+	}
+	return out
 }
 
 func sanitizeUsageLogResults(items []service.UsageLog) []service.UsageLog {
@@ -409,16 +438,13 @@ func sanitizeUsageProxySnapshot(value *string) *string {
 			}
 			return &sanitized
 		}
-		return sanitizeUsageDetailTextPtr(value)
-	}
-	endpoint, _ := payload["endpoint"].(string)
-	endpoint = strings.TrimSpace(endpoint)
-	if endpoint != "" {
-		if parsed, err := url.Parse(endpoint); err == nil {
-			parsed.User = nil
-			payload["endpoint"] = parsed.String()
+		sanitized := sanitizeUsageProxySnapshotString(raw)
+		if sanitized == "" {
+			return nil
 		}
+		return &sanitized
 	}
+	payload = sanitizeUsageProxySnapshotMap(payload)
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return sanitizeUsageDetailTextPtr(value)
@@ -428,6 +454,99 @@ func sanitizeUsageProxySnapshot(value *string) *string {
 		return nil
 	}
 	return &sanitized
+}
+
+func sanitizeUsageProxySnapshotMap(payload map[string]any) map[string]any {
+	sanitized := make(map[string]any, len(payload))
+	for key, value := range payload {
+		if isSensitiveUsageProxySnapshotKey(key) {
+			continue
+		}
+		sanitizedValue := sanitizeUsageProxySnapshotValue(value)
+		if sanitizedValue == nil {
+			continue
+		}
+		sanitized[key] = sanitizedValue
+	}
+	return sanitized
+}
+
+func sanitizeUsageProxySnapshotValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return sanitizeUsageProxySnapshotMap(typed)
+	case []any:
+		sanitized := make([]any, 0, len(typed))
+		for _, item := range typed {
+			sanitizedItem := sanitizeUsageProxySnapshotValue(item)
+			if sanitizedItem == nil {
+				continue
+			}
+			sanitized = append(sanitized, sanitizedItem)
+		}
+		if len(sanitized) == 0 {
+			return nil
+		}
+		return sanitized
+	case string:
+		return sanitizeUsageProxySnapshotString(typed)
+	default:
+		return value
+	}
+}
+
+func sanitizeUsageProxySnapshotString(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if parsed, err := url.Parse(value); err == nil && parsed.Scheme != "" && parsed.Host != "" {
+		parsed.User = nil
+		value = parsed.String()
+	}
+	if containsSensitiveUsageProxySnapshotText(value) {
+		return ""
+	}
+	return sanitizeUsageDetailText(value)
+}
+
+func containsSensitiveUsageProxySnapshotText(value string) bool {
+	normalized := strings.ToLower(value)
+	return strings.Contains(normalized, "authorization") ||
+		strings.Contains(normalized, "bearer ") ||
+		strings.Contains(normalized, "password=") ||
+		strings.Contains(normalized, "passwd=") ||
+		strings.Contains(normalized, "proxy_password=") ||
+		strings.Contains(normalized, "proxypassword=") ||
+		strings.Contains(normalized, "username=") ||
+		strings.Contains(normalized, "proxy_username=") ||
+		strings.Contains(normalized, "proxyusername=") ||
+		strings.Contains(normalized, "token=") ||
+		strings.Contains(normalized, "access_token=") ||
+		strings.Contains(normalized, "accesstoken=") ||
+		strings.Contains(normalized, "cookie=") ||
+		strings.Contains(normalized, "auth_cookie=") ||
+		strings.Contains(normalized, "authcookie=") ||
+		strings.Contains(normalized, "secret=")
+}
+
+func isSensitiveUsageProxySnapshotKey(key string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	normalized = strings.ReplaceAll(normalized, "-", "_")
+	normalized = strings.ReplaceAll(normalized, " ", "_")
+	switch normalized {
+	case "user", "username", "proxy_user", "proxy_username",
+		"proxyuser", "proxyusername",
+		"pass", "password", "proxy_pass", "proxy_password",
+		"proxypass", "proxypassword",
+		"auth", "authorization", "proxy_auth", "credentials", "credential",
+		"proxyauth",
+		"cookie", "cookies", "auth_cookie", "authcookie",
+		"token", "access_token", "accesstoken", "refresh_token", "refreshtoken", "secret":
+		return true
+	default:
+		return false
+	}
 }
 
 func sanitizeUsageDetailTextSlice(values []string) []string {
@@ -462,10 +581,14 @@ func sanitizeUsageDetailText(value string) string {
 }
 
 func usageLogFiltersFromQuery(c *gin.Context, userID int64) (usagestats.UsageLogFilters, error) {
+	status := normalizeUsageQueryValue(c.Query("status"))
+	operation := normalizeUsageQueryValue(c.Query("operation"))
 	filters := usagestats.UsageLogFilters{
-		UserID: userID,
-		Model:  normalizeUsageQueryValue(firstUsageQuery(c, "operation", "model")),
-		Status: normalizeUsageQueryValue(c.Query("status")),
+		UserID:      userID,
+		Operation:   operation,
+		Platform:    normalizeUsageQueryValue(c.Query("platform")),
+		AccountName: normalizeUsageQueryValue(firstUsageQuery(c, "account", "account_name")),
+		Status:      status,
 	}
 	if start, err := parseUsageQueryTime(c.Query("start_date"), false); err != nil {
 		return filters, err

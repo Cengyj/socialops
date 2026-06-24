@@ -337,7 +337,6 @@ import {
   persistOAuthTokenContext,
   resolveWeChatOAuthStartStrict,
   type OAuthAdoptionDecision,
-  type OAuthTokenResponse,
   type PendingOAuthExchangeResponse
 } from '@/api/auth'
 import {
@@ -347,6 +346,11 @@ import {
 } from '@/utils/oauthAffiliate'
 import { buildSafeAuthErrorMessage } from '@/utils/authError'
 import { recordClientDiagnostic } from '@/utils/clientDiagnostics'
+import {
+  parseOAuthCallbackFragment,
+  readOAuthFragmentLogin,
+  readOAuthFragmentPendingToken
+} from '@/utils/oauthCallbackFragment'
 
 const route = useRoute()
 const router = useRouter()
@@ -374,7 +378,7 @@ const pendingAccountAction = ref<'none' | 'choice' | 'create_account' | 'bind_lo
 const pendingAccountEmail = ref('')
 const bindLoginEmail = ref('')
 const bindLoginPassword = ref('')
-const legacyPendingOAuthToken = ref('')
+const fragmentPendingOAuthToken = ref('')
 const accountActionError = ref('')
 const needsTotpChallenge = ref(false)
 const totpTempToken = ref('')
@@ -440,36 +444,6 @@ function persistPendingAuthSession(redirect?: string) {
 
 function clearPendingAuthSession() {
   authStore.clearPendingAuthSession()
-}
-
-function parseFragmentParams(): URLSearchParams {
-  const raw = typeof window !== 'undefined' ? window.location.hash : ''
-  const hash = raw.startsWith('#') ? raw.slice(1) : raw
-  return new URLSearchParams(hash)
-}
-
-function readLegacyFragmentLogin(params: URLSearchParams): OAuthTokenResponse | null {
-  const accessToken = params.get('access_token')?.trim() || ''
-  if (!accessToken) {
-    return null
-  }
-
-  const completion: OAuthTokenResponse = {
-    access_token: accessToken
-  }
-  const refreshToken = params.get('refresh_token')?.trim() || ''
-  if (refreshToken) {
-    completion.refresh_token = refreshToken
-  }
-  const expiresIn = Number.parseInt(params.get('expires_in')?.trim() || '', 10)
-  if (Number.isFinite(expiresIn) && expiresIn > 0) {
-    completion.expires_in = expiresIn
-  }
-  const tokenType = params.get('token_type')?.trim() || ''
-  if (tokenType) {
-    completion.token_type = tokenType
-  }
-  return completion
 }
 
 function sanitizeRedirectPath(path: string | null | undefined): string {
@@ -872,10 +846,10 @@ async function handleSubmitInvitation() {
   try {
     const affCode = loadOAuthAffiliateCode()
     const decision = currentAdoptionDecision()
-    const completion: PendingWeChatCompletion = legacyPendingOAuthToken.value
+    const completion: PendingWeChatCompletion = fragmentPendingOAuthToken.value
       ? (
           await apiClient.post<PendingWeChatCompletion>('/auth/oauth/wechat/complete-registration', {
-            pending_oauth_token: legacyPendingOAuthToken.value,
+            pending_oauth_token: fragmentPendingOAuthToken.value,
             invitation_code: invitationCode.value.trim(),
             ...oauthAffiliatePayload(affCode),
             ...serializeAdoptionDecision(decision)
@@ -1017,9 +991,9 @@ onMounted(async () => {
     return
   }
 
-  const params = parseFragmentParams()
-  const legacyLogin = readLegacyFragmentLogin(params)
-  const legacyPendingToken = params.get('pending_oauth_token')?.trim() || ''
+  const params = parseOAuthCallbackFragment()
+  const fragmentLogin = readOAuthFragmentLogin(params)
+  const fragmentPendingToken = readOAuthFragmentPendingToken(params)
   const error = params.get('error')
   const errorDesc = params.get('error_description') || params.get('error_message') || ''
   const redirect = sanitizeRedirectPath(
@@ -1027,17 +1001,17 @@ onMounted(async () => {
   )
 
   try {
-    if (legacyLogin) {
-      persistOAuthTokenContext(legacyLogin)
-      await authStore.setToken(legacyLogin.access_token)
+    if (fragmentLogin) {
+      persistOAuthTokenContext(fragmentLogin)
+      await authStore.setToken(fragmentLogin.access_token)
       clearAllAffiliateReferralCodes()
       appStore.showSuccess(t('auth.loginSuccess'))
       await router.replace(redirect)
       return
     }
 
-    if (error === 'invitation_required' && legacyPendingToken) {
-      legacyPendingOAuthToken.value = legacyPendingToken
+    if (error === 'invitation_required' && fragmentPendingToken) {
+      fragmentPendingOAuthToken.value = fragmentPendingToken
       redirectTo.value = redirect
       needsInvitation.value = true
       isProcessing.value = false

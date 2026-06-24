@@ -181,7 +181,7 @@ func TestVerifyOrderByOutTradeNoBackfillsTradeNoFromPaidQuery(t *testing.T) {
 		SetPayAmount(88).
 		SetFeeRate(0).
 		SetRechargeCode("CHECKPAID-UPSTREAM-TRADE-NO").
-		SetOutTradeNo("sub2_checkpaid_trade_no_missing").
+		SetOutTradeNo("socialops_checkpaid_trade_no_missing").
 		SetPaymentType(payment.TypeAlipay).
 		SetPaymentTradeNo("").
 		SetOrderType(payment.OrderTypeBalance).
@@ -225,7 +225,6 @@ func TestVerifyOrderByOutTradeNoBackfillsTradeNoFromPaidQuery(t *testing.T) {
 		nil,
 		nil,
 		client,
-		nil,
 		nil,
 	)
 	registry := payment.NewRegistry()
@@ -282,7 +281,7 @@ func TestVerifyOrderByOutTradeNoRetriesZeroAmountPaidQueryOnce(t *testing.T) {
 		SetPayAmount(88).
 		SetFeeRate(0).
 		SetRechargeCode("CHECKPAID-UPSTREAM-RETRY").
-		SetOutTradeNo("sub2_checkpaid_retry_zero_amount").
+		SetOutTradeNo("socialops_checkpaid_retry_zero_amount").
 		SetPaymentType(payment.TypeAlipay).
 		SetPaymentTradeNo("").
 		SetOrderType(payment.OrderTypeBalance).
@@ -326,7 +325,6 @@ func TestVerifyOrderByOutTradeNoRetriesZeroAmountPaidQueryOnce(t *testing.T) {
 		nil,
 		nil,
 		client,
-		nil,
 		nil,
 	)
 	registry := payment.NewRegistry()
@@ -380,7 +378,7 @@ func TestVerifyOrderByOutTradeNoRejectsPaidQueryWithZeroAmount(t *testing.T) {
 		SetPayAmount(88).
 		SetFeeRate(0).
 		SetRechargeCode("CHECKPAID-ZERO-AMOUNT").
-		SetOutTradeNo("sub2_checkpaid_zero_amount").
+		SetOutTradeNo("socialops_checkpaid_zero_amount").
 		SetPaymentType(payment.TypeAlipay).
 		SetPaymentTradeNo("").
 		SetOrderType(payment.OrderTypeBalance).
@@ -417,7 +415,6 @@ func TestVerifyOrderByOutTradeNoRejectsPaidQueryWithZeroAmount(t *testing.T) {
 		nil,
 		nil,
 		client,
-		nil,
 		nil,
 	)
 	registry := payment.NewRegistry()
@@ -472,7 +469,7 @@ func TestVerifyOrderByOutTradeNoDoesNotCancelUnpaidUpstreamOrder(t *testing.T) {
 		SetPayAmount(88).
 		SetFeeRate(0).
 		SetRechargeCode("CHECKPAID-PENDING").
-		SetOutTradeNo("sub2_checkpaid_pending").
+		SetOutTradeNo("socialops_checkpaid_pending").
 		SetPaymentType(payment.TypeAlipay).
 		SetPaymentTradeNo("").
 		SetOrderType(payment.OrderTypeBalance).
@@ -529,7 +526,7 @@ func TestCancelOrderStillClosesUnpaidUpstreamOrder(t *testing.T) {
 		SetPayAmount(88).
 		SetFeeRate(0).
 		SetRechargeCode("CANCEL-PENDING").
-		SetOutTradeNo("sub2_cancel_pending").
+		SetOutTradeNo("socialops_cancel_pending").
 		SetPaymentType(payment.TypeAlipay).
 		SetPaymentTradeNo("").
 		SetOrderType(payment.OrderTypeBalance).
@@ -586,7 +583,7 @@ func TestReconcilePendingWxpayOrdersBackfillsPaidOrder(t *testing.T) {
 		SetPayAmount(50).
 		SetFeeRate(0).
 		SetRechargeCode("WXPAY-RECONCILE").
-		SetOutTradeNo("sub2_wxpay_reconcile").
+		SetOutTradeNo("socialops_wxpay_reconcile").
 		SetPaymentType(payment.TypeWxpay).
 		SetPaymentTradeNo("").
 		SetOrderType(payment.OrderTypeBalance).
@@ -630,7 +627,6 @@ func TestReconcilePendingWxpayOrdersBackfillsPaidOrder(t *testing.T) {
 		nil,
 		nil,
 		client,
-		nil,
 		nil,
 	)
 	registry := payment.NewRegistry()
@@ -688,7 +684,7 @@ func TestVerifyOrderByOutTradeNoUsesOutTradeNoWhenPaymentTradeNoAlreadyExistsFor
 		SetPayAmount(88).
 		SetFeeRate(0).
 		SetRechargeCode("CHECKPAID-EXISTING-TRADE-NO").
-		SetOutTradeNo("sub2_checkpaid_use_out_trade_no").
+		SetOutTradeNo("socialops_checkpaid_use_out_trade_no").
 		SetPaymentType(payment.TypeAlipay).
 		SetPaymentTradeNo("upstream-trade-existing").
 		SetOrderType(payment.OrderTypeBalance).
@@ -732,7 +728,6 @@ func TestVerifyOrderByOutTradeNoUsesOutTradeNoWhenPaymentTradeNoAlreadyExistsFor
 		nil,
 		nil,
 		client,
-		nil,
 		nil,
 	)
 	registry := payment.NewRegistry()
@@ -786,12 +781,12 @@ func TestPaymentOrderQueryReferenceUsesOutTradeNoForOfficialProviders(t *testing
 
 	order := &dbent.PaymentOrder{
 		PaymentType:    payment.TypeWxpay,
-		OutTradeNo:     "sub2_out_trade_no",
+		OutTradeNo:     "socialops_out_trade_no",
 		PaymentTradeNo: "wx-transaction-id",
 	}
 
-	require.Equal(t, "sub2_out_trade_no", paymentOrderQueryReference(order, &paymentOrderLifecycleQueryProvider{}))
-	require.Equal(t, "sub2_out_trade_no", paymentOrderQueryReference(order, paymentFulfillmentTestProvider{
+	require.Equal(t, "socialops_out_trade_no", paymentOrderQueryReference(order, &paymentOrderLifecycleQueryProvider{}))
+	require.Equal(t, "socialops_out_trade_no", paymentOrderQueryReference(order, paymentFulfillmentTestProvider{
 		key: payment.TypeWxpay,
 	}))
 }

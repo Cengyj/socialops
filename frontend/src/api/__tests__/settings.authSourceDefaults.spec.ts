@@ -64,7 +64,7 @@ describe("admin settings auth source defaults helpers", () => {
     expect(state.wechat.grant_on_signup).toBe(false);
   });
 
-  it("keeps legacy group-only default subscriptions compatible", () => {
+  it("keeps group-only default subscriptions compatible", () => {
     const state = buildAuthSourceDefaultsState({
       auth_source_default_email_subscriptions: [
         { group_id: 1, validity_days: 30 },

@@ -453,8 +453,6 @@ func socialTaskMediaFileExtensionFromContentType(contentType string) string {
 		return ".gif"
 	case "image/webp":
 		return ".webp"
-	case "video/mp4":
-		return ".mp4"
 	default:
 		return ""
 	}

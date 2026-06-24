@@ -152,6 +152,25 @@ func TestNotificationEmailAdditionalEventsAreListedAndPreviewable(t *testing.T) 
 	}
 }
 
+func TestNotificationEmailEventsDoNotExposeRemovedTemplateEvents(t *testing.T) {
+	svc := NewNotificationEmailService(newNotificationEmailMemorySettingRepo(), nil)
+	events := make(map[string]struct{})
+	for _, info := range svc.ListEventInfos() {
+		events[info.Event] = struct{}{}
+	}
+
+	removedEvents := []string{
+		"account.quota_alert",
+		"content_moderation.violation_notice",
+		"content_moderation.account_disabled",
+		"ops.alert",
+		"ops.scheduled_report",
+	}
+	for _, event := range removedEvents {
+		require.NotContains(t, events, event)
+	}
+}
+
 func TestNotificationEmailFallbackClassification(t *testing.T) {
 	templateErr := notificationEmailTemplateErr(errors.New("bad template"))
 	configErr := notificationEmailConfigErr(errors.New("missing email service"))
@@ -241,17 +260,17 @@ func TestNotificationEmailDeliveryKeyUsesShortStableHash(t *testing.T) {
 		"3d",
 	))
 
-	legacyKey := legacyNotificationEmailDeliveryKey(
+	historicalKey := historicalNotificationEmailDeliveryKey(
 		NotificationEmailEventSubscriptionExpiryReminder,
 		"user_subscription",
 		"1234567890",
 		"user@example.com",
 		"7d",
 	)
-	require.Greater(t, len(legacyKey), 100)
+	require.Greater(t, len(historicalKey), 100)
 }
 
-func TestNotificationEmailPreferenceKeyUsesShortStableHashAndReadsLegacyKey(t *testing.T) {
+func TestNotificationEmailPreferenceKeyUsesShortStableHashAndReadsHistoricalKey(t *testing.T) {
 	ctx := context.Background()
 	repo := newNotificationEmailMemorySettingRepo()
 	svc := NewNotificationEmailService(repo, nil)
@@ -262,9 +281,9 @@ func TestNotificationEmailPreferenceKeyUsesShortStableHashAndReadsLegacyKey(t *t
 	require.True(t, strings.HasPrefix(key, notificationEmailPreferenceKeyPrefix+"v2:"))
 	require.Equal(t, key, notificationEmailPreferenceKey(NotificationEmailEventSubscriptionExpiryReminder, "user@example.com"))
 
-	legacyKey := legacyNotificationEmailPreferenceKey(NotificationEmailEventSubscriptionExpiryReminder, "user@example.com")
-	require.Greater(t, len(legacyKey), 100)
-	require.NoError(t, repo.Set(ctx, legacyKey, "unsubscribed"))
+	historicalKey := historicalNotificationEmailPreferenceKey(NotificationEmailEventSubscriptionExpiryReminder, "user@example.com")
+	require.Greater(t, len(historicalKey), 100)
+	require.NoError(t, repo.Set(ctx, historicalKey, "unsubscribed"))
 
 	unsubscribed, err := svc.IsUnsubscribed(ctx, "User@Example.com", NotificationEmailEventSubscriptionExpiryReminder)
 	require.NoError(t, err)
@@ -306,7 +325,7 @@ func TestNotificationEmailSendDeduplicatesSubscriptionExpiryReminder(t *testing.
 	require.Equal(t, int64(1), smtpServer.messageCount())
 }
 
-func TestNotificationEmailSendRespectsLegacyDeliveryKey(t *testing.T) {
+func TestNotificationEmailSendRespectsHistoricalDeliveryKey(t *testing.T) {
 	ctx := context.Background()
 	repo := newNotificationEmailMemorySettingRepo()
 	svc := NewNotificationEmailService(repo, nil)
@@ -317,8 +336,8 @@ func TestNotificationEmailSendRespectsLegacyDeliveryKey(t *testing.T) {
 		SourceID:       "1234567890",
 		ReminderKey:    "7d",
 	}
-	legacyKey := legacyNotificationEmailDeliveryKey(input.Event, input.SourceType, input.SourceID, input.RecipientEmail, input.ReminderKey)
-	require.NoError(t, repo.Set(ctx, legacyKey, "sent"))
+	historicalKey := historicalNotificationEmailDeliveryKey(input.Event, input.SourceType, input.SourceID, input.RecipientEmail, input.ReminderKey)
+	require.NoError(t, repo.Set(ctx, historicalKey, "sent"))
 
 	require.NoError(t, svc.Send(ctx, input))
 }

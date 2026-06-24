@@ -79,7 +79,7 @@ func InitEnt(cfg *config.Config) (*ent.Client, *sql.DB, error) {
 		return nil, nil, fmt.Errorf("validate config after secret bootstrap: %w", err)
 	}
 
-	// Simple mode group seeding removed (Group entity deleted in Phase 2D)
+	// Simple mode keeps the bootstrap admin ready for current task execution limits.
 	if cfg.RunMode == config.RunModeSimple {
 		seedCtx, seedCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer seedCancel()

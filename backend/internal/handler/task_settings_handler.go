@@ -19,12 +19,15 @@ func NewTaskSettingsHandler(svc *service.TaskSettingsService) *TaskSettingsHandl
 }
 
 func (h *TaskSettingsHandler) ListTemplates(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := taskSettingsAuthSubject(c)
 	if !ok {
-		response.Unauthorized(c, "unauthorized")
 		return
 	}
-	items, err := h.svc.ListTemplates(c.Request.Context(), subject.UserID)
+	svc, ok := h.taskSettingsService(c)
+	if !ok {
+		return
+	}
+	items, err := svc.ListTemplates(c.Request.Context(), subject.UserID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -33,17 +36,20 @@ func (h *TaskSettingsHandler) ListTemplates(c *gin.Context) {
 }
 
 func (h *TaskSettingsHandler) SaveTemplate(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := taskSettingsAuthSubject(c)
 	if !ok {
-		response.Unauthorized(c, "unauthorized")
 		return
 	}
 	var req service.TaskTemplateInput
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
+		response.ErrorFrom(c, taskTemplateInputRequiredError())
 		return
 	}
-	tmpl, err := h.svc.SaveTemplate(c.Request.Context(), subject.UserID, &req)
+	svc, ok := h.taskSettingsService(c)
+	if !ok {
+		return
+	}
+	tmpl, err := svc.SaveTemplate(c.Request.Context(), subject.UserID, &req)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -52,12 +58,15 @@ func (h *TaskSettingsHandler) SaveTemplate(c *gin.Context) {
 }
 
 func (h *TaskSettingsHandler) DeleteTemplate(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := taskSettingsAuthSubject(c)
 	if !ok {
-		response.Unauthorized(c, "unauthorized")
 		return
 	}
-	if err := h.svc.DeleteTemplate(c.Request.Context(), subject.UserID, c.Param("id")); err != nil {
+	svc, ok := h.taskSettingsService(c)
+	if !ok {
+		return
+	}
+	if err := svc.DeleteTemplate(c.Request.Context(), subject.UserID, c.Param("id")); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
@@ -65,12 +74,15 @@ func (h *TaskSettingsHandler) DeleteTemplate(c *gin.Context) {
 }
 
 func (h *TaskSettingsHandler) CopyTemplate(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := taskSettingsAuthSubject(c)
 	if !ok {
-		response.Unauthorized(c, "unauthorized")
 		return
 	}
-	tmpl, err := h.svc.CopyTemplate(c.Request.Context(), subject.UserID, c.Param("id"))
+	svc, ok := h.taskSettingsService(c)
+	if !ok {
+		return
+	}
+	tmpl, err := svc.CopyTemplate(c.Request.Context(), subject.UserID, c.Param("id"))
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -79,12 +91,15 @@ func (h *TaskSettingsHandler) CopyTemplate(c *gin.Context) {
 }
 
 func (h *TaskSettingsHandler) SetDefaultTemplate(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := taskSettingsAuthSubject(c)
 	if !ok {
-		response.Unauthorized(c, "unauthorized")
 		return
 	}
-	tmpl, err := h.svc.SetDefaultTemplate(c.Request.Context(), subject.UserID, c.Param("id"))
+	svc, ok := h.taskSettingsService(c)
+	if !ok {
+		return
+	}
+	tmpl, err := svc.SetDefaultTemplate(c.Request.Context(), subject.UserID, c.Param("id"))
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -93,33 +108,60 @@ func (h *TaskSettingsHandler) SetDefaultTemplate(c *gin.Context) {
 }
 
 func (h *TaskSettingsHandler) ValidateTemplate(c *gin.Context) {
-	if _, ok := middleware2.GetAuthSubjectFromContext(c); !ok {
-		response.Unauthorized(c, "unauthorized")
+	if _, ok := taskSettingsAuthSubject(c); !ok {
 		return
 	}
 	var req service.TaskTemplateInput
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
+		response.ErrorFrom(c, taskTemplateInputRequiredError())
 		return
 	}
-	response.Success(c, service.ValidateTaskTemplateInput(&req))
+	svc, ok := h.taskSettingsService(c)
+	if !ok {
+		return
+	}
+	response.Success(c, svc.ValidateTemplateInput(&req))
 }
 
 func (h *TaskSettingsHandler) PreviewTemplateMedia(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	subject, ok := taskSettingsAuthSubject(c)
 	if !ok {
-		response.Unauthorized(c, "unauthorized")
 		return
 	}
-	if h.svc == nil {
-		response.ErrorFrom(c, infraerrors.ServiceUnavailable("TASK_TEMPLATE_SERVICE_UNAVAILABLE", "task template service is unavailable"))
+	svc, ok := h.taskSettingsService(c)
+	if !ok {
 		return
 	}
-	resolved, err := h.svc.PreviewTemplateMedia(c.Request.Context(), subject.UserID, c.Query("storage_key"))
+	resolved, err := svc.PreviewTemplateMedia(c.Request.Context(), subject.UserID, c.Query("storage_key"))
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
-	c.Header("Content-Disposition", `inline; filename="`+resolved.FileName+`"`)
+	c.Header("Content-Disposition", inlineMediaContentDisposition(resolved.FileName))
 	c.Data(http.StatusOK, resolved.ContentType, resolved.Body)
+}
+
+func taskSettingsAuthSubject(c *gin.Context) (middleware2.AuthSubject, bool) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "unauthorized")
+		return middleware2.AuthSubject{}, false
+	}
+	return subject, true
+}
+
+func (h *TaskSettingsHandler) taskSettingsService(c *gin.Context) (*service.TaskSettingsService, bool) {
+	if h == nil || h.svc == nil {
+		response.ErrorFrom(c, taskTemplateServiceUnavailableError())
+		return nil, false
+	}
+	return h.svc, true
+}
+
+func taskTemplateServiceUnavailableError() error {
+	return infraerrors.ServiceUnavailable("TASK_TEMPLATE_SERVICE_UNAVAILABLE", "task template service is unavailable")
+}
+
+func taskTemplateInputRequiredError() error {
+	return infraerrors.BadRequest("TASK_TEMPLATE_INPUT_REQUIRED", "task template input is required")
 }

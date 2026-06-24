@@ -11,12 +11,10 @@ import settingsAPI from './settings'
 import systemAPI from './system'
 import subscriptionsAPI from './subscriptions'
 import userAttributesAPI from './userAttributes'
-import dataManagementAPI from './dataManagement'
 import backupAPI from './backup'
 import adminPaymentAPI from './payment'
 import affiliatesAPI from './affiliates'
 import { accountWorkbenchAdminAPI } from '../accountWorkbench'
-import adminRiskControlAPI from './riskControl'
 import dashboardAPI from './dashboard'
 import groupsAPI from './groups'
 import totalAccountsAPI from './totalAccounts'
@@ -33,12 +31,10 @@ export const adminAPI = {
   system: systemAPI,
   subscriptions: subscriptionsAPI,
   userAttributes: userAttributesAPI,
-  dataManagement: dataManagementAPI,
   backup: backupAPI,
   payment: adminPaymentAPI,
   affiliates: affiliatesAPI,
   accountWorkbench: accountWorkbenchAdminAPI,
-  riskControl: adminRiskControlAPI,
   dashboard: dashboardAPI,
   groups: groupsAPI,
   totalAccounts: totalAccountsAPI,
@@ -53,12 +49,10 @@ export {
   systemAPI,
   subscriptionsAPI,
   userAttributesAPI,
-  dataManagementAPI,
   backupAPI,
   adminPaymentAPI,
   affiliatesAPI,
   accountWorkbenchAdminAPI,
-  adminRiskControlAPI,
   dashboardAPI,
   groupsAPI,
   totalAccountsAPI,
@@ -68,5 +62,4 @@ export default adminAPI
 
 // Re-export types used by components
 export type { BalanceHistoryItem } from './users'
-export type { BackupAgentHealth, DataManagementConfig } from './dataManagement'
 export type { AdminSocialTaskLog, SocialAccount, SocialAccountStats } from '../accountWorkbench'

@@ -42,6 +42,7 @@ describe('subscriptionPlanCatalog', () => {
     const twitterPackage = quotaPackages.find((quotaPackage) => quotaPackage.platform === 'x_twitter')
     expect(twitterPackage?.plans.map((item) => item.id)).toEqual([1, 2])
     expect(twitterPackage?.defaultPlan.id).toBe(1)
+    expect(twitterPackage).not.toHaveProperty('familyName')
   })
 
   it('strips quota text from names when no explicit product name exists', () => {

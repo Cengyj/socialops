@@ -10,11 +10,11 @@ export default {
     "getStarted": "Get Started",
     "goToDashboard": "Go to Dashboard",
     "heroSubtitle": "Website account pool and social execution billing",
-    "heroDescription": "Use assigned pool accounts, bind stable IP resources, and run batches of follows, messages, posts, likes, and login checks from one workspace.",
+    "heroDescription": "Use assigned pool accounts, bind stable IP resources, and run batches of follows, posts, likes, and login checks from one workspace.",
     "tags": {
-      "subscriptionToApi": "Subscription Access",
-      "stickySession": "Account Assignment",
-      "realtimeBilling": "Task Records"
+      "subscriptionAccess": "Subscription Access",
+      "accountAssignment": "Account Assignment",
+      "taskRecords": "Task Records"
     },
     "painPoints": {
       "title": "Sound Familiar?",
@@ -25,7 +25,7 @@ export default {
         },
         "complex": {
           "title": "Manual Batch Work",
-          "desc": "Following, messaging, posting, and checking accounts one by one wastes time"
+          "desc": "Following, posting, liking, and checking accounts one by one wastes time"
         },
         "unstable": {
           "title": "Risk Control Pressure",
@@ -43,56 +43,11 @@ export default {
     },
     "features": {
       "accountPool": "Assigned Account Pool",
-      "accountPoolDesc": "Administrators import, register, assign, and reclaim social accounts while users work only with their allocated pool.",
+      "accountPoolDesc": "Administrators import, assign, reclaim, and clean up social accounts while users work only with their allocated pool.",
       "multiAccount": "Task Distribution",
       "multiAccountDesc": "Submit social actions in batches and keep account status, task state, and execution history visible.",
       "balanceQuota": "Subscription Control",
       "balanceQuotaDesc": "Plans, redeem codes, payments, and usage records keep access and fulfillment predictable."
-    },
-    "comparison": {
-      "title": "Why Choose Us?",
-      "headers": {
-        "feature": "Comparison",
-        "official": "Official Subscriptions",
-        "us": "Our Platform"
-      },
-      "items": {
-        "pricing": {
-          "feature": "Pricing",
-          "official": "Fixed monthly fee, pay even if unused",
-          "us": "Pay only for what you use"
-        },
-        "models": {
-          "feature": "Account Operations",
-          "official": "Manual switching between accounts",
-          "us": "Assigned accounts and task history in one place"
-        },
-        "management": {
-          "feature": "Account Management",
-          "official": "Spreadsheets and manual handoff",
-          "us": "Centralized account pool and assignment"
-        },
-        "stability": {
-          "feature": "Stability",
-          "official": "Unclear account/IP health",
-          "us": "Status, IP binding, and risk-control workflow"
-        },
-        "control": {
-          "feature": "Usage Control",
-          "official": "Not available",
-          "us": "Quotas & detailed analytics"
-        }
-      }
-    },
-    "providers": {
-      "title": "Supported Social Platforms",
-      "description": "One workflow, multiple social surfaces",
-      "supported": "Supported",
-      "soon": "Soon",
-      "xTwitter": "X / Twitter",
-      "instagram": "Instagram",
-      "tiktok": "TikTok",
-      "more": "More"
     },
     "cta": {
       "title": "Ready to Get Started?",
@@ -214,6 +169,7 @@ export default {
     "balance": "Balance",
     "available": "Available",
     "copiedToClipboard": "Copied to clipboard",
+    "copyToClipboard": "Copy to clipboard",
     "copied": "Copied",
     "copyFailed": "Failed to copy",
     "verifying": "Verifying...",
@@ -221,7 +177,7 @@ export default {
     "imageUpload": {
       "fileTooLarge": "File too large (current {size}, max {max})",
       "invalidImageType": "Please choose an image file",
-      "invalidMediaType": "Please choose a supported media file",
+      "invalidMediaType": "Please choose an image file",
       "readFailed": "Failed to read the selected file"
     },
     "sending": "Sending...",
@@ -305,12 +261,9 @@ export default {
     "paymentDashboard": "Payment Dashboard",
     "paymentConfig": "Payment Config",
     "paymentPlans": "Plans",
-    "riskControl": "Risk Control",
-    "dataOperations": "Operations & Data",
-    "dataManagement": "Data Management",
-    "backup": "Backups",
     "accountWorkbenchHome": "Workbench",
-    "accountWorkbench": "Account Workbench"
+    "accountWorkbench": "Account Workbench",
+    "globalProxies": "Global Proxy Pool"
   },
   "auth": {
     "welcomeBack": "Welcome Back",
@@ -322,7 +275,6 @@ export default {
     "signUp": "Sign up",
     "processing": "Processing...",
     "continue": "Continue",
-    "rememberMe": "Remember me",
     "dontHaveAccount": "Don't have an account?",
     "alreadyHaveAccount": "Already have an account?",
     "registrationDisabled": "Registration is currently disabled. Please contact the administrator.",
@@ -558,7 +510,7 @@ export default {
     "platformDistribution": "Platform distribution",
     "platformDistributionDescription": "Uses task records first, then assigned accounts when no tasks exist.",
     "platformDistributionEmpty": "No platform data",
-    "recentUsageDescription": "Shows recent operations, statuses, quantity, and cost.",
+    "recentUsageDescription": "Shows recent platforms, operations, results, and cost.",
     "allRecords": "All records",
     "quickEntries": "Quick entries",
     "quickEntriesDescription": "Go to common account, log, and billing pages.",
@@ -568,7 +520,7 @@ export default {
     "executableAccounts": "Executable accounts",
     "totalPoolAccounts": "Assigned from the total account pool",
     "totalRequests": "Total tasks",
-    "recentRpm": "Last 5 min {count}/min",
+    "recentOperationsPerMinute": "Last 5 min {count}/min",
     "totalCharged": "Total charged",
     "successOnlyBilling": "Only successful tasks are charged",
     "recentSuccessRate": "Recent success rate",
@@ -595,45 +547,24 @@ export default {
     },
     "welcomeMessage": "Welcome back! Here's an overview of your account.",
     "balance": "Balance",
-    "apiKeys": "Access Keys",
     "todayRequests": "Tasks Today",
     "todayCost": "Today Cost",
-    "todayTokens": "Actions Today",
-    "totalTokens": "Total Actions",
-    "cacheToday": "Cache (Today)",
-    "performance": "Performance",
-    "avgResponse": "Avg Response",
-    "averageTime": "Average time",
     "timeRange": "Time Range",
     "granularity": "Granularity",
     "day": "Day",
     "hour": "Hour",
-    "modelDistribution": "Action Distribution",
-    "groupDistribution": "Group Usage Distribution",
     "platformBreakdown": "Per-platform Breakdown",
     "platformBreakdownEmpty": "No platform usage yet",
     "platformCount": "{count} platforms",
     "platformOther": "Other",
-    "tokenUsageTrend": "Action Usage Trend",
     "noDataAvailable": "No data available",
-    "model": "Action",
-    "group": "Group",
-    "noGroup": "No Group",
     "requests": "Requests",
-    "tokens": "Actions",
     "actual": "Actual",
-    "standard": "Standard",
-    "input": "Input",
-    "output": "Output",
-    "cache": "Cache",
     "recentUsage": "Recent Usage",
     "last7Days": "Last 7 days",
     "noUsageRecords": "No usage records",
-    "startUsingApi": "Submit SocialOps tasks to see your usage history here.",
     "viewAllUsage": "View all usage",
     "quickActions": "Quick Actions",
-    "createApiKey": "Create API Key",
-    "generateNewKey": "Generate a new API key",
     "viewUsage": "View Usage",
     "checkDetailedLogs": "Check detailed usage logs",
     "redeemCode": "Redeem Code",
@@ -641,108 +572,6 @@ export default {
   },
   "groups": {
     "subscription": "Sub"
-  },
-  "keys": {
-    "title": "API Keys",
-    "description": "Manage your API keys and access tokens",
-    "searchPlaceholder": "Search name or key...",
-    "allGroups": "All Groups",
-    "allStatus": "All Status",
-    "createKey": "Create API Key",
-    "editKey": "Edit API Key",
-    "deleteKey": "Delete API Key",
-    "deleteConfirmMessage": "Are you sure you want to delete '{name}'? This action cannot be undone.",
-    "apiKey": "API Key",
-    "group": "Group",
-    "noGroup": "No group",
-    "searchGroup": "Search groups...",
-    "noGroupFound": "No groups found",
-    "created": "Created",
-    "copyToClipboard": "Copy to clipboard",
-    "copied": "Copied!",
-    "enable": "Enable",
-    "disable": "Disable",
-    "nameLabel": "Name",
-    "namePlaceholder": "My API Key",
-    "groupLabel": "Group",
-    "selectGroup": "Select a group",
-    "statusLabel": "Status",
-    "selectStatus": "Select status",
-    "saving": "Saving...",
-    "noKeysYet": "No API keys yet",
-    "createFirstKey": "Create your first API key to get started with the API.",
-    "keyCreatedSuccess": "API key created successfully",
-    "keyUpdatedSuccess": "API key updated successfully",
-    "keyDeletedSuccess": "API key deleted successfully",
-    "keyEnabledSuccess": "API key enabled successfully",
-    "keyDisabledSuccess": "API key disabled successfully",
-    "failedToLoad": "Failed to load API keys",
-    "failedToSave": "Failed to save API key",
-    "failedToDelete": "Failed to delete API key",
-    "failedToUpdateStatus": "Failed to update API key status",
-    "clickToChangeGroup": "Click to change group",
-    "groupChangedSuccess": "Group changed successfully",
-    "failedToChangeGroup": "Failed to change group",
-    "groupRequired": "Please select a group",
-    "usage": "Usage",
-    "today": "Today",
-    "total": "Last 30d",
-    "quota": "Quota",
-    "lastUsedAt": "Last Used",
-    "customKeyLabel": "Custom Key",
-    "customKeyPlaceholder": "Enter your custom key (min 16 chars)",
-    "customKeyHint": "Only letters, numbers, underscores and hyphens allowed. Minimum 16 characters.",
-    "customKeyTooShort": "Custom key must be at least 16 characters",
-    "customKeyInvalidChars": "Custom key can only contain letters, numbers, underscores, and hyphens",
-    "customKeyRequired": "Please enter a custom key",
-    "ipRestriction": "IP Restriction",
-    "ipWhitelist": "IP Whitelist",
-    "ipWhitelistPlaceholder": "192.168.1.100\n10.0.0.0/8",
-    "ipWhitelistHint": "One IP or CIDR per line. Only these IPs can use this key when set.",
-    "ipBlacklist": "IP Blacklist",
-    "ipBlacklistPlaceholder": "1.2.3.4\n5.6.0.0/16",
-    "ipBlacklistHint": "One IP or CIDR per line. These IPs will be blocked from using this key.",
-    "ipRestrictionEnabled": "IP restriction enabled",
-    "quotaLimit": "Quota Limit",
-    "quotaAmount": "Quota Amount (USD)",
-    "quotaAmountPlaceholder": "Enter quota limit in USD",
-    "quotaAmountHint": "Set the maximum amount this key can spend. 0 = unlimited.",
-    "quotaUsed": "Quota Used",
-    "reset": "Reset",
-    "resetQuotaUsed": "Reset used quota to 0",
-    "resetQuotaTitle": "Confirm Reset Quota",
-    "resetQuotaConfirmMessage": "Are you sure you want to reset the used quota (${used}) for key \"{name}\" to 0? This action cannot be undone.",
-    "quotaResetSuccess": "Quota reset successfully",
-    "failedToResetQuota": "Failed to reset quota",
-    "rateLimitColumn": "Rate Limit",
-    "rateLimitSection": "Rate Limit",
-    "resetUsage": "Reset",
-    "rateLimit5h": "5-Hour Limit (USD)",
-    "rateLimit1d": "Daily Limit (USD)",
-    "rateLimit7d": "7-Day Limit (USD)",
-    "rateLimitHint": "Set the maximum spending for this key within each time window. 0 = unlimited.",
-    "rateLimitUsage": "Rate Limit Usage",
-    "resetRateLimitUsage": "Reset Rate Limit Usage",
-    "resetRateLimitTitle": "Confirm Reset Rate Limit",
-    "resetRateLimitConfirmMessage": "Are you sure you want to reset the rate limit usage for key \"{name}\"? All time window usage will be reset to zero. This action cannot be undone.",
-    "rateLimitResetSuccess": "Rate limit usage reset successfully",
-    "failedToResetRateLimit": "Failed to reset rate limit usage",
-    "resetNow": "Resetting soon",
-    "expiration": "Expiration",
-    "expiresInDays": "{days} days",
-    "extendDays": "+{days} days",
-    "customDate": "Custom",
-    "expirationDate": "Expiration Date",
-    "expirationDateHint": "Select when this API key should expire.",
-    "currentExpiration": "Current expiration",
-    "expiresAt": "Expires",
-    "noExpiration": "Never",
-    "status": {
-      "active": "Active",
-      "inactive": "Inactive",
-      "quota_exhausted": "Quota Exhausted",
-      "expired": "Expired"
-    }
   },
   "usage": {
     "title": "Usage Records",
@@ -752,6 +581,7 @@ export default {
       "status": "Status filter",
       "allOperations": "All operations",
       "allStatuses": "All statuses",
+      "allPlatforms": "All platforms",
       "clear": "Clear filters"
     },
     "records": "Operation Records",
@@ -759,18 +589,21 @@ export default {
     "platform": "Platform",
     "account": "Account",
     "status": "Status",
+    "timeRange": "Time Range",
     "quantity": "Quantity",
-    "chargeStatus": "Charge Status",
-    "serviceTier": "Service tier",
-    "serviceTierPriority": "Fast",
-    "serviceTierFlex": "Flex",
-    "serviceTierStandard": "Standard",
+    "loading": "Loading usage records...",
     "empty": "No SocialOps operations yet.",
+    "emptyFiltered": "No usage records match the current filters.",
     "totalOperations": "Total Operations",
-    "totalQuantity": "Total Quantity",
     "successCount": "Successful",
     "failedCount": "Failed",
-    "totalCost": "Total Cost",
+    "successRate": "Success Rate",
+    "totalCharged": "Total Charged",
+    "inSelectedRange": "In selected range",
+    "successOnlyBilling": "Charged successful tasks",
+    "exportCsv": "Export CSV",
+    "exportFailed": "Failed to export usage records",
+    "exportEmpty": "No usage records match the current filters.",
     "exportingProgress": "Exporting data...",
     "exportedCount": "Exported {current}/{total} records",
     "estimatedTime": "Estimated time remaining: {time}",
@@ -778,6 +611,7 @@ export default {
     "exporting": "Exporting...",
     "cost": "Cost",
     "result": "Result",
+    "summary": "Summary",
     "detailTitle": "Task Detail",
     "detailDescription": "Review the submitted configuration and execution summary.",
     "detailEmpty": "No structured detail is available for this record.",
@@ -785,12 +619,14 @@ export default {
     "detailLoadFailed": "Failed to load task detail",
     "detailSections": {
       "summary": "Summary",
+      "proxy": "Execution Proxy",
       "payload": "Execution Payload",
       "template": "Template Snapshot",
       "profile": "Profile Fields",
       "media": "Media",
       "targets": "Targets",
-      "contents": "Contents"
+      "contents": "Contents",
+      "technical": "Technical Info"
     },
     "detailLabels": {
       "operation": "Operation",
@@ -842,20 +678,25 @@ export default {
     "taskResults": {
       "completedHidden": "Task completed; details are hidden",
       "failedNoCharge": "Task failed; not charged",
+      "executionTimeout": "Task timed out; not charged",
       "queueBusy": "Task queue is busy; not charged",
       "platformUnavailable": "This platform action is unavailable; not charged",
       "billingAnomaly": "Task completed, but billing confirmation failed. Please contact an administrator",
       "authUnavailable": "Account authentication is unavailable; not charged",
+      "accountNotFound": "Account does not exist; not charged",
       "proxyUnavailable": "Execution proxy unavailable; not charged",
+      "platformNetworkFailed": "Platform network request failed; not charged",
+      "passwordInvalid": "Password is incorrect; not charged",
+      "loginDependencyNotConfigured": "Login dependency is not configured; not charged",
       "unsupportedAction": "This action is not supported; not charged",
       "invalidParams": "Task parameters are incomplete; not charged",
       "avatarSizeInvalid": "Avatar image must be 400 × 400; not charged",
       "bannerSizeInvalid": "Banner image must be 1500 × 500; not charged",
       "mediaAssetUnavailable": "Task media asset is unavailable; not charged",
       "mediaUploadFailed": "Platform media upload failed; not charged",
-      "mediaSourceUnsupported": "Media references are not available yet; not charged",
-      "postVideoUnavailable": "Video post media is not available yet; not charged",
-      "postMediaTypeUnsupported": "Post media type is not supported yet; not charged",
+      "mediaSourceUnsupported": "Media references are not available for execution; not charged",
+      "postVideoUnavailable": "Video post media is not supported for execution; not charged",
+      "postMediaTypeUnsupported": "Post media type is not supported for execution; not charged",
       "targetMissing": "Execution target does not exist; not charged",
       "challengeRequired": "Account requires additional verification; not charged",
       "accountLimited": "Account status or rate limits blocked execution; not charged",
@@ -877,11 +718,8 @@ export default {
       "login_check": "Login Check",
       "login": "Login",
       "follow": "Follow",
-      "message": "Message",
-      "dm": "Message",
       "like": "Like",
       "post": "Post",
-      "tweet": "Post",
       "retweet": "Retweet",
       "repost": "Retweet",
       "reply": "Reply",
@@ -892,11 +730,8 @@ export default {
       "viewDetails": "View details"
     },
     "statuses": {
-      "success": "Succeeded",
-      "failed": "Failed",
-      "pending": "Pending",
-      "running": "Running",
-      "queued": "Queued"
+      "success": "Success",
+      "failed": "Failed"
     },
     "chargeStatuses": {
       "charged": "Charged",
@@ -1257,7 +1092,7 @@ export default {
       "allocatableAccounts": "Allocatable accounts",
       "storedAccountsMeta": "{count} stored",
       "todayTasks": "Tasks today",
-      "recentRpmMeta": "Last 5 min {count}/min",
+      "recentOperationsPerMinuteMeta": "Last 5 min {count}/min",
       "totalTasks": "Total tasks",
       "executionRecordsMeta": "Successful and failed tasks both count as execution records",
       "todaySuccessfulCharges": "Successful charges today",
@@ -1283,16 +1118,10 @@ export default {
           "description": "Maintain account assignment status"
         }
       },
-      "apiKeys": "API Keys",
       "accounts": "Accounts",
       "users": "Users",
       "todayRequests": "Tasks Today",
       "newUsersToday": "New Users Today",
-      "todayTokens": "Actions Today",
-      "totalTokens": "Total Actions",
-      "cacheToday": "Cache (Today)",
-      "performance": "Performance",
-      "avgResponse": "Avg Response",
       "active": "active",
       "ok": "ok",
       "err": "err",
@@ -1302,34 +1131,21 @@ export default {
       "granularity": "Granularity",
       "day": "Day",
       "hour": "Hour",
-      "modelDistribution": "Action Distribution",
-      "groupDistribution": "Group Usage Distribution",
-      "metricTokens": "By Actions",
       "metricActualCost": "By Actual Cost",
-      "tokenUsageTrend": "Action Usage Trend",
       "userUsageTrend": "User Usage Trend (Top 12)",
-      "model": "Action",
-      "group": "Group",
-      "noGroup": "No Group",
       "requests": "Requests",
-      "tokens": "Actions",
       "actual": "Actual",
-      "standard": "Standard",
-      "accountCost": "Cost",
       "noDataAvailable": "No data available",
       "recentUsage": "Recent Usage",
-      "viewModelDistribution": "Action Distribution",
       "viewSpendingRanking": "User Spending Ranking",
       "spendingRankingTitle": "User Spending Ranking",
       "spendingRankingUser": "User",
       "spendingRankingRequests": "Requests",
-      "spendingRankingTokens": "Actions",
       "spendingRankingSpend": "Spend",
       "spendingRankingOther": "Others",
       "spendingRankingUsage": "Usage",
       "spendShort": "Spend",
       "requestsShort": "Req",
-      "tokensShort": "Act",
       "failedToLoad": "Failed to load dashboard statistics"
     },
     "totalAccounts": {
@@ -1338,23 +1154,44 @@ export default {
     },
     "socialAccountWorkbench": {
       "title": "Account Management",
-      "description": "Manage the website account pool: import, registration entry, edit, assign, reclaim, and export",
+      "description": "Manage the website account pool: import, edit, assign, reclaim, export, and clean up records",
       "searchPlaceholder": "Search account / platform / phone / email / IP / assigned user",
       "batchRetry": "Batch Retry",
       "exportFailed": "Export Failed",
+      "importFailed": "Import Failed",
       "detailTitle": "Account Detail",
+      "createTitle": "Create Account",
+      "createHint": "Create one unassigned account in the total account pool. Assignment remains a separate pool operation.",
       "editTitle": "Edit Account",
       "mockHint": "Account data comes from the backend and total-pool imports are deduplicated.",
       "failedToLoad": "Failed to load account pool records",
-      "placeholderSaved": "Configuration saved.",
-      "placeholderAction": "{action} completed.",
-      "placeholderRowAction": "{action} completed for {account}.",
       "saved": "Account saved.",
-      "created": "Account imported into the total account pool.",
+      "created": "Account created in the total account pool.",
+      "saveFailed": "Failed to save account",
+      "noChanges": "No changes to save.",
+      "createFailed": "Failed to create account",
+      "assignFailed": "Failed to assign accounts",
+      "reclaimFailed": "Failed to return accounts to the pool",
+      "deleteFailed": "Failed to delete accounts",
+      "errors": {
+        "SOCIAL_ACCOUNT_SERVICE_UNAVAILABLE": "Account service is temporarily unavailable. Try again later.",
+        "SOCIAL_ACCOUNT_INPUT_REQUIRED": "Account details are incomplete. Check the form and try again.",
+        "SOCIAL_ACCOUNT_NAME_REQUIRED": "Enter an account name.",
+        "SOCIAL_ACCOUNT_PLATFORM_REQUIRED": "Choose an account platform.",
+        "SOCIAL_ACCOUNT_IDENTITY_REQUIRED": "Account identity is incomplete. Check the account name and platform.",
+        "SOCIAL_ACCOUNT_PASSWORD_REQUIRED": "Enter the account password.",
+        "SOCIAL_ACCOUNT_IMPORT_REQUIRED": "Choose a valid import file and try again.",
+        "SOCIAL_ACCOUNT_IMPORT_INCOMPLETE": "Account delivery is incomplete. Provide a password and at least one login credential: 2FA, complete email credentials, or auth cookie.",
+        "SOCIAL_ACCOUNT_DUPLICATE": "This account already exists in the total account pool. Do not create or import it again.",
+        "SOCIAL_ACCOUNT_NOT_FOUND": "The account no longer exists or was updated. Refresh the list and try again.",
+        "SOCIAL_ACCOUNT_ALREADY_ASSIGNED": "This account has already been assigned to a user. Refresh the list and try again.",
+        "SOCIAL_ACCOUNT_ASSIGNMENT_CHANGED": "The account assignment changed. Refresh the list and try again.",
+        "SOCIAL_ACCOUNT_EXECUTION_AUTH_INVALID": "Execution auth format is invalid. Use the stored ciphertext or refresh login credentials.",
+        "USER_NOT_FOUND": "The target user no longer exists or is unavailable. Refresh the user list and try again."
+      },
       "imported": "Imported {count} accounts.",
-      "registerNotConfigured": "SocialOps will try to log in and store execution credentials. If a challenge is required, the account remains in manual review.",
       "tabs": {
-        "managementDescription": "Import, register, and clean up social account records; ownership is handled in the total account pool",
+        "managementDescription": "Import and clean up social account records; ownership is handled in the total account pool",
         "poolDescription": "Review assignment state and handle assignment, reclaim, export, and bulk cleanup"
       },
       "stats": {
@@ -1369,7 +1206,6 @@ export default {
         "unassigned": "Unassigned"
       },
       "actions": {
-        "register": "Register Account",
         "manualImport": "Manual Import",
         "fileUpload": "Upload to Pool",
         "assign": "Assign",
@@ -1377,8 +1213,10 @@ export default {
         "delete": "Delete"
       },
       "toolbar": {
+        "createAccount": "Create Account",
         "importAccounts": "Import Accounts",
-        "exportRecords": "Export Records"
+        "exportRecords": "Export Records",
+        "exportSelectedRecords": "Export selected records"
       },
       "credentials": {
         "configured": "Configured",
@@ -1396,14 +1234,13 @@ export default {
       "executionBar": {
         "selectedCount": "{count} accounts selected",
         "clear": "Clear Selection",
-        "start": "Start Execution",
-        "placeholderStarted": "Started placeholder {action} task for {count} accounts."
+        "selectionRequired": "Select at least one account first.",
+        "noAssignedSelection": "Select at least one assigned account to return to the pool.",
+        "start": "Start Execution"
       },
       "executionActions": {
         "login": "Login",
         "login_check": "Login Check",
-        "message": "Message",
-        "messageUnavailable": "Not connected yet",
         "post": "Post",
         "follow": "Follow",
         "like": "Like",
@@ -1413,7 +1250,7 @@ export default {
         "title": "Execution Parameters",
         "hint": "Prepare {action} for {count} selected accounts. Backend validation decides whether each account can run.",
         "target": "Target username, URL, or post ID",
-        "content": "Message or post content"
+        "content": "Post content"
       },
       "executionLog": {
         "title": "Execution Log",
@@ -1465,7 +1302,6 @@ export default {
         "emailToken": "Email Token",
         "registrationIp": "Registration IP",
         "executionAuth": "Execution Auth",
-        "credentials": "Credential Status",
         "accountStatus": "Account Status",
         "taskStatus": "Execution Result",
         "taskMessage": "Result Message",
@@ -1526,10 +1362,11 @@ export default {
         "emailClientId": "Email client ID",
         "emailToken": "Email token",
         "registrationIp": "Registration IP",
-        "executionAuth": "Execution auth JSON",
+        "executionAuth": "Encrypted execution auth",
+        "executionAuthHelp": "This field stores encrypted execution auth only. Do not enter full cookies, device headers, or unencrypted execution credentials here.",
         "defaultProxySnapshot": "Default proxy snapshot",
         "filePlaceholder": "Select CSV / JSON file",
-        "fileHint": "Field format: name, password, phone, email, email_password, two_factor, backup_code, email_client_id, email_token, registration_ip, auth_cookie, execution_auth, default_proxy_snapshot, remark. Platform is selected in the import UI."
+        "fileHint": "Field format: name, password, two_factor, backup_code, email, email_password, email_client_id, email_token, registration_ip, auth_cookie, execution_auth, phone, remark. Platform is selected in the import UI."
       },
       "uploadPreview": {
         "total": "Total",
@@ -1567,9 +1404,10 @@ export default {
         "searchPlaceholder": "Search email, username, or role",
         "userListLabel": "Assignable users",
         "selectedUserLabel": "Selected user",
-        "assignedCountLabel": "{count} accounts assigned",
+        "assignedCountLabel": "{count} visible accounts assigned",
         "noSelectedUserPrompt": "Choose a user on the left to confirm the assignment target here.",
         "noUsersFound": "No matching target users. Try a different keyword.",
+        "userLoadFailed": "Failed to load target users. Refresh the page and try again.",
         "userStatus": {
           "active": "Active",
           "disabled": "Disabled"
@@ -1596,12 +1434,29 @@ export default {
         "impactHint": "After deletion, credentials, ownership, and list records are removed from the total account pool.",
         "confirm": "Confirm Permanent Delete"
       },
+      "batchResult": {
+        "dismiss": "Clear batch operation result",
+        "rowsMore": "{count} more result(s)",
+        "statuses": {
+          "succeeded": "Succeeded",
+          "skipped": "Skipped",
+          "failed": "Failed",
+          "duplicate": "Duplicate"
+        }
+      },
+      "importResult": {
+        "dismiss": "Clear import result",
+        "summary": "Import result: total {total}, imported {created}, skipped {skipped}, failed {failed}, duplicates {duplicates}."
+      },
       "toasts": {
         "assignRequiresUnassigned": "Assign only supports unassigned accounts. {count} selected accounts are already assigned; adjust the selection and try again.",
         "selectTargetUser": "Please choose a target user.",
         "assigned": "Assigned {count} accounts to {user}.",
+        "assignedResult": "Assignment result: total {total}, succeeded {succeeded}, skipped {skipped}, failed {failed}. Target user: {user}.",
         "reclaimed": "Reclaimed {count} accounts and marked them unassigned.",
-        "deleted": "Deleted {count} accounts."
+        "reclaimedResult": "Reclaim result: total {total}, succeeded {succeeded}, skipped {skipped}, failed {failed}.",
+        "deleted": "Deleted {count} accounts.",
+        "deletedResult": "Delete result: total {total}, succeeded {succeeded}, skipped {skipped}, failed {failed}."
       }
     },
     "backup": {
@@ -1718,186 +1573,6 @@ export default {
         "freeTier": "R2 Free Tier: 10GB storage + 1M Class A requests + 10M Class B requests per month — more than enough for database backups."
       }
     },
-    "dataManagement": {
-      "title": "Data Management",
-      "description": "Manage data management agent status, object storage settings, and backup jobs in one place",
-      "agent": {
-        "title": "Data Management Agent Status",
-        "description": "The system probes a fixed Unix socket and enables data management only when reachable.",
-        "enabled": "Data management agent is ready. Data management operations are available.",
-        "disabled": "Data management agent is unavailable. Only diagnostic information is available now.",
-        "socketPath": "Socket Path",
-        "version": "Version",
-        "status": "Status",
-        "uptime": "Uptime",
-        "reasonLabel": "Unavailable Reason",
-        "reason": {
-          "DATA_MANAGEMENT_AGENT_SOCKET_MISSING": "Data management socket file is missing",
-          "DATA_MANAGEMENT_AGENT_UNAVAILABLE": "Data management agent is unreachable",
-          "DATA_MANAGEMENT_DEPRECATED": "Data management agent is disabled; only diagnostics are available in this version",
-          "BACKUP_AGENT_SOCKET_MISSING": "Backup socket file is missing",
-          "BACKUP_AGENT_UNAVAILABLE": "Backup agent is unreachable",
-          "UNKNOWN": "Unknown reason"
-        }
-      },
-      "sections": {
-        "config": {
-          "title": "Backup Configuration",
-          "description": "Configure backup source, retention policy, and S3 settings."
-        },
-        "s3": {
-          "title": "S3 Object Storage",
-          "description": "Configure and test uploads of backup artifacts to a standard S3-compatible storage."
-        },
-        "backup": {
-          "title": "Backup Operations",
-          "description": "Trigger PostgreSQL, Redis, and full backup jobs."
-        },
-        "history": {
-          "title": "Backup History",
-          "description": "Review backup job status, errors, and artifact metadata."
-        }
-      },
-      "form": {
-        "sourceMode": "Source Mode",
-        "backupRoot": "Backup Root",
-        "activePostgresProfile": "Active PostgreSQL Profile",
-        "activeRedisProfile": "Active Redis Profile",
-        "activeS3Profile": "Active S3 Profile",
-        "retentionDays": "Retention Days",
-        "keepLast": "Keep Last Jobs",
-        "uploadToS3": "Upload to S3",
-        "useActivePostgresProfile": "Use Active PostgreSQL Profile",
-        "useActiveRedisProfile": "Use Active Redis Profile",
-        "useActiveS3Profile": "Use Active Profile",
-        "idempotencyKey": "Idempotency Key (Optional)",
-        "secretConfigured": "Configured already, leave empty to keep unchanged",
-        "source": {
-          "profileID": "Profile ID (Unique)",
-          "profileName": "Profile Name",
-          "setActive": "Set as active after creation"
-        },
-        "postgres": {
-          "title": "PostgreSQL",
-          "host": "Host",
-          "port": "Port",
-          "user": "User",
-          "password": "Password",
-          "database": "Database",
-          "sslMode": "SSL Mode",
-          "containerName": "Container Name (docker_exec mode)"
-        },
-        "redis": {
-          "title": "Redis",
-          "addr": "Address (host:port)",
-          "username": "Username",
-          "password": "Password",
-          "db": "Database Index",
-          "containerName": "Container Name (docker_exec mode)"
-        },
-        "s3": {
-          "enabled": "Enable S3 Upload",
-          "profileID": "Profile ID (Unique)",
-          "profileName": "Profile Name",
-          "endpoint": "Endpoint (Optional)",
-          "region": "Region",
-          "bucket": "Bucket",
-          "accessKeyID": "Access Key ID",
-          "secretAccessKey": "Secret Access Key",
-          "prefix": "Object Prefix",
-          "forcePathStyle": "Force Path Style",
-          "useSSL": "Use SSL",
-          "setActive": "Set as active after creation"
-        }
-      },
-      "sourceProfiles": {
-        "createTitle": "Create Source Profile",
-        "editTitle": "Edit Source Profile",
-        "empty": "No source profiles yet, create one first",
-        "deleteConfirm": "Delete source profile {profileID}?",
-        "columns": {
-          "profile": "Profile",
-          "active": "Active",
-          "connection": "Connection",
-          "database": "Database",
-          "updatedAt": "Updated At",
-          "actions": "Actions"
-        }
-      },
-      "s3Profiles": {
-        "createTitle": "Create S3 Profile",
-        "editTitle": "Edit S3 Profile",
-        "empty": "No S3 profiles yet, create one first",
-        "editHint": "Click \"Edit\" to modify profile details in the right drawer.",
-        "deleteConfirm": "Delete S3 profile {profileID}?",
-        "columns": {
-          "profile": "Profile",
-          "active": "Active",
-          "storage": "Storage",
-          "updatedAt": "Updated At",
-          "actions": "Actions"
-        }
-      },
-      "history": {
-        "total": "{count} jobs",
-        "empty": "No backup jobs yet",
-        "columns": {
-          "jobID": "Job ID",
-          "type": "Type",
-          "status": "Status",
-          "triggeredBy": "Triggered By",
-          "pgProfile": "PostgreSQL Profile",
-          "redisProfile": "Redis Profile",
-          "s3Profile": "S3 Profile",
-          "finishedAt": "Finished At",
-          "artifact": "Artifact",
-          "error": "Error"
-        },
-        "status": {
-          "queued": "Queued",
-          "running": "Running",
-          "succeeded": "Succeeded",
-          "failed": "Failed",
-          "partial_succeeded": "Partial Succeeded"
-        },
-        "types": {
-          "postgres": "PostgreSQL",
-          "redis": "Redis",
-          "full": "Full"
-        }
-      },
-      "actions": {
-        "refresh": "Refresh Status",
-        "disabledHint": "Start datamanagementd first and ensure the socket is reachable.",
-        "reloadConfig": "Reload Config",
-        "reloadSourceProfiles": "Reload Source Profiles",
-        "reloadProfiles": "Reload Profiles",
-        "newSourceProfile": "New Source Profile",
-        "saveConfig": "Save Config",
-        "configSaved": "Configuration saved",
-        "testS3": "Test S3 Connection",
-        "s3TestOK": "S3 connection test succeeded",
-        "s3TestFailed": "S3 connection test failed",
-        "newProfile": "New Profile",
-        "saveProfile": "Save Profile",
-        "activateProfile": "Activate",
-        "profileIDRequired": "Profile ID is required",
-        "profileNameRequired": "Profile name is required",
-        "profileSelectRequired": "Select a profile to edit first",
-        "profileCreated": "S3 profile created",
-        "profileSaved": "S3 profile saved",
-        "profileActivated": "S3 profile activated",
-        "profileDeleted": "S3 profile deleted",
-        "sourceProfileCreated": "Source profile created",
-        "sourceProfileSaved": "Source profile saved",
-        "sourceProfileActivated": "Source profile activated",
-        "sourceProfileDeleted": "Source profile deleted",
-        "createBackup": "Create Backup Job",
-        "jobCreated": "Backup job created: {jobID} ({status})",
-        "refreshJobs": "Refresh Jobs",
-        "loadMore": "Load More"
-      }
-    },
     "affiliates": {
       "invitesDescription": "View site-wide inviter and invitee relationships",
       "rebatesDescription": "View recharge orders that generated affiliate rebates",
@@ -1946,7 +1621,7 @@ export default {
       "createUser": "Create User",
       "editUser": "Edit User",
       "deleteUser": "Delete User",
-      "searchUsers": "Search by email, username, notes, or API key...",
+      "searchUsers": "Search by email, username, or notes...",
       "allRoles": "All Roles",
       "allStatus": "All Status",
       "allGroups": "All Groups",
@@ -2007,11 +1682,7 @@ export default {
       "enable": "Enable",
       "disableUser": "Disable User",
       "enableUser": "Enable User",
-      "viewApiKeys": "View API Keys",
       "groups": "Groups",
-      "apiKeys": "API Keys",
-      "userApiKeys": "User API Keys",
-      "noApiKeys": "This user has no API keys",
       "group": "Group",
       "none": "None",
       "groupChangedSuccess": "Group updated successfully",
@@ -2029,7 +1700,6 @@ export default {
       "failedToUpdate": "Failed to update user",
       "failedToDelete": "Failed to delete user",
       "failedToToggle": "Failed to update user status",
-      "failedToLoadApiKeys": "Failed to load user API keys",
       "emailRequired": "Please enter email",
       "concurrencyMin": "Concurrency must be at least 1",
       "amountRequired": "Please enter a valid amount",
@@ -2052,12 +1722,6 @@ export default {
       "useDefaultRate": "Use Default",
       "customRatePlaceholder": "Leave empty for default",
       "groupConfigUpdated": "Group configuration updated successfully",
-      "replaceGroup": "Replace Group",
-      "clickToReplace": "Click to replace",
-      "replaceGroupTitle": "Replace Exclusive Group",
-      "replaceGroupHint": "Select a new group to replace \"{old}\". Keys will be migrated and permissions updated automatically.",
-      "replaceGroupConfirm": "Confirm Replace",
-      "replaceGroupSuccess": "Group replaced successfully, {count} key(s) migrated",
       "selectNewGroup": "Select target group",
       "noOtherGroups": "No other exclusive groups available",
       "deposit": "Deposit",
@@ -2164,22 +1828,6 @@ export default {
         "keyExists": "Attribute key already exists",
         "dragToReorder": "Drag to reorder"
       }
-    },
-    "riskControl": {
-      "title": "Risk Control",
-      "description": "Review SocialOps account risk signals",
-      "runtimeStatus": "Runtime Status",
-      "accountRules": "Account Rules",
-      "recentEvents": "Recent Events",
-      "skeletonMessage": "SocialOps risk control backend is not configured yet.",
-      "records": "Risk Events",
-      "scope": "Scope",
-      "target": "Target",
-      "status": "Status",
-      "enabled": "Enabled",
-      "disabled": "Disabled",
-      "empty": "No risk events yet.",
-      "loadFailed": "Failed to load risk control"
     },
     "subscriptions": {
       "title": "Subscription Management",
@@ -2320,7 +1968,7 @@ export default {
     },
     "accounts": {
       "title": "Social account workbench",
-      "description": "Register, import, and clean up social accounts; ownership is handled in the total account pool.",
+      "description": "Import, upload, and clean up social accounts; ownership is handled in the total account pool.",
       "leaveEmptyToKeep": "Leave empty to keep current value"
     },
     "proxies": {
@@ -2360,6 +2008,7 @@ export default {
       "types": {
         "residential": "Residential",
         "static": "Static",
+        "dynamic": "Dynamic",
         "mobile": "Mobile",
         "datacenter": "Datacenter"
       },
@@ -2376,6 +2025,39 @@ export default {
       },
       "ad": {
         "inline": "Need proxy IP?"
+      }
+    },
+    "globalProxies": {
+      "title": "Global Proxy Pool",
+      "description": "Maintain system-level proxies. Login tasks currently use this pool when an account has no default proxy, and it can be extended to other execution functions later.",
+      "searchPlaceholder": "Search name, endpoint, or note",
+      "addProxy": "Add Global Proxy",
+      "editTitle": "Edit Global Proxy",
+      "failedToLoad": "Failed to load global proxies",
+      "saved": "Global proxy saved.",
+      "created": "Global proxy created.",
+      "deleted": "Global proxy deleted.",
+      "saveFailed": "Failed to save global proxy",
+      "deleteFailed": "Failed to delete global proxy",
+      "columns": {
+        "lastUsed": "Last Used"
+      },
+      "form": {
+        "namePlaceholder": "Global Proxy 01",
+        "endpointHint": "Enter a static proxy URL, or an extraction URL that returns ip/port/username/password. Execution resolves a fresh proxy from it."
+      },
+      "empty": {
+        "title": "No global proxies yet",
+        "description": "Add one and test it online before current login tasks can use it when accounts have no default proxy."
+      },
+      "noResults": {
+        "title": "No matching global proxies",
+        "description": "Adjust the search, status, or type filters and try again."
+      },
+      "deleteDialog": {
+        "title": "Delete Global Proxy",
+        "description": "Delete \"{name}\"?",
+        "impact": "After deletion, current login tasks will no longer use this proxy as a global fallback."
       }
     },
     "redeem": {
@@ -2608,14 +2290,12 @@ export default {
     },
     "settings": {
       "title": "System Settings",
-      "description": "Manage site basics, sign-up and login, OAuth, subscription defaults, feature switches, payment, notifications, and backups",
+      "description": "Manage site basics, login agreement, security and authentication, user defaults, payment, email notifications, and backups",
       "tabs": {
         "general": "General",
-        "registration": "Registration",
+        "agreement": "Login Agreement",
         "security": "Security",
-        "auth": "Authentication",
-        "users": "Subscriptions & Rebates",
-        "features": "Features",
+        "users": "User Defaults",
         "payment": "Payment",
         "email": "Email",
         "backup": "Backups"
@@ -2671,19 +2351,22 @@ export default {
       },
       "loginAgreement": {
         "title": "Login Agreement",
+        "description": "Controls whether the login page requires users to accept terms, privacy policy, or other Markdown documents.",
         "enabled": "Enable login agreement",
         "mode": "Display mode",
         "modal": "Modal",
         "checkbox": "Checkbox confirmation",
         "add": "Add Document",
+        "documents": "Agreement Documents",
+        "documentsHint": "Document titles are customizable and content is saved as Markdown.",
+        "untitled": "Untitled document",
         "empty": "No login agreement documents configured",
         "documentTitle": "Document Title",
         "content": "Markdown Content"
       },
       "security": {
         "title": "Security Settings",
-        "totp": "Enable TOTP two-factor authentication",
-        "trustForwardedIp": "Trust forwarded IP"
+        "totp": "Enable TOTP two-factor authentication"
       },
       "turnstile": {
         "enabled": "Enable Turnstile",
@@ -2825,31 +2508,17 @@ export default {
       "defaultUserRpmLimit": "Default RPM",
       "affiliate": {
         "title": "Affiliate Rebate Config",
+        "description": "Configure affiliate rebate enablement, rate, settlement freeze, and per-invitee cap.",
         "enabled": "Enable affiliate rebates",
+        "enabledHint": "Uses the project's existing invite rebate records and settlement flow when enabled.",
         "rate": "Rebate rate",
+        "rateHint": "Enter a decimal between 0 and 1, such as 0.2 for 20%.",
         "freezeHours": "Freeze hours",
+        "freezeHoursHint": "How long rebates stay frozen before settlement.",
         "durationDays": "Duration days",
-        "perInviteeCap": "Per-invitee rebate cap"
-      },
-      "features": {
-        "title": "Feature Switches",
-        "description": "Manage only real system-level switches for this commercial project, without turning settings into a page directory.",
-        "payment": "Enable payment system",
-        "paymentHint": "Controls recharge, subscription purchase, and order payment capabilities.",
-        "disableBalanceRecharge": "Disable balance recharge",
-        "disableBalanceRechargeHint": "Keeps payment enabled while hiding wallet top-ups.",
-        "purchaseEntry": "Enable purchase entry",
-        "purchaseEntryHint": "Controls whether the user-side purchase entry is visible.",
-        "riskControl": "Enable risk control",
-        "riskControlHint": "Turns on the project's existing abuse-prevention and execution-safety policy.",
-        "affiliate": "Enable affiliate rebates",
-        "affiliateHint": "Controls invites, rebate records, and transfer workflows.",
-        "promoCode": "Enable promo codes",
-        "promoCodeHint": "Controls promo-code based registration or redemption capability.",
-        "invitationCode": "Enable invitation codes",
-        "invitationCodeHint": "Requires an invitation code during signup.",
-        "backendMode": "Backend mode",
-        "backendModeHint": "Restricts normal public pages while preserving required login and admin access."
+        "durationDaysHint": "How long an invite relationship can generate rebates.",
+        "perInviteeCap": "Per-invitee rebate cap",
+        "perInviteeCapHint": "Limits the total rebate amount generated by the same invitee."
       },
       "smtp": {
         "title": "SMTP Configuration",
@@ -2872,6 +2541,7 @@ export default {
       },
       "notifications": {
         "title": "Notifications",
+        "description": "Configure system reminders for balance, subscription expiry, and account quota.",
         "balanceLow": "Low balance notification",
         "balanceThreshold": "Balance threshold",
         "rechargeUrl": "Recharge URL",
@@ -2916,6 +2586,8 @@ export default {
         "findProvider": "Provider guide",
         "helpImagePlaceholder": "Payment help image URL",
         "balanceDisabled": "Disable balance recharge",
+        "purchaseEntry": "Enable recharge / subscription entry",
+        "purchaseUrl": "Recharge / subscription URL",
         "alipayForceQr": "Force Alipay QR code",
         "minAmount": "Minimum amount",
         "maxAmount": "Maximum amount",
@@ -2928,7 +2600,7 @@ export default {
         "productSuffix": "Product name suffix",
         "loadBalanceStrategy": "Payment routing strategy",
         "loadBalanceRoundRobin": "Round robin",
-        "loadBalanceLeastAmount": "Least consumed channel first",
+        "loadBalanceLeastAmount": "Least consumed provider first",
         "cancelRateLimitEnabled": "Enable cancellation rate limit",
         "cancelRateLimitMax": "Allowed cancellations",
         "cancelRateLimitWindow": "Window size",
@@ -3189,7 +2861,7 @@ export default {
       },
       "accountManage": {
         "title": "Social account workbench",
-        "description": "<div style=\"line-height: 1.7;\"><p>Register, import, upload, and inspect accounts in the workbench. Assignment and reclaim stay in the total account pool.</p></div>"
+        "description": "<div style=\"line-height: 1.7;\"><p>Import, upload, and inspect accounts in the workbench. Assignment and reclaim stay in the total account pool.</p></div>"
       },
       "proxies": {
         "title": "Proxy management",
@@ -3398,8 +3070,7 @@ export default {
       "todayQuota": "Today's Quota",
       "thisWeekQuota": "This Week Quota",
       "thisMonthQuota": "This Month Quota",
-      "unlimited": "Unlimited",
-      "models": "Models"
+      "unlimited": "Unlimited"
     },
     "platformFallback": "General",
     "subscriptionPicker": {
@@ -3420,7 +3091,6 @@ export default {
       "tabs": {
         "overview": "Overview",
         "orders": "Orders",
-        "channels": "Channels",
         "plans": "Plans"
       },
       "todayRevenue": "Today Revenue",
@@ -3480,12 +3150,6 @@ export default {
       "refundRequestReason": "Request Reason",
       "auditLogs": "Audit Logs",
       "operator": "Operator",
-      "channelName": "Channel Name",
-      "channelDescription": "Channel Description",
-      "createChannel": "Create Channel",
-      "editChannel": "Edit Channel",
-      "deleteChannel": "Delete Channel",
-      "deleteChannelConfirm": "Are you sure you want to delete this channel?",
       "planName": "Plan Name",
       "planDescription": "Plan Description",
       "createPlan": "Create Plan",
@@ -3573,22 +3237,24 @@ export default {
     "test": "Test",
     "testSelected": "Test selected",
     "testAll": "Test all",
-    "batchTestSubmitted": "Submitted connectivity checks for {count} proxy/proxies.",
-    "batchTestPartial": "Completed {total} proxy checks; {failed} request(s) failed. Review the result details.",
-    "testResult": "Connectivity test completed: {status}",
+    "selection": {
+      "selectedCount": "{count} selected",
+      "noneSelected": "Select at least one proxy to test."
+    },
+    "noProxiesToTest": "No proxies to test.",
+    "batchTestPartial": "Connectivity test completed: {total} tested · {online} online · {offline} offline · {unknown} unknown; {failed} request(s) failed.",
+    "testResultSummary": "Connectivity test completed: {total} tested · {online} online · {offline} offline · {unknown} unknown",
     "testFailed": "Proxy test failed",
     "saved": "Proxy saved.",
     "created": "Proxy created.",
     "deleted": "Proxy deleted.",
+    "noChanges": "No changes to save.",
+    "saveFailed": "Failed to save proxy",
     "deleteFailed": "Failed to delete proxy",
     "deleteDialog": {
       "title": "Delete proxy",
       "description": "Delete {name} from your proxy pool?",
       "snapshotWarning": "Accounts using this proxy will have their default proxy cleared."
-    },
-    "testResults": {
-      "title": "Connectivity results",
-      "summary": "{total} tested · {online} online · {offline} offline · {unknown} unknown"
     },
     "stats": {
       "total": "Total",
@@ -3613,14 +3279,25 @@ export default {
       "namePlaceholder": "Workspace proxy name",
       "type": "Proxy type",
       "endpoint": "Endpoint",
-      "endpointPlaceholder": "http://user:pass{'@'}host:port or socks5://host:port",
-      "endpointHint": "Endpoint must be complete before the proxy can pass testing and be used for execution.",
+      "endpointPlaceholder": "http://user:pass{'@'}host:port, socks5://host:port, or provider URL",
+      "endpointHint": "Enter a static proxy endpoint or a provider URL returning ip/port/username/password; execution fetches a fresh proxy from the URL.",
       "remark": "Remark",
       "remarkPlaceholder": "Internal note"
+    },
+    "errors": {
+      "SOCIAL_IP_SERVICE_UNAVAILABLE": "Proxy service is temporarily unavailable. Try again later.",
+      "SOCIAL_IP_INPUT_REQUIRED": "Enter proxy information.",
+      "SOCIAL_IP_NAME_REQUIRED": "Enter a proxy name.",
+      "SOCIAL_IP_TYPE_INVALID": "Choose a valid proxy type.",
+      "INVALID_PROXY_ENDPOINT": "Endpoint format is invalid. Use a complete http, https, socks5 address or a valid proxy provider URL.",
+      "SOCIAL_IP_NOT_FOUND": "The proxy does not exist or is not yours. Refresh and try again.",
+      "SOCIAL_IP_OWNER_NOT_FOUND": "The signed-in account could not be verified. Sign in again and retry.",
+      "SOCIAL_IP_USER_ID_NOT_ACCEPTED": "Proxy ownership is based on the signed-in account. Refresh and try again."
     },
     "types": {
       "residential": "Residential",
       "static": "Static",
+      "dynamic": "Dynamic",
       "mobile": "Mobile",
       "datacenter": "Datacenter"
     },
@@ -3653,6 +3330,7 @@ export default {
     "copied": "Template copied.",
     "copyFailed": "Failed to copy template",
     "setDefault": "Set default",
+    "alreadyDefault": "This template is already the default.",
     "defaultSaved": "Default template saved.",
     "defaultFailed": "Failed to set default template",
     "defaultToggle": "Make default for this task type",
@@ -3667,9 +3345,19 @@ export default {
     "save": "Save template",
     "saved": "Template saved.",
     "saveFailed": "Failed to save template",
+    "errors": {
+      "serviceUnavailable": "Task template service is temporarily unavailable. Try again later.",
+      "templateMissing": "Template information is missing. Refresh the list and try again.",
+      "templateNotFound": "The template no longer exists or was deleted. Refresh the list and try again.",
+      "templateInvalid": "The template is incomplete. Fix the validation issues and try again.",
+      "storeInvalid": "Template data cannot be read right now. Refresh and try again.",
+      "mediaServiceUnavailable": "Template media service is temporarily unavailable. Try again later.",
+      "mediaMissing": "Template media information is missing. Upload it again and retry."
+    },
     "validate": "Validate",
     "importFile": "Import file",
     "imported": "Imported {count} value(s).",
+    "importEmpty": "No usable values were found in the selected file.",
     "importFailed": "Failed to import file",
     "viewAll": "View all",
     "clearValues": "Clear",
@@ -3690,6 +3378,7 @@ export default {
       "emptyTitle": "No saved config for this type",
       "emptyDescription": "There are no {type} templates yet. Fill the parameters and save one before account execution uses it.",
       "newForType": "New {type} template",
+      "selectTemplateFirst": "Select a saved template first.",
       "allTypesHint": "Templates for every task type appear here.",
       "unsavedTitle": "Unsaved template",
       "unsavedDescription": "Save it before account execution can use it.",
@@ -3705,7 +3394,6 @@ export default {
       "unusable": "Unavailable"
     },
     "types": {
-      "login": "Login",
       "follow": "Follow",
       "like": "Like",
       "retweet": "Retweet",
@@ -3715,20 +3403,18 @@ export default {
       "update_banner": "Update banner"
     },
     "typeDescriptions": {
-      "login": "Log in with the account's password and capture execution credentials (cookie / tokens) back onto the account.",
       "follow": "Distribute user-follow tasks across selected accounts.",
-      "like": "Distribute tweet-like tasks from a target pool.",
+      "like": "Distribute like tasks from a target pool.",
       "retweet": "Distribute retweet tasks from a target pool.",
-      "post": "Distribute text publishing tasks from a content pool, with optional quote links and inline images or a single MP4 video.",
+      "post": "Distribute text publishing tasks from a content pool, with optional quote links and inline images.",
       "update_profile": "Distribute profile metadata updates such as display name, bio, location, and website.",
       "update_avatar": "Distribute avatar refresh tasks with a prepared image.",
       "update_banner": "Distribute banner refresh tasks with a prepared image."
     },
     "typeRequirements": {
-      "login": "No extra parameters; uses the account's own password and credentials",
       "follow": "Targets: user ID, username, or profile URL",
-      "like": "Targets: Tweet URL or Tweet ID",
-      "retweet": "Targets: Tweet URL or Tweet ID",
+      "like": "Targets: post URL or post ID",
+      "retweet": "Targets: post URL or post ID",
       "post": "Contents: one post text per line",
       "update_profile": "Profile fields: at least one field is required",
       "update_avatar": "Avatar: upload one image",
@@ -3753,7 +3439,7 @@ export default {
       "profileUrl": "Website",
       "profileUrlPlaceholder": "https://example.com",
       "followTargetsPlaceholder": "One target user ID or username per line",
-      "tweetTargetsPlaceholder": "One Tweet URL or Tweet ID per line",
+      "postTargetsPlaceholder": "One target post URL or post ID per line",
       "contentsPlaceholder": "One post text per line"
     },
     "summary": {
@@ -3782,12 +3468,13 @@ export default {
       "emptyLinesHint": "{count} empty line(s) will be ignored before saving.",
       "tooLongHint": "One or more values exceed {max} characters and must be shortened before saving.",
       "duplicateHint": "{count} duplicate value(s) detected. You can save them, or deduplicate before saving.",
-      "empty": "No values in this pool."
+      "empty": "No values in this pool.",
+      "noDuplicates": "No duplicate values to remove."
     },
     "media": {
       "postEnhancementsTitle": "Quote and media",
       "postImages": "Post media",
-      "postImagesHint": "Attach up to 4 images or 1 MP4 video for inline post media.",
+      "postImagesHint": "Attach up to 4 images for inline post media.",
       "postImagesEmpty": "No post media attached yet.",
       "postImageCount": "{count} / {max} media item(s) used",
       "postImageItem": "Media {index}",
@@ -3808,12 +3495,16 @@ export default {
       "invalid": "Template needs attention",
       "failed": "Validation failed",
       "nameRequired": "Enter a template name before saving.",
+      "templateRequired": "Template information is missing. Refresh and try again.",
+      "unsupportedType": "This task type is not supported. Choose another task type.",
       "targetsRequired": "Add at least one target before saving this template.",
       "contentsRequired": "Add at least one post text before saving this template.",
       "postConfigurationRequired": "Add post text or at least one media item before saving this template.",
-      "postVideoUnavailable": "Only one MP4 video is supported for post media right now.",
-      "postMediaTypeUnsupported": "Only image media or a single MP4 video is supported right now.",
+      "postMediaTooMany": "Post templates can contain at most {max} media items.",
+      "postVideoUnavailable": "Video post media is not supported for execution right now.",
+      "postMediaTypeUnsupported": "Only image media is supported right now.",
       "mediaSourceUnsupported": "Saved media references are not available for execution yet.",
+      "mediaInvalid": "This image cannot be read. Upload it again before saving.",
       "profileRequired": "Add at least one profile field before saving this template.",
       "avatarRequired": "Upload one avatar image before saving this template.",
       "bannerRequired": "Upload one banner image before saving this template.",
@@ -3840,16 +3531,18 @@ export default {
     "title": "Account Management",
     "description": "Manage social accounts within your permission scope, including imports, batch actions, task execution, and execution results.",
     "failedToLoad": "Failed to load social accounts",
-    "dependencyLoadWarning": "Some account workbench controls are temporarily unavailable.",
+    "dependencyLoadWarning": "Some account workbench controls could not be loaded.",
     "exportAccounts": "Export accounts",
+    "exportSelectedAccounts": "Export selected accounts",
     "exportFailed": "Failed to export accounts",
     "deleteSelected": "Delete selected",
     "deleteOne": "Delete account",
-    "deleteConfirm": "Remove {name} from your account workbench?",
-    "batchDeleteConfirm": "Remove {count} selected account(s) from your account workbench?",
-    "deleteSuccess": "Removed {count} account(s).",
-    "batchDeleteSuccess": "Removed {count} account(s), {skipped} skipped.",
-    "deleteFailed": "Failed to remove account",
+    "deleteConfirm": "Permanently delete account {name}? It will be deleted from the total account pool.",
+    "batchDeleteConfirm": "Permanently delete {count} selected account(s)? They will be deleted from the total account pool.",
+    "deleteSuccess": "Deleted {count} account(s).",
+    "batchDeleteSuccess": "Deleted {count} account(s), {skipped} skipped.",
+    "batchDeleteResultSummary": "Total {total}, removed {removed}, failed {failed}, skipped {skipped}.",
+    "deleteFailed": "Failed to delete account",
     "searchPlaceholder": "Search account, platform, status, or note",
       "columns": {
         "name": "Account",
@@ -3870,6 +3563,14 @@ export default {
       "executableMeta": "Available accounts ready for tasks",
       "selected": "Selected",
       "selectedMeta": "Accounts in the current batch",
+      "pending": "Queued",
+      "pendingMeta": "Tasks waiting to start",
+      "running": "Running",
+      "runningMeta": "Tasks in progress",
+      "success": "Success",
+      "successMeta": "Recently succeeded tasks",
+      "failed": "Failed",
+      "failedMeta": "Recently failed tasks",
       "abnormal": "Abnormal / Unavailable",
       "abnormalMeta": "Accounts that cannot submit tasks"
     },
@@ -3881,12 +3582,81 @@ export default {
     "selection": {
       "selectedCount": "{count} selected"
     },
+    "batchResultReasons": {
+      "invalidId": "The account ID is invalid",
+      "invalidInput": "The input is invalid",
+      "duplicateInBatch": "Duplicate in this batch",
+      "duplicateInDatabase": "Already exists in the total account pool",
+      "accountNotFound": "The account was not found",
+      "accountNotAssigned": "The account is not assigned to your workbench",
+      "proxyNotAvailable": "The selected proxy is unavailable",
+      "assignFailed": "Could not assign the account",
+      "notFound": "The record was not found",
+      "alreadyStored": "This account is already in the total pool",
+      "invalidCredentials": "Required credentials are incomplete",
+      "alreadyAssigned": "This account is already assigned",
+      "alreadyUnassigned": "This account is already unassigned",
+      "targetUserNotFound": "The target user was not found",
+      "reclaimFailed": "Could not reclaim the account",
+      "deleteFailed": "Could not delete the account",
+      "createFailed": "Could not create the account",
+      "loadFailed": "Could not load the account",
+      "uploadFailed": "Could not upload the account",
+      "operationFailed": "Could not process this account",
+      "stateChanged": "The account state changed"
+    },
+    "storeWorkbench": {
+      "title": "Upload to Pool",
+      "hint": "Upload {count} selected not-stored account(s) into the total account pool. This is not file upload; it only handles currently selected accounts.",
+      "storeable": "Storeable",
+      "skippedSelection": "Not storeable",
+      "accountSummary": "Accounts to upload",
+      "selectAccountsFirst": "Select at least one not-stored account first.",
+      "onlyNotStored": "The current selection has no not-stored accounts. Only accounts with account status Not Stored and task status Pending can be uploaded to the pool.",
+      "confirm": "Confirm upload",
+      "resultTitle": "Upload result",
+      "resultSummary": "Total {total}; succeeded {succeeded}; failed {failed}; skipped {skipped}.",
+      "resultRowsMore": "{count} more row(s) not shown.",
+      "savedWithSummary": "Upload completed: {succeeded} succeeded, {failed} failed, {skipped} skipped.",
+      "failed": "Failed to upload accounts to pool"
+    },
     "edit": {
       "title": "Edit Account Credentials",
       "identityTitle": "Read-only identity",
       "identityHint": "Account ID, platform, screen name, platform rest_id, and registration IP are read-only metadata and cannot be changed here.",
       "saved": "Account credentials saved.",
-      "failed": "Failed to save account credentials"
+      "failed": "Failed to save account credentials",
+      "noChanges": "No changes to save.",
+      "errors": {
+        "SOCIAL_ACCOUNT_EXECUTION_AUTH_INVALID": "Execution auth format is invalid. Use the stored ciphertext or refresh login credentials."
+      }
+    },
+    "credentials": {
+      "title": "Credential Details",
+      "previewHint": "Long credential values are summarized by character count here; copying still uses the full stored value.",
+      "authCookieDescription": "Imported or login-saved authentication cookie for this social account.",
+      "executionAuthDescription": "Execution auth is stored and delivered as ciphertext. This view only shows its character count.",
+      "copy": "Copy",
+      "copyRaw": "Copy raw {field}",
+      "copied": "Credential field copied.",
+      "copyFailed": "Failed to copy credential field",
+      "emptyCopy": "This field is empty and cannot be copied.",
+      "refresh": "Refresh",
+      "refreshTitle": "Refresh execution auth",
+      "refreshSubmitted": "Submitted {count} login refresh task(s), {enqueued} queued.",
+      "refreshFailed": "Failed to refresh execution auth",
+      "executionAuthAlreadyReady": "Execution auth is already usable.",
+      "refreshNeedsProxy": "Refreshing execution auth requires a default proxy first.",
+      "refreshNeedsPassword": "Refreshing execution auth requires the account password.",
+      "refreshNeedsProxyAndPassword": "Refreshing execution auth requires both a default proxy and the account password.",
+      "empty": "Not configured",
+      "length": "{count} chars",
+      "encryptedStored": "Encrypted value stored",
+      "oauthReady": "OAuth complete",
+      "rawCookieDetected": "Raw cookie",
+      "oauthPartial": "OAuth incomplete",
+      "jsonDetected": "JSON detected",
+      "loginRefreshRequired": "Login refresh required to capture execution auth"
     },
     "detailSections": {
       "identity": "Identity Metadata",
@@ -3907,26 +3677,29 @@ export default {
       "update_profile": "Update profile",
       "update_avatar": "Update avatar",
       "update_banner": "Update banner",
-      "message": "Message",
-      "messageUnavailable": "Message is not connected yet",
       "platformUnavailable": "Current platform is not connected"
     },
     "execution": {
       "panelTitle": "Task execution",
-      "panelDescription": "Select available accounts on one platform and a saved task template, then submit the batch.",
-      "templatePlaceholder": "Select a task template",
+      "panelDescription": "Select accounts on one platform and choose the function to run. Parameterized functions such as follows and posts use their default execution-parameter template.",
+      "actionPlaceholder": "Select a function",
+      "noActions": "No functions available",
       "noTemplates": "No templates available",
+      "defaultTemplateMissing": "Set a default template for this function in task settings first",
+      "defaultTemplateDescription": "Default template: {template} · {summary}",
       "defaultTemplate": "Default",
       "start": "Submit task",
       "confirmTitle": "Confirm task execution",
-      "confirmHint": "Submit {count} account(s) with template {template}.",
+      "confirmHint": "Submit {count} account(s) for {action} using default template {template}.",
       "confirmSubmit": "Submit task",
+      "actionType": "Function",
       "templateType": "Template type",
       "targets": "Targets",
       "contents": "Contents",
       "profileFields": "Profile fields",
       "media": "Media",
       "templateDetails": "Template details",
+      "executionDetails": "Execution details",
       "accountSummary": "Account summary",
       "loginCheckSummary": "Login check does not require extra parameters.",
       "loginSummary": "Logs in with the account password and captures execution credentials; no extra parameters.",
@@ -3937,9 +3710,6 @@ export default {
       "avatarSummary": "1 avatar image will be applied during execution.",
       "bannerSummary": "1 banner image will be applied during execution.",
       "resultSummary": "Submitted {submitted}; queued {enqueued}; failed closed {failed}.",
-      "failureNoChargeSummary": "Failed or closed tasks were not charged.",
-      "resultRows": "Task result details",
-      "resultRowsMore": "{count} more result(s) available in usage logs.",
       "taskSummaryTarget": "Target: {value}",
       "taskSummaryContent": "Text: {value}",
       "taskSummaryQuote": "Quote: {value}",
@@ -3948,35 +3718,55 @@ export default {
       "taskSummaryAvatar": "Avatar image ready",
       "taskSummaryBanner": "Banner image ready",
       "taskSummaryNoDetails": "No structured details",
-      "taskStatuses": {
-        "pending": "Pending",
-        "running": "Running",
-        "success": "Success",
-        "failed": "Failed"
-      },
-      "chargeStatuses": {
-        "charged": "Charged",
-        "not_charged": "Not charged",
-        "charge_failed": "Charge failed"
-      },
       "selectAccountsFirst": "Select at least one executable account first.",
       "nonExecutableSelected": "Only available executable accounts can be submitted. Remove unavailable accounts from the selection before submitting.",
+      "loginProxyRequired": "Login tasks require a default proxy on the selected accounts.",
+      "loginPasswordRequired": "Login tasks require the account password. Edit or re-import the account password first.",
+      "loginProxyAndPasswordRequired": "Login tasks require both a default proxy and the account password. Complete them before submitting.",
       "mixedPlatforms": "One batch can only include accounts from the same platform.",
       "platformUnavailable": "The selected platform does not have a connected executor yet. This action is disabled.",
-      "templateRequired": "Select a saved task template before submitting.",
+      "defaultTemplateRequired": "Choose a parameterized function with a default template before submitting.",
       "templatesUnavailable": "Task templates are unavailable. Retry loading before submitting tasks.",
-      "templateInvalid": "The selected task template is incomplete.",
+      "defaultTemplateInvalid": "This function's default template is incomplete. Fix it in task settings first.",
       "submitFailed": "Failed to submit task",
+      "errors": {
+        "SOCIAL_TASK_SERVICE_UNAVAILABLE": "Task service is temporarily unavailable. Try again later.",
+        "TASK_TEMPLATE_SERVICE_UNAVAILABLE": "Task template service is temporarily unavailable. Try again later.",
+        "SOCIAL_IP_SERVICE_UNAVAILABLE": "Proxy service is temporarily unavailable. Try again later.",
+        "SOCIAL_TASK_INSUFFICIENT_FUNDS": "Insufficient balance: this batch requires ${required_total}, wallet balance is ${wallet_balance}, and ${wallet_required} is still needed.",
+        "SOCIAL_TASK_INPUT_REQUIRED": "Task submission details are incomplete. Refresh the page and submit again.",
+        "SOCIAL_TASK_ACCOUNTS_REQUIRED": "Select at least one account before submitting the task.",
+        "TASK_DEFAULT_TEMPLATE_REQUIRED": "The default task template is missing or no longer exists. Set a default template in task settings before submitting.",
+        "TASK_TEMPLATE_INVALID": "The default task template is incomplete. Fix it in task settings before submitting.",
+        "SOCIAL_IP_NOT_AVAILABLE": "The selected account's default proxy is unavailable. Set a usable default proxy before submitting.",
+        "GLOBAL_PROXY_NOT_AVAILABLE": "Global proxy is unavailable. Contact an administrator.",
+        "GLOBAL_PROXY_SERVICE_UNAVAILABLE": "Global proxy service is temporarily unavailable. Try again later.",
+        "SOCIAL_ACCOUNT_NOT_AVAILABLE": "The selected account is not executable right now. Refresh the list and remove unavailable accounts before submitting.",
+        "SOCIAL_TASK_LOGIN_PASSWORD_REQUIRED": "Login tasks require the account password. Edit or re-import the account password first.",
+        "SOCIAL_TASK_PLATFORM_REQUIRED": "A selected account is missing platform information. Refresh the list and select the accounts again.",
+        "SOCIAL_TASK_ACCOUNT_ID_INVALID": "The selected account list is stale. Refresh the list, select the accounts again, and resubmit.",
+        "SOCIAL_TASK_ACCOUNT_BUSY": "A selected account already has an active task. Wait for it to finish before submitting again.",
+        "SOCIAL_TASK_MIXED_PLATFORMS": "Selected accounts must belong to the same platform. Refresh the list and submit one platform at a time.",
+        "SOCIAL_TASK_UNSUPPORTED_ACTION": "This task action is not supported. Choose another execution function.",
+        "SOCIAL_TASK_TARGET_REQUIRED": "This task requires target parameters. Fix the default template before submitting.",
+        "SOCIAL_TASK_POST_CONFIGURATION_REQUIRED": "Post tasks require content or media. Fix the default template before submitting.",
+        "SOCIAL_TASK_PAYLOAD_REQUIRED": "This task is missing required execution parameters. Fix the default template before submitting.",
+        "SOCIAL_TASK_MEDIA_UNSUPPORTED": "The default template contains media that cannot be executed. Replace it with supported media.",
+        "SOCIAL_TASK_IDEMPOTENCY_CONFLICT": "This submit request was already used for a different task. Refresh and try again."
+      },
       "submitted": "Submitted {count} task(s), {enqueued} queued for execution."
     },
       "import": {
         "platformPlaceholder": "Default platform, e.g. x_twitter",
-        "batchPlaceholder": "Paste TXT/table data. Field order per line: account, password, 2FA, backup code, email, email password, email client ID, email token, registration IP, auth cookie, execution auth",
+        "batchPlaceholder": "Paste TXT/table data. Field order per line: account, password, 2FA, backup code, email, email password, email client ID, email token, registration IP, auth cookie, execution auth, phone, remark",
         "batchAction": "Batch import",
         "batchTitle": "Batch Import Accounts",
-        "batchHint": "Paste text or choose a txt / xls / xlsx file. Each row must include account, password, and at least one of 2FA, complete email credentials, or auth cookie. Execution auth is supplemental.",
+        "batchHint": "Paste text or choose a txt / xls / xlsx file. XLSX is read by fixed columns: account, password, 2FA, phone, email account, email password, email Client ID, email Token. Each row must include account, password, and either 2FA or complete email credentials.",
         "defaultPlatform": "Default platform",
         "fileLabel": "Import file",
+        "fileDropTitle": "Drop file here",
+        "fileDropHint": "Supports txt / xls / xlsx. XLSX uses the fixed 8-column order and does not match by header name.",
+        "chooseFile": "Choose file",
         "fileEmpty": "No file selected",
         "clearSource": "Clear source",
         "pendingCount": "Submittable rows",
@@ -3992,8 +3782,20 @@ export default {
           "batchDuplicate": "Duplicate in this batch",
           "existingWorkbenchDuplicate": "Duplicate in workbench",
           "needsData": "Needs data",
+          "pendingBackendMatch": "Pending backend match",
           "duplicate": "Duplicate",
           "skipped": "Skipped"
+        },
+        "resultReasons": {
+          "matchedTotalPool": "Matched an existing total-pool account",
+          "stagedNotStored": "Staged as a not-stored workbench account",
+          "duplicateInBatch": "Duplicate in this batch",
+          "duplicateInDatabase": "Already exists in the total account pool",
+          "alreadyInWorkbench": "Already exists in your workbench",
+          "alreadyAssigned": "Already assigned to a workbench",
+          "ambiguousTotalPoolMatch": "Multiple total-pool accounts match this username",
+          "invalidInput": "Import data is invalid",
+          "importFailed": "Could not import this account"
         },
         "resultTitle": "Import result",
         "resultSummary": "Total {total}; succeeded {succeeded}; imported {imported}; failed {failed}; skipped {skipped}; duplicates {duplicates}.",
@@ -4014,8 +3816,8 @@ export default {
         "duplicateAccount": "Duplicate account in this file",
         "duplicateInWorkbench": "This account already exists in the current workbench",
         "credentialRequired": "Needs 2FA, complete email credentials, or auth cookie",
-        "invalidExecutionAuth": "Execution auth must include access_token and token_secret",
         "unsupportedFile": "Only txt, xls, or xlsx files are supported",
+        "emptyFile": "No importable account rows were found in this file",
         "fileReadFailed": "Could not read the file. Check the file format."
       }
       },
@@ -4065,7 +3867,14 @@ export default {
         "clear": "Clear Proxy",
         "saved": "Default proxy saved.",
         "cleared": "Default proxy cleared.",
-        "failed": "Failed to set default proxy"
+        "failed": "Failed to set default proxy",
+        "errors": {
+          "SOCIAL_IP_NOT_AVAILABLE": "The selected proxy is unavailable. Test it successfully in Proxy Management before assigning it.",
+          "SOCIAL_IP_NOT_FOUND": "The selected proxy does not exist or is not yours. Refresh the proxy list and try again.",
+          "SOCIAL_IP_POOL_EMPTY": "No online proxies are available for random assignment. Add and test a proxy first.",
+          "SOCIAL_IP_REQUIRED": "Select an online proxy before assigning it.",
+          "SOCIAL_IP_ASSIGNMENT_MODE_INVALID": "Proxy assignment mode changed. Reopen the dialog and try again."
+        }
       },
       "empty": {
         "title": "No workbench accounts",
@@ -4077,11 +3886,11 @@ export default {
       },
       "deleteDialog": {
         "title": "Confirm Account Deletion",
-        "singleHint": "Please confirm again: remove {name} from your account workbench. This will not start a task or clear unrelated selections.",
-        "batchHint": "Please confirm again: remove the selected {count} account(s) from your account workbench.",
+        "singleHint": "Please confirm again: permanently delete account {name}. It will be deleted from the current workbench and the total account pool.",
+        "batchHint": "Please confirm again: permanently delete the selected {count} account(s). They will be deleted from the current workbench and the total account pool.",
         "accountSummary": "Accounts to delete",
         "accountSummaryMore": "{count} more",
-        "impactHint": "After deletion, these accounts are removed from the current account workbench. Submitted tasks and backend validation results still follow server rules.",
+        "impactHint": "After deletion, account records, credentials, ownership, and linked task records are cleaned up. This cannot be undone.",
         "confirmSingle": "Confirm Delete",
         "confirmBatch": "Delete {count} Accounts"
       },
@@ -4094,6 +3903,7 @@ export default {
       "not_stored": "Not Stored"
     },
     "taskStatus": {
+      "idle": "Idle",
       "pending": "Pending",
       "registering": "Registering",
       "importing": "Importing",

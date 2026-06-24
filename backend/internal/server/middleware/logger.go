@@ -3,7 +3,6 @@ package middleware
 import (
 	"time"
 
-	"github.com/Wei-Shaw/socialops/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/socialops/internal/pkg/ip"
 	"github.com/Wei-Shaw/socialops/internal/pkg/logger"
 	"github.com/gin-gonic/gin"
@@ -34,8 +33,6 @@ func Logger() gin.HandlerFunc {
 		statusCode := c.Writer.Status()
 		clientIP := ip.GetClientIP(c)
 		protocol := c.Request.Proto
-		accountID, hasAccountID := c.Request.Context().Value(ctxkey.AccountID).(int64)
-		platform, _ := c.Request.Context().Value(ctxkey.Platform).(string)
 
 		fields := []zap.Field{
 			zap.String("component", "http.access"),
@@ -45,12 +42,6 @@ func Logger() gin.HandlerFunc {
 			zap.String("protocol", protocol),
 			zap.String("method", method),
 			zap.String("path", path),
-		}
-		if hasAccountID && accountID > 0 {
-			fields = append(fields, zap.Int64("account_id", accountID))
-		}
-		if platform != "" {
-			fields = append(fields, zap.String("platform", platform))
 		}
 
 		l := logger.FromContext(c.Request.Context()).With(fields...)

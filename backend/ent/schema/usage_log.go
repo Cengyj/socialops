@@ -30,17 +30,20 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int64("user_id"),
 		field.Int64("api_key_id").
 			Optional().
-			Nillable(),
+			Nillable().
+			Comment("Historical api_keys foreign key; SocialOps social task rows leave this empty"),
 		field.Int64("account_id").
 			Optional().
-			Nillable(),
+			Nillable().
+			Comment("Historical account identifier column retained for table shape compatibility"),
 		field.String("request_id").
 			MaxLen(64).
 			Optional().
 			Nillable(),
 		field.String("model").
 			MaxLen(100).
-			Default("social-action"),
+			Default("social-action").
+			Comment("Historical model column; SocialOps stores a generic social-action marker"),
 		field.Int64("group_id").
 			Optional().
 			Nillable(),
@@ -48,17 +51,23 @@ func (UsageLog) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 		field.Int("input_tokens").
-			Default(0),
+			Default(0).
+			Comment("Historical AI token column; SocialOps social task rows keep this at zero"),
 		field.Int("output_tokens").
-			Default(0),
+			Default(0).
+			Comment("Historical AI token column; SocialOps social task rows keep this at zero"),
 		field.Int("cache_creation_tokens").
-			Default(0),
+			Default(0).
+			Comment("Historical AI token column; SocialOps social task rows keep this at zero"),
 		field.Int("cache_read_tokens").
-			Default(0),
+			Default(0).
+			Comment("Historical AI token column; SocialOps social task rows keep this at zero"),
 		field.Int("cache_creation_5m_tokens").
-			Default(0),
+			Default(0).
+			Comment("Historical AI token column; SocialOps social task rows keep this at zero"),
 		field.Int("cache_creation_1h_tokens").
-			Default(0),
+			Default(0).
+			Comment("Historical AI token column; SocialOps social task rows keep this at zero"),
 		field.Float("input_cost").
 			Default(0).
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),
@@ -83,13 +92,16 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int8("billing_type").
 			Default(0),
 		field.Bool("stream").
-			Default(false),
+			Default(false).
+			Comment("Historical AI request column; SocialOps social task rows keep this false"),
 		field.Int("duration_ms").
 			Optional().
-			Nillable(),
+			Nillable().
+			Comment("Historical request timing column retained for table shape compatibility"),
 		field.Int("first_token_ms").
 			Optional().
-			Nillable(),
+			Nillable().
+			Comment("Historical AI first-token timing column retained for table shape compatibility"),
 		field.String("user_agent").
 			MaxLen(512).
 			Optional().

@@ -30,7 +30,7 @@ var frontendFS embed.FS
 
 // PublicSettingsProvider is an interface to fetch public settings
 type PublicSettingsProvider interface {
-	GetPublicSettingsForInjection(ctx context.Context) (any, error)
+	GetPublicSettingsForInjection(ctx context.Context) (json.RawMessage, error)
 }
 
 // FrontendServer serves the embedded frontend with settings injection
@@ -173,16 +173,8 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 	defer cancel()
 
-	settings, err := s.settings.GetPublicSettingsForInjection(ctx)
-	if err != nil {
-		// Fallback: serve without injection
-		c.Data(http.StatusOK, "text/html; charset=utf-8", s.baseHTML)
-		c.Abort()
-		return
-	}
-
-	settingsJSON, err := json.Marshal(settings)
-	if err != nil {
+	settingsJSON, err := s.settings.GetPublicSettingsForInjection(ctx)
+	if err != nil || !json.Valid(settingsJSON) {
 		// Fallback: serve without injection
 		c.Data(http.StatusOK, "text/html; charset=utf-8", s.baseHTML)
 		c.Abort()
@@ -250,7 +242,8 @@ func replaceNoncePlaceholder(html []byte, nonce string) []byte {
 }
 
 // ServeEmbeddedFrontend returns a middleware for serving embedded frontend
-// This is the legacy function for backward compatibility when no settings provider is available
+// without per-request public settings injection. It is used only as a
+// fallback when the settings-backed frontend server cannot be initialized.
 func ServeEmbeddedFrontend() gin.HandlerFunc {
 	distFS, err := fs.Sub(frontendFS, "dist")
 	if err != nil {
@@ -292,7 +285,8 @@ func ServeEmbeddedFrontend() gin.HandlerFunc {
 	}
 }
 
-// tryServeOverrideFile is a standalone version of tryServeOverride for legacy usage.
+// tryServeOverrideFile applies the same local public-file override rule used
+// by FrontendServer for the fallback embedded frontend handler.
 func tryServeOverrideFile(c *gin.Context, overrideDir, cleanPath string) bool {
 	if overrideDir == "" {
 		return false

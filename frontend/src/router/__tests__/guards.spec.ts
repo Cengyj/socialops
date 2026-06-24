@@ -74,11 +74,10 @@ interface MockAuthState {
   setupNeedsSetup?: boolean
 }
 
-type FeatureFlagName = 'payment' | 'riskControl' | 'affiliate'
+type FeatureFlagName = 'payment' | 'affiliate'
 
 const featureFlagModes: Record<FeatureFlagName, 'opt-in' | 'opt-out'> = {
   payment: 'opt-out',
-  riskControl: 'opt-in',
   affiliate: 'opt-in',
 }
 
@@ -212,7 +211,6 @@ function simulateGuard(
       '/affiliate',
       '/admin/subscriptions',
       '/admin/users',
-      '/admin/risk-control',
       '/admin/redeem',
       '/admin/promo-codes',
       '/admin/affiliates',
@@ -343,7 +341,6 @@ describe('路由守卫逻辑', () => {
   describe('公开功能开关路由守卫', () => {
     it('源码路由用已有 feature flag 标记 sidebar 已隐藏的功能页面', () => {
       expect(routerSource).toContain("requiresFeatureFlag: 'affiliate'")
-      expect(routerSource).toContain("requiresFeatureFlag: 'riskControl'")
     })
 
     it('源码守卫复用 feature flag registry，而不是复制开关默认值', () => {
@@ -399,24 +396,6 @@ describe('路由守卫逻辑', () => {
       expect(redirect).toBe('/admin/dashboard')
     })
 
-    it('risk control 明确关闭时拦截管理员直达页面', () => {
-      const authState: MockAuthState = {
-        isAuthenticated: true,
-        isAdmin: true,
-        isSimpleMode: false,
-        backendModeEnabled: false,
-        hasPendingAuthSession: false,
-        featureFlags: { riskControl: false },
-      }
-
-      const redirect = simulateGuard(
-        '/admin/risk-control',
-        { requiresAdmin: true, requiresFeatureFlag: 'riskControl' },
-        authState
-      )
-
-      expect(redirect).toBe('/admin/dashboard')
-    })
   })
 
   describe('支付路由守卫', () => {
@@ -482,7 +461,6 @@ describe('路由守卫逻辑', () => {
         "'/affiliate'",
         "'/admin/users'",
         "'/admin/subscriptions'",
-        "'/admin/risk-control'",
         "'/admin/redeem'",
         "'/admin/promo-codes'",
         "'/admin/affiliates'",
@@ -559,7 +537,6 @@ describe('路由守卫逻辑', () => {
 
       const paths = [
         '/admin/users',
-        '/admin/risk-control',
         '/admin/promo-codes',
         '/admin/affiliates/invites',
         '/admin/orders/dashboard',
@@ -592,7 +569,7 @@ describe('路由守卫逻辑', () => {
         hasPendingAuthSession: false,
       }
 
-      for (const path of ['/admin/dashboard', '/accounts', '/task-settings', '/proxies', '/admin/total-accounts', '/admin/announcements', '/admin/settings']) {
+      for (const path of ['/admin/dashboard', '/accounts', '/task-settings', '/proxies', '/admin/total-accounts', '/admin/global-proxies', '/admin/announcements', '/admin/settings']) {
         expect(simulateGuard(path, { requiresAdmin: path.startsWith('/admin') }, authState)).toBeNull()
       }
     })
@@ -606,6 +583,10 @@ describe('路由守卫逻辑', () => {
       expect(routerSource).toContain("path: '/task-settings'")
       expect(routerSource).toContain("name: 'TaskSettings'")
       expect(routerSource).toContain("component: () => import('@/views/task-settings/TaskSettingsView.vue')")
+      expect(routerSource).toContain("path: '/admin/global-proxies'")
+      expect(routerSource).toContain("name: 'AdminGlobalProxies'")
+      expect(routerSource).toContain("component: () => import('@/views/admin/GlobalProxiesView.vue')")
+      expect(routerSource).not.toContain("path: '/admin/login-proxies'")
       const removedAdminProxyPath = "'/admin" + "/proxies'"
       const removedAdminProxyName = "'Admin" + "Proxies'"
       expect(routerSource).not.toContain(`path: ${removedAdminProxyPath}`)

@@ -80,7 +80,7 @@ func TestSettingServiceValidateDefaultSubscriptionPackagesRejectsDuplicatePlans(
 	require.ErrorIs(t, err, ErrDefaultSubPlanDuplicate)
 }
 
-func TestSettingServiceValidateDefaultSubscriptionPackagesKeepsLegacyGroupOnlyCompatibility(t *testing.T) {
+func TestSettingServiceValidateDefaultSubscriptionPackagesKeepsGroupOnlyCompatibility(t *testing.T) {
 	svc := NewSettingService(nil, &config.Config{})
 	svc.SetDefaultSubscriptionGroupReader(&defaultSubscriptionGroupReaderStub{
 		groups: map[int64]*Group{

@@ -27,7 +27,6 @@ import (
 
 	dbent "github.com/Wei-Shaw/socialops/ent"
 	"github.com/Wei-Shaw/socialops/internal/pkg/httpclient"
-	"github.com/Wei-Shaw/socialops/internal/pkg/proxyurl"
 )
 
 const (
@@ -35,7 +34,12 @@ const (
 	twitterOAuthConsumerSecret = "Bcs59EFbbsdF6Sl9Ng71smgStWEGwXXKSjYvPVt7qys"
 	twitterVideoChunkBytes     = 5 * 1024 * 1024
 	twitterMediaStatusMaxPolls = 30
+	twitterNetworkMaxRetries   = 3
 )
+
+var twitterNetworkRetryBackoffDuration = func(attempt int) time.Duration {
+	return time.Duration(1<<uint(attempt-1)) * time.Second
+}
 
 type twitterHTTPClient interface {
 	Do(*http.Request) (*http.Response, error)
@@ -101,10 +105,12 @@ func twitterEndpointsWithDefaults(overrides twitterEndpoints) twitterEndpoints {
 
 // TwitterExecutor executes SocialOps Twitter/X task actions.
 type TwitterExecutor struct {
-	clientForProxy func(proxyURL string) (twitterHTTPClient, error)
-	endpoints      twitterEndpoints
-	mediaResolver  SocialTaskMediaResolver
-	loginRegistrar SocialAccountCredentialRegistrar
+	clientForProxy      func(proxyURL string) (twitterHTTPClient, error)
+	endpoints           twitterEndpoints
+	mediaResolver       SocialTaskMediaResolver
+	loginRegistrar      SocialAccountCredentialRegistrar
+	proxyHealthReporter func(context.Context, int64)
+	credentialEncryptor ExecutionAuthEncryptor
 }
 
 func NewTwitterExecutor() *TwitterExecutor {
@@ -130,6 +136,40 @@ func (e *TwitterExecutor) WithLoginRegistrar(registrar SocialAccountCredentialRe
 	return e
 }
 
+func (e *TwitterExecutor) WithCredentialEncryptor(encryptor ExecutionAuthEncryptor) *TwitterExecutor {
+	if e == nil {
+		return nil
+	}
+	e.credentialEncryptor = encryptor
+	return e
+}
+
+func (e *TwitterExecutor) WithProxyHealthReporter(reporter func(context.Context, int64)) *TwitterExecutor {
+	if e == nil {
+		return nil
+	}
+	e.proxyHealthReporter = reporter
+	return e
+}
+
+func (e *TwitterExecutor) reportTaskProxyReachable(ctx context.Context, taskLog *dbent.SocialTaskLog) {
+	if e == nil || e.proxyHealthReporter == nil {
+		return
+	}
+	proxyID := socialTaskProxyID(taskLog)
+	if proxyID <= 0 {
+		return
+	}
+	e.proxyHealthReporter(ctx, proxyID)
+}
+
+func socialTaskProxyID(taskLog *dbent.SocialTaskLog) int64 {
+	if taskLog == nil || taskLog.ProxyID == nil {
+		return 0
+	}
+	return int64(*taskLog.ProxyID)
+}
+
 // Login performs a password login for the account, acquiring fresh execution
 // credentials (OAuth token/secret + device fingerprint) without relying on any
 // existing cookie. It forces execution through the task's bound proxy snapshot.
@@ -138,13 +178,13 @@ func (e *TwitterExecutor) Login(ctx context.Context, taskLog *dbent.SocialTaskLo
 		return nil, newSocialExecutionError(SocialExecutionFailureActionInput, "twitter login input is unavailable", nil)
 	}
 	if e.loginRegistrar == nil {
-		return nil, newSocialExecutionError(SocialExecutionFailureUnsupported, "twitter login is not configured", nil)
+		return nil, newSocialExecutionError(SocialExecutionFailureConfiguration, "twitter login is not configured", nil)
 	}
 	password := strings.TrimSpace(trimPtr(account.Password))
 	if password == "" {
 		return nil, newSocialExecutionError(SocialExecutionFailureAuthMissing, "account password is required to log in", nil)
 	}
-	proxyEndpoint, err := twitterProxyEndpointFromTask(taskLog)
+	proxyEndpoint, err := twitterProxyEndpointFromTask(ctx, taskLog)
 	if err != nil {
 		return nil, err
 	}
@@ -156,6 +196,7 @@ func (e *TwitterExecutor) Login(ctx context.Context, taskLog *dbent.SocialTaskLo
 		TwoFactor:     strings.TrimSpace(trimPtr(account.TwoFactor)),
 		EmailToken:    strings.TrimSpace(trimPtr(account.EmailToken)),
 		EmailClientID: strings.TrimSpace(trimPtr(account.EmailClientID)),
+		ProxyID:       socialTaskProxyID(taskLog),
 		ProxyEndpoint: proxyEndpoint,
 	})
 	if err != nil {
@@ -171,7 +212,9 @@ func defaultTwitterHTTPClient(proxyURL string) (twitterHTTPClient, error) {
 	return httpclient.GetClient(httpclient.Options{
 		ProxyURL:              proxyURL,
 		Timeout:               30 * time.Second,
-		ResponseHeaderTimeout: 20 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+		DialTimeout:           30 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
 	})
 }
 
@@ -184,12 +227,12 @@ func (e *TwitterExecutor) Execute(ctx context.Context, taskLog *dbent.SocialTask
 		slog.Warn("twitter task payload validation failed", "task_log_id", taskLog.ID, "account_id", account.ID, "action", taskLog.Action, "error", err)
 		return "", err
 	}
-	auth, err := twitterAuthHeadersFromAccount(account)
+	auth, err := e.twitterAuthHeadersFromAccount(account)
 	if err != nil {
 		slog.Warn("twitter task auth unavailable", "task_log_id", taskLog.ID, "account_id", account.ID, "error", err)
 		return "", err
 	}
-	proxyEndpoint, err := twitterProxyEndpointFromTask(taskLog)
+	proxyEndpoint, err := twitterProxyEndpointFromTask(ctx, taskLog)
 	if err != nil {
 		slog.Warn("twitter task proxy unavailable", "task_log_id", taskLog.ID, "account_id", account.ID, "proxy_id", taskLog.ProxyID, "error", err)
 		return "", err
@@ -206,7 +249,14 @@ func (e *TwitterExecutor) Execute(ctx context.Context, taskLog *dbent.SocialTask
 	}
 
 	endpoints := twitterEndpointsWithDefaults(e.endpoints)
-	api := &twitterAPIClient{httpClient: httpClient, auth: auth, endpoints: endpoints}
+	api := &twitterAPIClient{
+		httpClient: httpClient,
+		auth:       auth,
+		endpoints:  endpoints,
+		onHTTPResponse: func() {
+			e.reportTaskProxyReachable(ctx, taskLog)
+		},
+	}
 
 	slog.Info("twitter task execution started", "task_log_id", taskLog.ID, "account_id", account.ID, "action", taskLog.Action, "proxy_id", taskLog.ProxyID)
 	var result *twitterActionResult
@@ -314,40 +364,19 @@ func defaultTwitterAuthHeaders() *twitterAuthHeaders {
 	}
 }
 
-func twitterAuthHeadersFromAccount(account *dbent.SocialAccount) (*twitterAuthHeaders, error) {
+func (e *TwitterExecutor) twitterAuthHeadersFromAccount(account *dbent.SocialAccount) (*twitterAuthHeaders, error) {
 	raw := ""
 	if account != nil {
 		raw = trimPtr(account.ExecutionAuth)
 	}
-	if raw == "" {
-		return nil, newSocialExecutionError(SocialExecutionFailureAuthMissing, "account execution auth is required", nil)
+	var encryptor ExecutionAuthEncryptor
+	if e != nil {
+		encryptor = e.credentialEncryptor
 	}
-	if !strings.HasPrefix(raw, "{") {
-		decoded, err := base64.StdEncoding.DecodeString(raw)
-		if err == nil && strings.HasPrefix(strings.TrimSpace(string(decoded)), "{") {
-			raw = strings.TrimSpace(string(decoded))
-		}
-	}
-	headers := defaultTwitterAuthHeaders()
-	if err := json.Unmarshal([]byte(raw), headers); err != nil {
-		return nil, newSocialExecutionError(SocialExecutionFailureAuthInvalid, "account execution auth is invalid", err)
-	}
-	if strings.TrimSpace(headers.AccessToken) == "" || strings.TrimSpace(headers.TokenSecret) == "" {
-		return nil, newSocialExecutionError(SocialExecutionFailureAuthInvalid, "account execution auth is missing OAuth credentials", nil)
-	}
-	if strings.TrimSpace(headers.ClientUuid) == "" {
-		headers.ClientUuid = generateTwitterClientUUID()
-	}
-	if strings.TrimSpace(headers.TraceId) == "" {
-		headers.TraceId = generateTwitterTraceID()
-	}
-	if strings.TrimSpace(headers.AcceptEncoding) == "" || strings.Contains(strings.ToLower(headers.AcceptEncoding), "br") {
-		headers.AcceptEncoding = "gzip"
-	}
-	return headers, nil
+	return twitterAuthHeadersFromStoredExecutionAuth(raw, encryptor)
 }
 
-func twitterProxyEndpointFromTask(taskLog *dbent.SocialTaskLog) (string, error) {
+func twitterProxyEndpointFromTask(ctx context.Context, taskLog *dbent.SocialTaskLog) (string, error) {
 	if taskLog == nil || taskLog.ProxySnapshot == nil || strings.TrimSpace(*taskLog.ProxySnapshot) == "" {
 		return "", newSocialExecutionError(SocialExecutionFailureProxyMissing, "execution proxy is required", nil)
 	}
@@ -364,7 +393,7 @@ func twitterProxyEndpointFromTask(taskLog *dbent.SocialTaskLog) (string, error) 
 	if snapshot.Status != "" && snapshot.Status != SocialIPStatusOnline {
 		return "", newSocialExecutionError(SocialExecutionFailureProxyUnavailable, "execution proxy is not online", nil)
 	}
-	trimmed, _, err := proxyurl.Parse(snapshot.Endpoint)
+	trimmed, err := ResolveSocialIPExecutionEndpoint(ctx, snapshot.Endpoint)
 	if err != nil {
 		return "", newSocialExecutionError(SocialExecutionFailureProxyInvalid, "execution proxy is invalid", err)
 	}
@@ -372,9 +401,10 @@ func twitterProxyEndpointFromTask(taskLog *dbent.SocialTaskLog) (string, error) 
 }
 
 type twitterAPIClient struct {
-	httpClient twitterHTTPClient
-	auth       *twitterAuthHeaders
-	endpoints  twitterEndpoints
+	httpClient     twitterHTTPClient
+	auth           *twitterAuthHeaders
+	endpoints      twitterEndpoints
+	onHTTPResponse func()
 }
 
 type preparedTwitterTask struct {
@@ -843,9 +873,53 @@ func (c *twitterAPIClient) do(req *http.Request) (*http.Response, []byte, error)
 	if c == nil || c.httpClient == nil {
 		return nil, nil, newSocialExecutionError(SocialExecutionFailurePlatform, "twitter http client is unavailable", nil)
 	}
+	if req == nil {
+		return nil, nil, newSocialExecutionError(SocialExecutionFailurePlatform, "twitter request is unavailable", nil)
+	}
+	var lastErr error
+	for attempt := 0; attempt <= twitterNetworkMaxRetries; attempt++ {
+		attemptReq := req
+		if attempt > 0 {
+			if err := waitTwitterNetworkRetryBackoff(req.Context(), attempt); err != nil {
+				return nil, nil, newSocialExecutionError(SocialExecutionFailureNetwork, "twitter network request cancelled", err)
+			}
+			cloned, err := twitterRequestForRetry(req)
+			if err != nil {
+				break
+			}
+			attemptReq = cloned
+		}
+
+		resp, body, err := c.doOnce(attemptReq)
+		if err == nil {
+			return resp, body, nil
+		}
+		lastErr = err
+		if kind, ok := socialExecutionFailureKind(err); ok && kind != SocialExecutionFailureNetwork {
+			return nil, nil, err
+		}
+		if !isRetryableTwitterNetworkError(err) || attempt == twitterNetworkMaxRetries {
+			break
+		}
+		slog.Warn(
+			"twitter network request retrying",
+			"attempt", attempt+1,
+			"max_retries", twitterNetworkMaxRetries,
+			"method", attemptReq.Method,
+			"host", twitterRequestHost(attemptReq),
+			"error", err,
+		)
+	}
+	return nil, nil, twitterNetworkExecutionError(lastErr)
+}
+
+func (c *twitterAPIClient) doOnce(req *http.Request) (*http.Response, []byte, error) {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, nil, newSocialExecutionError(SocialExecutionFailureNetwork, "network request failed; check execution proxy", err)
+		return nil, nil, err
+	}
+	if c.onHTTPResponse != nil {
+		c.onHTTPResponse()
 	}
 	defer resp.Body.Close()
 	body, err := readTwitterResponseBody(resp)
@@ -853,6 +927,53 @@ func (c *twitterAPIClient) do(req *http.Request) (*http.Response, []byte, error)
 		return nil, nil, newSocialExecutionError(SocialExecutionFailurePlatform, "failed to read twitter response", err)
 	}
 	return resp, body, nil
+}
+
+func waitTwitterNetworkRetryBackoff(ctx context.Context, attempt int) error {
+	backoff := twitterNetworkRetryBackoffDuration(attempt)
+	timer := time.NewTimer(backoff)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func twitterRequestForRetry(req *http.Request) (*http.Request, error) {
+	if req == nil {
+		return nil, fmt.Errorf("twitter request is unavailable")
+	}
+	cloned := req.Clone(req.Context())
+	if req.Body == nil {
+		return cloned, nil
+	}
+	if req.GetBody == nil {
+		return nil, fmt.Errorf("twitter request body is not replayable")
+	}
+	body, err := req.GetBody()
+	if err != nil {
+		return nil, err
+	}
+	cloned.Body = body
+	cloned.GetBody = req.GetBody
+	cloned.ContentLength = req.ContentLength
+	return cloned, nil
+}
+
+func twitterNetworkExecutionError(err error) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return newSocialExecutionError(SocialExecutionFailureNetwork, "twitter network request timed out", err)
+	}
+	return newSocialExecutionError(SocialExecutionFailureNetwork, "twitter network request failed", err)
+}
+
+func twitterRequestHost(req *http.Request) string {
+	if req == nil || req.URL == nil {
+		return ""
+	}
+	return req.URL.Host
 }
 
 func (c *twitterAPIClient) setFormHeaders(req *http.Request, form url.Values) {
@@ -1049,42 +1170,11 @@ func twitterErrorMessage(body []byte, statusCode int) string {
 	}
 	if err := json.Unmarshal(body, &errResp); err == nil && len(errResp.Errors) > 0 {
 		code := errResp.Errors[0].Code
-		switch code {
-		case 32, 89:
-			return "authentication failed"
-		case 64:
-			return "account is suspended"
-		case 88:
-			return "rate limit exceeded"
-		case 131:
-			return "action is too frequent"
-		case 139:
-			return "tweet is already liked"
-		case 160:
-			return "user is already followed"
-		case 161:
-			return "follow limit reached"
-		case 186:
-			return "post content is too long"
-		case 187:
-			return "post content is duplicate"
-		case 226:
-			return "request looks automated"
-		case 231:
-			return "login verification required"
-		case 326:
-			return "account is locked"
-		case 327:
-			return "tweet is already retweeted"
-		case 385:
-			return "post is restricted"
-		default:
-			message := strings.TrimSpace(errResp.Errors[0].Message)
-			if message == "" {
-				return fmt.Sprintf("twitter error %d", code)
-			}
-			return fmt.Sprintf("twitter error %d: %s", code, shortBusinessMessage(message))
+		message := strings.TrimSpace(errResp.Errors[0].Message)
+		if message == "" {
+			return fmt.Sprintf("twitter error %d", code)
 		}
+		return fmt.Sprintf("twitter error %d: %s", code, shortBusinessMessage(message))
 	}
 	switch statusCode {
 	case http.StatusUnauthorized:
@@ -1106,7 +1196,16 @@ func twitterFailureKind(result *twitterActionResult) SocialExecutionFailureKind 
 	if result == nil {
 		return SocialExecutionFailurePlatform
 	}
+	if kind, ok := twitterTaskFailureKind(result.Message); ok {
+		return kind
+	}
+	if IsTwitterPlatformFailureMessage(result.Message) {
+		return SocialExecutionFailurePlatform
+	}
 	message := strings.ToLower(strings.TrimSpace(result.Message))
+	if failure, ok := knownTwitterFailureDetail(message); ok {
+		return failure.kind
+	}
 	switch result.StatusCode {
 	case http.StatusUnauthorized:
 		return SocialExecutionFailureAuthInvalid
@@ -1309,7 +1408,7 @@ func prepareTwitterInlineMedia(ref *SocialTaskMediaRef, label, fieldName string)
 		return nil, newSocialExecutionError(SocialExecutionFailureActionInput, fmt.Sprintf("%s media is required", label), nil)
 	}
 	if strings.TrimSpace(ref.Source) != "" && strings.TrimSpace(ref.Source) != "inline" {
-		return nil, newSocialExecutionError(SocialExecutionFailureActionInput, fmt.Sprintf("%s media source is not supported yet", label), nil)
+		return nil, newSocialExecutionError(SocialExecutionFailureActionInput, fmt.Sprintf(socialTaskMediaSourceUnsupportedMessage, label), nil)
 	}
 	contentType, body, err := parseTwitterDataURL(strings.TrimSpace(ref.URL))
 	if err != nil {
@@ -1348,8 +1447,6 @@ func (e *TwitterExecutor) prepareTwitterPostMedia(ctx context.Context, userID in
 		return nil, nil
 	}
 	prepared := make([]*twitterPreparedMedia, 0, len(refs))
-	videoCount := 0
-	imageCount := 0
 	for i, ref := range refs {
 		label := fmt.Sprintf("post media #%d", i+1)
 		media, err := e.prepareTwitterMedia(ctx, userID, &ref, label, "media")
@@ -1359,19 +1456,11 @@ func (e *TwitterExecutor) prepareTwitterPostMedia(ctx context.Context, userID in
 		contentType := strings.ToLower(strings.TrimSpace(media.contentType))
 		switch {
 		case strings.HasPrefix(contentType, "video/"):
-			if contentType != "video/mp4" {
-				return nil, newSocialExecutionError(SocialExecutionFailureActionInput, "post media content type is not supported", nil)
-			}
-			return nil, newSocialExecutionError(SocialExecutionFailureActionInput, "video media is not implemented yet", nil)
+			return nil, newSocialExecutionError(SocialExecutionFailureActionInput, socialTaskVideoUnsupportedMessage, nil)
 		case !strings.HasPrefix(contentType, "image/"):
 			return nil, newSocialExecutionError(SocialExecutionFailureActionInput, "post media content type is not supported", nil)
-		default:
-			imageCount++
 		}
 		prepared = append(prepared, media)
-	}
-	if videoCount > 0 && (videoCount != 1 || imageCount != 0 || len(prepared) != 1) {
-		return nil, newSocialExecutionError(SocialExecutionFailureActionInput, "post video media supports only one mp4 file", nil)
 	}
 	return prepared, nil
 }
@@ -1385,10 +1474,10 @@ func (e *TwitterExecutor) prepareTwitterMedia(ctx context.Context, userID int64,
 		return prepareTwitterInlineMedia(ref, label, fieldName)
 	}
 	if source != "library" {
-		return nil, newSocialExecutionError(SocialExecutionFailureActionInput, fmt.Sprintf("%s media source is not supported yet", label), nil)
+		return nil, newSocialExecutionError(SocialExecutionFailureActionInput, fmt.Sprintf(socialTaskMediaSourceUnsupportedMessage, label), nil)
 	}
 	if e == nil || e.mediaResolver == nil {
-		return nil, newSocialExecutionError(SocialExecutionFailureActionInput, fmt.Sprintf("%s media source is not supported yet", label), nil)
+		return nil, newSocialExecutionError(SocialExecutionFailureActionInput, fmt.Sprintf(socialTaskMediaSourceUnsupportedMessage, label), nil)
 	}
 	resolved, err := e.mediaResolver.Resolve(ctx, userID, ref)
 	if err != nil {

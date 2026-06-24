@@ -19,21 +19,11 @@ const (
 	socialTaskAvatarImageHeight = 400
 	socialTaskBannerImageWidth  = 1500
 	socialTaskBannerImageHeight = 500
-)
+	socialTaskPostMediaMaxItems = 4
 
-func validateSocialTaskExactImageDimensions(label string, ref *SocialTaskMediaRef, expectedWidth, expectedHeight int) error {
-	width, height, known, err := socialTaskMediaDimensions(ref)
-	if err != nil {
-		return fmt.Errorf("%s media is invalid", label)
-	}
-	if !known {
-		return fmt.Errorf("%s image must be %dx%d pixels", label, expectedWidth, expectedHeight)
-	}
-	if width != expectedWidth || height != expectedHeight {
-		return fmt.Errorf("%s image must be %dx%d pixels", label, expectedWidth, expectedHeight)
-	}
-	return nil
-}
+	socialTaskMediaSourceUnsupportedMessage = "%s media source is not supported for SocialOps execution"
+	socialTaskVideoUnsupportedMessage       = "video media is not supported for SocialOps execution"
+)
 
 func validateSocialTaskImageMedia(label string, ref *SocialTaskMediaRef) error {
 	if ref == nil || ref.IsZero() {
@@ -52,6 +42,17 @@ func validateSocialTaskImageMedia(label string, ref *SocialTaskMediaRef) error {
 	return nil
 }
 
+func validateSocialTaskExactImageDimensions(label string, ref *SocialTaskMediaRef, requiredWidth, requiredHeight int) error {
+	width, height, known, err := socialTaskMediaDimensions(ref)
+	if err != nil {
+		return fmt.Errorf("%s media is invalid", label)
+	}
+	if !known || width != requiredWidth || height != requiredHeight {
+		return fmt.Errorf("%s image must be %dx%d pixels", label, requiredWidth, requiredHeight)
+	}
+	return nil
+}
+
 func validateSocialTaskExecutableInlineMediaSource(label string, ref *SocialTaskMediaRef) error {
 	if ref == nil || ref.IsZero() {
 		return nil
@@ -61,10 +62,10 @@ func validateSocialTaskExecutableInlineMediaSource(label string, ref *SocialTask
 		return nil
 	}
 	if source != "" && source != "inline" {
-		return fmt.Errorf("%s media source is not supported yet", label)
+		return fmt.Errorf(socialTaskMediaSourceUnsupportedMessage, label)
 	}
 	if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(ref.URL)), "data:") {
-		return fmt.Errorf("%s media source is not supported yet", label)
+		return fmt.Errorf(socialTaskMediaSourceUnsupportedMessage, label)
 	}
 	return nil
 }
@@ -84,8 +85,9 @@ func socialTaskMediaRefExecutableStored(ref *SocialTaskMediaRef) bool {
 }
 
 func validateSocialTaskSupportedPostMedia(refs []SocialTaskMediaRef) error {
-	videoCount := 0
-	imageCount := 0
+	if len(refs) > socialTaskPostMediaMaxItems {
+		return fmt.Errorf("post media cannot exceed %d items", socialTaskPostMediaMaxItems)
+	}
 	for i, ref := range refs {
 		label := fmt.Sprintf("post media #%d", i+1)
 		if err := validateSocialTaskExecutableInlineMediaSource(label, &ref); err != nil {
@@ -94,18 +96,10 @@ func validateSocialTaskSupportedPostMedia(refs []SocialTaskMediaRef) error {
 		contentType := socialTaskMediaContentType(&ref)
 		switch {
 		case strings.HasPrefix(contentType, "video/"):
-			if contentType != "video/mp4" {
-				return fmt.Errorf("post media content type is not supported")
-			}
-			return fmt.Errorf("video media is not implemented yet")
+			return fmt.Errorf(socialTaskVideoUnsupportedMessage)
 		case contentType == "" || !strings.HasPrefix(contentType, "image/"):
 			return fmt.Errorf("post media content type is not supported")
-		default:
-			imageCount++
 		}
-	}
-	if videoCount > 0 && (videoCount != 1 || imageCount != 0 || len(refs) != 1) {
-		return fmt.Errorf("post video media supports only one mp4 file")
 	}
 	return nil
 }

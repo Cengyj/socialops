@@ -1,17 +1,6 @@
 <template>
   <AppLayout>
-    <div class="mx-auto max-w-7xl space-y-6">
-      <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ t('admin.settings.title') }}</h1>
-          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.settings.description') }}</p>
-        </div>
-        <button type="button" class="btn btn-secondary btn-sm" :disabled="loading" @click="loadSettings">
-          <Icon name="refresh" size="sm" />
-          {{ t('common.refresh') }}
-        </button>
-      </div>
-
+    <div class="mx-auto max-w-6xl space-y-6">
       <div
         v-if="settingsLoadError"
         class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
@@ -25,30 +14,32 @@
       </div>
 
       <div class="space-y-6">
-        <div class="border-b border-gray-200 dark:border-dark-700">
-          <nav class="flex flex-wrap gap-2" role="tablist" :aria-label="t('admin.settings.title')">
-            <button
-              v-for="tab in tabs"
-              :key="tab.key"
-              :id="`settings-tab-${tab.key}`"
-              type="button"
-              role="tab"
-              class="border-b-2 px-3 py-2 text-sm font-medium transition-colors"
-              :class="activeTab === tab.key
-                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'"
-              :aria-selected="activeTab === tab.key"
-              :aria-controls="`settings-panel-${tab.key}`"
-              :tabindex="activeTab === tab.key ? 0 : -1"
-              @click="selectTab(tab.key)"
-              @keydown="handleTabKeydown($event, tab.key)"
-            >
-              {{ tab.label }}
-            </button>
+        <div class="settings-tabs-shell">
+          <nav class="settings-tabs-scroll" role="tablist" :aria-label="t('admin.settings.title')">
+            <div class="settings-tabs">
+              <button
+                v-for="tab in tabs"
+                :key="tab.key"
+                :id="`settings-tab-${tab.key}`"
+                type="button"
+                role="tab"
+                :class="['settings-tab', activeTab === tab.key && 'settings-tab-active']"
+                :aria-selected="activeTab === tab.key"
+                :aria-controls="`settings-panel-${tab.key}`"
+                :tabindex="activeTab === tab.key ? 0 : -1"
+                @click="selectTab(tab.key)"
+                @keydown="handleTabKeydown($event, tab.key)"
+              >
+                <span class="settings-tab-icon">
+                  <Icon :name="tab.icon" size="sm" />
+                </span>
+                <span class="settings-tab-label">{{ tab.label }}</span>
+              </button>
+            </div>
           </nav>
         </div>
 
-        <div v-if="activeTab === 'general'" id="settings-panel-general" class="space-y-4" role="tabpanel" aria-labelledby="settings-tab-general">
+        <div v-if="activeTab === 'general'" id="settings-panel-general" class="space-y-6" role="tabpanel" aria-labelledby="settings-tab-general">
           <section class="card p-6 space-y-5">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.general.title') }}</h2>
             <div class="grid gap-4 md:grid-cols-2">
@@ -87,14 +78,6 @@
               <label class="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
                 <input v-model="form.backend_mode_enabled" type="checkbox" class="checkbox" />
                 {{ t('admin.settings.general.backendMode') }}
-              </label>
-              <label class="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
-                <input v-model="form.purchase_subscription_enabled" type="checkbox" class="checkbox" />
-                {{ t('admin.settings.general.purchaseEntry') }}
-              </label>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 md:col-span-2">
-                {{ t('admin.settings.general.purchaseUrl') }}
-                <input v-model="form.purchase_subscription_url" type="url" class="input mt-1" />
               </label>
               <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 md:col-span-2">
                 {{ t('admin.settings.general.homeContent') }}
@@ -199,10 +182,125 @@
           </section>
         </div>
 
-        <div v-if="activeTab === 'registration'" id="settings-panel-registration" class="space-y-4" role="tabpanel" aria-labelledby="settings-tab-registration">
-          <section class="card p-6 space-y-5">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.registration.title') }}</h2>
-            <div class="grid gap-4 md:grid-cols-2">
+        <div v-if="activeTab === 'agreement'" id="settings-panel-agreement" class="space-y-6" role="tabpanel" aria-labelledby="settings-tab-agreement">
+          <section class="card overflow-hidden">
+            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+              <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.loginAgreement.title') }}</h2>
+                  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.settings.loginAgreement.description') }}</p>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="text-sm text-gray-600 dark:text-gray-300">
+                    {{ form.login_agreement_enabled ? t('common.enabled') : t('common.disabled') }}
+                  </span>
+                  <label class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center">
+                    <span class="sr-only">{{ t('admin.settings.loginAgreement.enabled') }}</span>
+                    <input v-model="form.login_agreement_enabled" type="checkbox" class="peer sr-only" />
+                    <span class="absolute inset-0 rounded-full bg-gray-200 transition-colors duration-200 peer-checked:bg-primary-600 peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:bg-dark-600 dark:peer-focus-visible:ring-offset-dark-800"></span>
+                    <span class="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 peer-checked:translate-x-5"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="space-y-6 p-6">
+              <div>
+                <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.loginAgreement.mode') }}
+                </label>
+                <div class="grid grid-cols-2 gap-2 rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
+                  <button
+                    type="button"
+                    class="inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition"
+                    :class="form.login_agreement_mode === 'modal'
+                      ? 'bg-white text-primary-700 shadow-sm dark:bg-dark-800 dark:text-primary-300'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'"
+                    @click="form.login_agreement_mode = 'modal'"
+                  >
+                    <Icon name="shield" size="sm" />
+                    {{ t('admin.settings.loginAgreement.modal') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition"
+                    :class="form.login_agreement_mode === 'checkbox'
+                      ? 'bg-white text-primary-700 shadow-sm dark:bg-dark-800 dark:text-primary-300'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'"
+                    @click="form.login_agreement_mode = 'checkbox'"
+                  >
+                    <Icon name="checkCircle" size="sm" />
+                    {{ t('admin.settings.loginAgreement.checkbox') }}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                      {{ t('admin.settings.loginAgreement.documents') }}
+                    </h3>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t('admin.settings.loginAgreement.documentsHint') }}
+                    </p>
+                  </div>
+                  <button type="button" class="btn btn-primary btn-sm inline-flex items-center gap-1.5" @click="addLoginAgreementDocument">
+                    <Icon name="plus" size="sm" />
+                    {{ t('admin.settings.loginAgreement.add') }}
+                  </button>
+                </div>
+
+                <div v-if="form.login_agreement_documents.length === 0" class="mt-4 rounded-lg border border-dashed border-gray-200 p-4 text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400">
+                  {{ t('admin.settings.loginAgreement.empty') }}
+                </div>
+                <div v-else class="mt-4 space-y-3">
+                  <div
+                    v-for="(document, index) in form.login_agreement_documents"
+                    :key="document.id || `agreement-${index}`"
+                    class="rounded-lg border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-800/60"
+                  >
+                    <div class="mb-3 flex items-center justify-between gap-3">
+                      <div class="flex min-w-0 items-center gap-3">
+                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-dark-200">
+                          <Icon name="document" size="sm" />
+                        </span>
+                        <div class="min-w-0">
+                          <p class="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                            {{ document.title || t('admin.settings.loginAgreement.untitled') }}
+                          </p>
+                          <p class="truncate text-xs text-gray-500 dark:text-gray-400">
+                            {{ document.id }}
+                          </p>
+                        </div>
+                      </div>
+                      <button type="button" class="rounded-md p-2 text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20" @click="removeLoginAgreementDocument(index)">
+                        <Icon name="trash" size="sm" />
+                      </button>
+                    </div>
+                    <div class="space-y-3">
+                      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {{ t('admin.settings.loginAgreement.documentTitle') }}
+                        <input v-model="document.title" type="text" class="input mt-1" />
+                      </label>
+                      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {{ t('admin.settings.loginAgreement.content') }}
+                        <textarea v-model="document.content_md" rows="6" class="input mt-1 resize-y font-mono text-sm"></textarea>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div v-if="activeTab === 'security'" id="settings-panel-security" class="space-y-6" role="tabpanel" aria-labelledby="settings-tab-security">
+          <section class="card overflow-hidden">
+            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.registration.title') }}</h2>
+            </div>
+            <div class="grid gap-4 p-6 md:grid-cols-2">
               <label class="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
                 <input v-model="form.registration_enabled" type="checkbox" class="checkbox" />
                 {{ t('admin.settings.registration.enabled') }}
@@ -231,64 +329,11 @@
           </section>
 
           <section class="card p-6 space-y-5">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.loginAgreement.title') }}</h2>
-              <button type="button" class="btn btn-secondary btn-sm" @click="addLoginAgreementDocument">
-                <Icon name="plus" size="sm" />
-                {{ t('admin.settings.loginAgreement.add') }}
-              </button>
-            </div>
-            <div class="grid gap-4 md:grid-cols-2">
-              <label class="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
-                <input v-model="form.login_agreement_enabled" type="checkbox" class="checkbox" />
-                {{ t('admin.settings.loginAgreement.enabled') }}
-              </label>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                {{ t('admin.settings.loginAgreement.mode') }}
-                <select v-model="form.login_agreement_mode" class="input mt-1">
-                  <option value="modal">{{ t('admin.settings.loginAgreement.modal') }}</option>
-                  <option value="checkbox">{{ t('admin.settings.loginAgreement.checkbox') }}</option>
-                </select>
-              </label>
-            </div>
-            <div v-if="form.login_agreement_documents.length === 0" class="rounded-lg border border-dashed border-gray-200 p-4 text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400">
-              {{ t('admin.settings.loginAgreement.empty') }}
-            </div>
-            <div v-else class="space-y-3">
-              <div
-                v-for="(document, index) in form.login_agreement_documents"
-                :key="document.id || `agreement-${index}`"
-                class="space-y-3 rounded-lg border border-gray-200 p-4 dark:border-dark-700"
-              >
-                <div class="grid gap-3 md:grid-cols-[1fr_auto]">
-                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {{ t('admin.settings.loginAgreement.documentTitle') }}
-                    <input v-model="document.title" type="text" class="input mt-1" />
-                  </label>
-                  <button type="button" class="btn btn-secondary self-end px-3" @click="removeLoginAgreementDocument(index)">
-                    <Icon name="trash" size="sm" />
-                  </button>
-                </div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {{ t('admin.settings.loginAgreement.content') }}
-                  <textarea v-model="document.content_md" rows="5" class="input mt-1 resize-y font-mono text-sm"></textarea>
-                </label>
-              </div>
-            </div>
-          </section>
-        </div>
-
-        <div v-if="activeTab === 'security'" id="settings-panel-security" class="space-y-4" role="tabpanel" aria-labelledby="settings-tab-security">
-          <section class="card p-6 space-y-5">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.security.title') }}</h2>
             <div class="grid gap-4 md:grid-cols-2">
               <label class="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
                 <input v-model="form.totp_enabled" type="checkbox" class="checkbox" />
                 {{ t('admin.settings.security.totp') }}
-              </label>
-              <label class="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
-                <input v-model="form.api_key_acl_trust_forwarded_ip" type="checkbox" class="checkbox" />
-                {{ t('admin.settings.security.trustForwardedIp') }}
               </label>
               <label class="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
                 <input v-model="form.turnstile_enabled" type="checkbox" class="checkbox" />
@@ -324,38 +369,6 @@
             </div>
           </section>
 
-          <section class="card p-6 space-y-4">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.adminApiKey.title') }}</h2>
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.settings.adminApiKey.status', { status: adminApiKey.exists ? t('common.enabled') : t('common.disabled') }) }}</p>
-              </div>
-              <div class="flex flex-wrap gap-2">
-                <button type="button" class="btn btn-secondary btn-sm" :disabled="adminApiKey.loading" @click="loadAdminApiKey">
-                  {{ t('common.refresh') }}
-                </button>
-                <button type="button" class="btn btn-primary btn-sm" :disabled="adminApiKey.loading" @click="regenerateAdminApiKey">
-                  {{ t('admin.settings.adminApiKey.regenerate') }}
-                </button>
-                <button type="button" class="btn btn-danger btn-sm" :disabled="adminApiKey.loading || !adminApiKey.exists" @click="deleteAdminApiKey">
-                  {{ t('common.delete') }}
-                </button>
-              </div>
-            </div>
-            <div class="grid gap-4 md:grid-cols-2">
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                {{ t('admin.settings.adminApiKey.masked') }}
-                <input :value="adminApiKey.masked_key || '-'" type="text" class="input mt-1" readonly />
-              </label>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                {{ t('admin.settings.adminApiKey.generated') }}
-                <input :value="adminApiKey.generated" type="text" class="input mt-1 font-mono text-xs" readonly />
-              </label>
-            </div>
-          </section>
-        </div>
-
-        <div v-if="activeTab === 'auth'" id="settings-panel-auth" class="space-y-4" role="tabpanel" aria-labelledby="settings-tab-auth">
           <section class="card p-6 space-y-5">
             <div>
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.wechatConnect.title') }}</h2>
@@ -920,9 +933,37 @@
               </label>
             </div>
           </section>
+
+          <section class="card overflow-hidden">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+              <div>
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.adminApiKey.title') }}</h2>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.settings.adminApiKey.status', { status: adminApiKey.exists ? t('common.enabled') : t('common.disabled') }) }}</p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" class="btn btn-primary btn-sm" :disabled="adminApiKey.loading" @click="regenerateAdminApiKey">
+                  {{ t('admin.settings.adminApiKey.regenerate') }}
+                </button>
+                <button type="button" class="btn btn-danger btn-sm" :disabled="adminApiKey.loading || !adminApiKey.exists" @click="deleteAdminApiKey">
+                  {{ t('common.delete') }}
+                </button>
+              </div>
+            </div>
+            <div class="grid gap-4 p-6 md:grid-cols-2">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ t('admin.settings.adminApiKey.masked') }}
+                <input :value="adminApiKey.masked_key || '-'" type="text" class="input mt-1" readonly />
+              </label>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ t('admin.settings.adminApiKey.generated') }}
+                <input :value="adminApiKey.generated" type="text" class="input mt-1 font-mono text-xs" readonly />
+              </label>
+            </div>
+          </section>
+
         </div>
 
-        <div v-if="activeTab === 'users'" id="settings-panel-users" class="space-y-4" role="tabpanel" aria-labelledby="settings-tab-users">
+        <div v-if="activeTab === 'users'" id="settings-panel-users" class="space-y-6" role="tabpanel" aria-labelledby="settings-tab-users">
           <section class="card p-6 space-y-5">
             <div>
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.authSourceDefaults.title') }}</h2>
@@ -1098,115 +1139,68 @@
             </div>
           </section>
 
-          <section class="card p-6 space-y-4">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.affiliate.title') }}</h2>
-            <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-              <label class="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
-                <input v-model="form.affiliate_enabled" type="checkbox" class="checkbox" />
-                {{ t('admin.settings.affiliate.enabled') }}
-              </label>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                {{ t('admin.settings.affiliate.rate') }}
-                <input v-model.number="form.affiliate_rebate_rate" type="number" min="0" max="1" step="0.01" class="input mt-1" />
-              </label>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                {{ t('admin.settings.affiliate.freezeHours') }}
-                <input v-model.number="form.affiliate_rebate_freeze_hours" type="number" min="0" class="input mt-1" />
-              </label>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                {{ t('admin.settings.affiliate.durationDays') }}
-                <input v-model.number="form.affiliate_rebate_duration_days" type="number" min="0" class="input mt-1" />
-              </label>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                {{ t('admin.settings.affiliate.perInviteeCap') }}
-                <input
-                  v-model.number="form.affiliate_rebate_per_invitee_cap"
-                  data-testid="affiliate-rebate-per-invitee-cap"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  class="input mt-1"
-                />
-              </label>
+          <section class="card overflow-hidden">
+            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.affiliate.title') }}</h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.settings.affiliate.description') }}</p>
+            </div>
+            <div class="space-y-5 p-6">
+              <div class="flex flex-col gap-4 rounded-lg border border-gray-200 p-4 dark:border-dark-700 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <label class="text-sm font-medium text-gray-900 dark:text-white">
+                    {{ t('admin.settings.affiliate.enabled') }}
+                  </label>
+                  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    {{ t('admin.settings.affiliate.enabledHint') }}
+                  </p>
+                </div>
+                <label class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center self-start sm:self-center">
+                  <span class="sr-only">{{ t('admin.settings.affiliate.enabled') }}</span>
+                  <input v-model="form.affiliate_enabled" data-testid="affiliate-enabled" type="checkbox" class="peer sr-only" />
+                  <span class="absolute inset-0 rounded-full bg-gray-200 transition-colors duration-200 peer-checked:bg-primary-600 peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:bg-dark-600 dark:peer-focus-visible:ring-offset-dark-800"></span>
+                  <span class="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 peer-checked:translate-x-5"></span>
+                </label>
+              </div>
+              <div v-if="form.affiliate_enabled" class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.affiliate.rate') }}
+                  <input v-model.number="form.affiliate_rebate_rate" type="number" min="0" max="1" step="0.01" class="input mt-1" />
+                  <span class="mt-1 block text-xs font-normal text-gray-500 dark:text-gray-400">{{ t('admin.settings.affiliate.rateHint') }}</span>
+                </label>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.affiliate.freezeHours') }}
+                  <input v-model.number="form.affiliate_rebate_freeze_hours" type="number" min="0" class="input mt-1" />
+                  <span class="mt-1 block text-xs font-normal text-gray-500 dark:text-gray-400">{{ t('admin.settings.affiliate.freezeHoursHint') }}</span>
+                </label>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.affiliate.durationDays') }}
+                  <input v-model.number="form.affiliate_rebate_duration_days" type="number" min="0" class="input mt-1" />
+                  <span class="mt-1 block text-xs font-normal text-gray-500 dark:text-gray-400">{{ t('admin.settings.affiliate.durationDaysHint') }}</span>
+                </label>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.affiliate.perInviteeCap') }}
+                  <input
+                    v-model.number="form.affiliate_rebate_per_invitee_cap"
+                    data-testid="affiliate-rebate-per-invitee-cap"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    class="input mt-1"
+                  />
+                  <span class="mt-1 block text-xs font-normal text-gray-500 dark:text-gray-400">{{ t('admin.settings.affiliate.perInviteeCapHint') }}</span>
+                </label>
+              </div>
             </div>
           </section>
         </div>
 
-        <div v-if="activeTab === 'backup'" id="settings-panel-backup" class="space-y-4" role="tabpanel" aria-labelledby="settings-tab-backup">
-          <BackupSettingsSection />
-        </div>
-
-        <div v-if="activeTab === 'features'" id="settings-panel-features" class="space-y-4" role="tabpanel" aria-labelledby="settings-tab-features">
-          <section class="card p-6 space-y-5">
-            <div>
-              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.features.title') }}</h2>
-              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.settings.features.description') }}</p>
+        <div v-if="activeTab === 'email'" id="settings-panel-email" class="space-y-6" role="tabpanel" aria-labelledby="settings-tab-email">
+          <section class="card overflow-hidden">
+            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.smtp.title') }}</h2>
             </div>
-            <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <label class="flex items-start gap-3 rounded-lg border border-gray-200 p-4 text-sm text-gray-700 dark:border-dark-700 dark:text-gray-300">
-                <input v-model="form.payment_enabled" type="checkbox" class="checkbox mt-0.5" />
-                <span>
-                  <span class="block font-medium text-gray-900 dark:text-white">{{ t('admin.settings.features.payment') }}</span>
-                  <span class="mt-1 block text-xs text-gray-500 dark:text-gray-400">{{ t('admin.settings.features.paymentHint') }}</span>
-                </span>
-              </label>
-              <label class="flex items-start gap-3 rounded-lg border border-gray-200 p-4 text-sm text-gray-700 dark:border-dark-700 dark:text-gray-300">
-                <input v-model="form.payment_balance_disabled" type="checkbox" class="checkbox mt-0.5" />
-                <span>
-                  <span class="block font-medium text-gray-900 dark:text-white">{{ t('admin.settings.features.disableBalanceRecharge') }}</span>
-                  <span class="mt-1 block text-xs text-gray-500 dark:text-gray-400">{{ t('admin.settings.features.disableBalanceRechargeHint') }}</span>
-                </span>
-              </label>
-              <label class="flex items-start gap-3 rounded-lg border border-gray-200 p-4 text-sm text-gray-700 dark:border-dark-700 dark:text-gray-300">
-                <input v-model="form.purchase_subscription_enabled" type="checkbox" class="checkbox mt-0.5" />
-                <span>
-                  <span class="block font-medium text-gray-900 dark:text-white">{{ t('admin.settings.features.purchaseEntry') }}</span>
-                  <span class="mt-1 block text-xs text-gray-500 dark:text-gray-400">{{ t('admin.settings.features.purchaseEntryHint') }}</span>
-                </span>
-              </label>
-              <label class="flex items-start gap-3 rounded-lg border border-gray-200 p-4 text-sm text-gray-700 dark:border-dark-700 dark:text-gray-300">
-                <input v-model="form.risk_control_enabled" type="checkbox" class="checkbox mt-0.5" />
-                <span>
-                  <span class="block font-medium text-gray-900 dark:text-white">{{ t('admin.settings.features.riskControl') }}</span>
-                  <span class="mt-1 block text-xs text-gray-500 dark:text-gray-400">{{ t('admin.settings.features.riskControlHint') }}</span>
-                </span>
-              </label>
-              <label class="flex items-start gap-3 rounded-lg border border-gray-200 p-4 text-sm text-gray-700 dark:border-dark-700 dark:text-gray-300">
-                <input v-model="form.affiliate_enabled" type="checkbox" class="checkbox mt-0.5" />
-                <span>
-                  <span class="block font-medium text-gray-900 dark:text-white">{{ t('admin.settings.features.affiliate') }}</span>
-                  <span class="mt-1 block text-xs text-gray-500 dark:text-gray-400">{{ t('admin.settings.features.affiliateHint') }}</span>
-                </span>
-              </label>
-              <label class="flex items-start gap-3 rounded-lg border border-gray-200 p-4 text-sm text-gray-700 dark:border-dark-700 dark:text-gray-300">
-                <input v-model="form.promo_code_enabled" type="checkbox" class="checkbox mt-0.5" />
-                <span>
-                  <span class="block font-medium text-gray-900 dark:text-white">{{ t('admin.settings.features.promoCode') }}</span>
-                  <span class="mt-1 block text-xs text-gray-500 dark:text-gray-400">{{ t('admin.settings.features.promoCodeHint') }}</span>
-                </span>
-              </label>
-              <label class="flex items-start gap-3 rounded-lg border border-gray-200 p-4 text-sm text-gray-700 dark:border-dark-700 dark:text-gray-300">
-                <input v-model="form.invitation_code_enabled" type="checkbox" class="checkbox mt-0.5" />
-                <span>
-                  <span class="block font-medium text-gray-900 dark:text-white">{{ t('admin.settings.features.invitationCode') }}</span>
-                  <span class="mt-1 block text-xs text-gray-500 dark:text-gray-400">{{ t('admin.settings.features.invitationCodeHint') }}</span>
-                </span>
-              </label>
-              <label class="flex items-start gap-3 rounded-lg border border-gray-200 p-4 text-sm text-gray-700 dark:border-dark-700 dark:text-gray-300">
-                <input v-model="form.backend_mode_enabled" type="checkbox" class="checkbox mt-0.5" />
-                <span>
-                  <span class="block font-medium text-gray-900 dark:text-white">{{ t('admin.settings.features.backendMode') }}</span>
-                  <span class="mt-1 block text-xs text-gray-500 dark:text-gray-400">{{ t('admin.settings.features.backendModeHint') }}</span>
-                </span>
-              </label>
-            </div>
-          </section>
-        </div>
-
-        <div v-if="activeTab === 'email'" id="settings-panel-email" class="space-y-4" role="tabpanel" aria-labelledby="settings-tab-email">
-          <section class="card p-6 space-y-5">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.smtp.title') }}</h2>
-            <div class="grid gap-4 md:grid-cols-3">
+            <div class="space-y-5 p-6">
+              <div class="grid gap-4 md:grid-cols-3">
               <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
                 {{ t('admin.settings.smtp.host') }}
                 <input v-model="form.smtp_host" type="text" class="input mt-1" />
@@ -1256,20 +1250,26 @@
                 {{ t('admin.settings.smtp.testEmail') }}
                 <input v-model="testEmail" type="email" class="input mt-1" />
               </label>
-            </div>
-            <div class="flex flex-wrap gap-2">
-              <button type="button" class="btn btn-secondary btn-sm" :disabled="testingSmtp" @click="testSmtpConnection">
-                {{ testingSmtp ? t('admin.settings.smtp.testing') : t('admin.settings.smtp.testConnection') }}
-              </button>
-              <button type="button" class="btn btn-primary btn-sm" :disabled="sendingTestEmail || !testEmail" @click="sendTestEmail">
-                {{ sendingTestEmail ? t('admin.settings.smtp.sending') : t('admin.settings.smtp.sendTestEmail') }}
-              </button>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" class="btn btn-secondary btn-sm" :disabled="testingSmtp" @click="testSmtpConnection">
+                  {{ testingSmtp ? t('admin.settings.smtp.testing') : t('admin.settings.smtp.testConnection') }}
+                </button>
+                <button type="button" class="btn btn-primary btn-sm" :disabled="sendingTestEmail || !testEmail" @click="sendTestEmail">
+                  {{ sendingTestEmail ? t('admin.settings.smtp.sending') : t('admin.settings.smtp.sendTestEmail') }}
+                </button>
+              </div>
             </div>
           </section>
 
-          <section class="card p-6 space-y-4">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.notifications.title') }}</h2>
-            <div class="grid gap-4 md:grid-cols-2">
+          <EmailTemplateEditor />
+
+          <section class="card overflow-hidden">
+            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.notifications.title') }}</h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.settings.notifications.description') }}</p>
+            </div>
+            <div class="grid gap-4 p-6 md:grid-cols-2">
               <label class="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
                 <input v-model="form.balance_low_notify_enabled" type="checkbox" class="checkbox" />
                 {{ t('admin.settings.notifications.balanceLow') }}
@@ -1296,11 +1296,9 @@
               </label>
             </div>
           </section>
-
-          <EmailTemplateEditor v-if="activeTab === 'email'" />
         </div>
 
-        <div v-if="activeTab === 'payment'" id="settings-panel-payment" class="space-y-4" role="tabpanel" aria-labelledby="settings-tab-payment">
+        <div v-if="activeTab === 'payment'" id="settings-panel-payment" class="space-y-6" role="tabpanel" aria-labelledby="settings-tab-payment">
           <section class="card p-6 space-y-5">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.payment.title') }}</h2>
@@ -1333,8 +1331,16 @@
                 {{ t('admin.settings.payment.balanceDisabled') }}
               </label>
               <label class="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
+                <input v-model="form.purchase_subscription_enabled" type="checkbox" class="checkbox" />
+                {{ t('admin.settings.payment.purchaseEntry') }}
+              </label>
+              <label class="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
                 <input v-model="form.payment_alipay_force_qrcode" type="checkbox" class="checkbox" />
                 {{ t('admin.settings.payment.alipayForceQr') }}
+              </label>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 md:col-span-2">
+                {{ t('admin.settings.payment.purchaseUrl') }}
+                <input v-model="form.purchase_subscription_url" type="url" class="input mt-1" />
               </label>
               <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
                 {{ t('admin.settings.payment.minAmount') }}
@@ -1495,6 +1501,10 @@
           />
         </div>
 
+        <div v-if="activeTab === 'backup'" id="settings-panel-backup" class="space-y-6" role="tabpanel" aria-labelledby="settings-tab-backup">
+          <BackupSettingsSection />
+        </div>
+
         <div v-if="activeTab !== 'backup'" class="flex justify-end">
           <button type="button" class="btn btn-primary" :disabled="saving || loading || Boolean(settingsLoadError)" @click="saveSettings">
             <span v-if="saving">{{ t('common.saving') }}</span>
@@ -1542,7 +1552,7 @@ import { useAppStore } from '@/stores'
 import { useAdminSettingsStore } from '@/stores/adminSettings'
 import { extractApiErrorMessage } from '@/utils/apiError'
 
-type TabKey = 'general' | 'registration' | 'security' | 'auth' | 'users' | 'features' | 'payment' | 'email' | 'backup'
+type TabKey = 'general' | 'agreement' | 'security' | 'users' | 'payment' | 'email' | 'backup'
 
 interface SettingsForm extends UpdateSettingsRequest {
   site_name: string
@@ -1580,7 +1590,6 @@ interface SettingsForm extends UpdateSettingsRequest {
   turnstile_enabled: boolean
   turnstile_site_key: string
   turnstile_secret_key: string
-  api_key_acl_trust_forwarded_ip: boolean
   linuxdo_connect_enabled: boolean
   linuxdo_connect_client_id: string
   linuxdo_connect_client_secret: string
@@ -1654,7 +1663,6 @@ interface SettingsForm extends UpdateSettingsRequest {
   affiliate_rebate_freeze_hours: number
   affiliate_rebate_duration_days: number
   affiliate_rebate_per_invitee_cap: number
-  risk_control_enabled: boolean
   payment_enabled: boolean
   payment_enabled_types: string[]
   payment_min_amount: number
@@ -1690,15 +1698,13 @@ const adminSettingsStore = useAdminSettingsStore()
 const route = useRoute() as ReturnType<typeof useRoute> | undefined
 
 const tabs = [
-  { key: 'general' as const, label: t('admin.settings.tabs.general') },
-  { key: 'registration' as const, label: t('admin.settings.tabs.registration') },
-  { key: 'security' as const, label: t('admin.settings.tabs.security') },
-  { key: 'auth' as const, label: t('admin.settings.tabs.auth') },
-  { key: 'users' as const, label: t('admin.settings.tabs.users') },
-  { key: 'features' as const, label: t('admin.settings.tabs.features') },
-  { key: 'payment' as const, label: t('admin.settings.tabs.payment') },
-  { key: 'email' as const, label: t('admin.settings.tabs.email') },
-  { key: 'backup' as const, label: t('admin.settings.tabs.backup') },
+  { key: 'general' as const, label: t('admin.settings.tabs.general'), icon: 'cog' as const },
+  { key: 'agreement' as const, label: t('admin.settings.tabs.agreement'), icon: 'document' as const },
+  { key: 'security' as const, label: t('admin.settings.tabs.security'), icon: 'shield' as const },
+  { key: 'users' as const, label: t('admin.settings.tabs.users'), icon: 'users' as const },
+  { key: 'payment' as const, label: t('admin.settings.tabs.payment'), icon: 'creditCard' as const },
+  { key: 'email' as const, label: t('admin.settings.tabs.email'), icon: 'mail' as const },
+  { key: 'backup' as const, label: t('admin.settings.tabs.backup'), icon: 'database' as const },
 ]
 const tabKeys = tabs.map((tab) => tab.key)
 const activeTab = ref<TabKey>(resolveInitialTab(route?.query?.tab))
@@ -1780,7 +1786,6 @@ const form = reactive<SettingsForm>({
   turnstile_enabled: false,
   turnstile_site_key: '',
   turnstile_secret_key: '',
-  api_key_acl_trust_forwarded_ip: false,
   linuxdo_connect_enabled: false,
   linuxdo_connect_client_id: '',
   linuxdo_connect_client_secret: '',
@@ -1854,7 +1859,6 @@ const form = reactive<SettingsForm>({
   affiliate_rebate_freeze_hours: 0,
   affiliate_rebate_duration_days: 0,
   affiliate_rebate_per_invitee_cap: 0,
-  risk_control_enabled: false,
   payment_enabled: false,
   payment_enabled_types: [],
   payment_min_amount: 0,
@@ -2009,7 +2013,6 @@ function applySettings(settings: Partial<SystemSettings>) {
     turnstile_enabled: settings.turnstile_enabled ?? false,
     turnstile_site_key: settings.turnstile_site_key || '',
     turnstile_secret_key: '',
-    api_key_acl_trust_forwarded_ip: settings.api_key_acl_trust_forwarded_ip ?? false,
     linuxdo_connect_enabled: settings.linuxdo_connect_enabled ?? false,
     linuxdo_connect_client_id: settings.linuxdo_connect_client_id || '',
     linuxdo_connect_client_secret: '',
@@ -2083,7 +2086,6 @@ function applySettings(settings: Partial<SystemSettings>) {
     affiliate_rebate_freeze_hours: settings.affiliate_rebate_freeze_hours ?? 0,
     affiliate_rebate_duration_days: settings.affiliate_rebate_duration_days ?? 0,
     affiliate_rebate_per_invitee_cap: settings.affiliate_rebate_per_invitee_cap ?? 0,
-    risk_control_enabled: settings.risk_control_enabled ?? false,
     payment_enabled: settings.payment_enabled ?? false,
     payment_enabled_types: settings.payment_enabled_types || [],
     payment_min_amount: settings.payment_min_amount ?? 0,
@@ -2153,7 +2155,7 @@ async function loadSubscriptionPlans() {
         ? plan.features
         : String(plan.features || '').split('\n').map((item) => item.trim()).filter(Boolean),
     }))
-    hydrateLegacyDefaultSubscriptions()
+    hydrateDefaultSubscriptionPlanBindings()
   } catch (error: unknown) {
     subscriptionPlansError.value = extractApiErrorMessage(error, t('admin.settings.authSourceDefaults.failedToLoadPlans'))
     subscriptionPlans.value = []
@@ -2213,7 +2215,6 @@ function buildPayload(): UpdateSettingsRequest {
     smtp_use_tls: form.smtp_use_tls,
     turnstile_enabled: form.turnstile_enabled,
     turnstile_site_key: form.turnstile_site_key,
-    api_key_acl_trust_forwarded_ip: form.api_key_acl_trust_forwarded_ip,
     linuxdo_connect_enabled: form.linuxdo_connect_enabled,
     linuxdo_connect_client_id: form.linuxdo_connect_client_id,
     linuxdo_connect_redirect_url: form.linuxdo_connect_redirect_url,
@@ -2280,7 +2281,6 @@ function buildPayload(): UpdateSettingsRequest {
     affiliate_rebate_freeze_hours: Math.max(0, Math.floor(Number(form.affiliate_rebate_freeze_hours) || 0)),
     affiliate_rebate_duration_days: Math.max(0, Math.floor(Number(form.affiliate_rebate_duration_days) || 0)),
     affiliate_rebate_per_invitee_cap: normalizeNonNegativeNumber(form.affiliate_rebate_per_invitee_cap),
-    risk_control_enabled: form.risk_control_enabled,
     payment_enabled: form.payment_enabled,
     payment_enabled_types: [...form.payment_enabled_types],
     payment_min_amount: normalizeNonNegativeNumber(form.payment_min_amount),
@@ -2398,7 +2398,7 @@ function syncDefaultSubscriptionPlan(item: DefaultSubscriptionSetting) {
   }
 }
 
-function hydrateLegacyDefaultSubscriptions() {
+function hydrateDefaultSubscriptionPlanBindings() {
   hydrateSubscriptionList(form.default_subscriptions)
   for (const source of authSourceTypes) {
     hydrateSubscriptionList(authSourceDefaults[source].subscriptions)
@@ -2693,3 +2693,120 @@ function normalizeNotifyEmailEntries(value: string): NotifyEmailEntry[] {
   }))
 }
 </script>
+
+<style scoped>
+.settings-tabs-shell {
+  @apply sticky z-20 -mx-1 rounded-2xl border border-white/80 bg-white/90 p-1.5 backdrop-blur-xl;
+  top: 4.75rem;
+  box-shadow:
+    0 12px 28px rgb(15 23 42 / 0.07),
+    0 1px 0 rgb(255 255 255 / 0.9) inset;
+}
+
+.settings-tabs-scroll {
+  @apply overflow-x-auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.settings-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.settings-tabs {
+  @apply flex min-w-max items-center gap-1;
+}
+
+.settings-tab {
+  @apply relative isolate flex h-10 min-w-[6.75rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-transparent px-3 text-sm font-medium text-gray-600 outline-none transition-colors duration-200 ease-out dark:text-gray-300;
+}
+
+@media (min-width: 768px) {
+  .settings-tabs {
+    @apply min-w-full;
+  }
+
+  .settings-tab {
+    @apply min-w-0 flex-1 basis-0 overflow-hidden px-2 text-[13px];
+  }
+
+  .settings-tab-icon {
+    @apply h-6 w-6;
+  }
+}
+
+.settings-tab::before {
+  @apply absolute inset-0 -z-10 rounded-xl opacity-0 transition-opacity duration-200;
+  content: "";
+  background: linear-gradient(135deg, rgb(248 250 252 / 0.95), rgb(241 245 249 / 0.8));
+}
+
+.settings-tab:hover::before,
+.settings-tab:focus-visible::before {
+  opacity: 1;
+}
+
+.settings-tab:focus-visible {
+  @apply ring-2 ring-primary-500/40 ring-offset-2 ring-offset-white dark:ring-offset-dark-900;
+}
+
+.settings-tab-active {
+  @apply border-primary-200/80 bg-white text-primary-700 shadow-sm dark:border-primary-400/30 dark:bg-dark-700/95 dark:text-primary-200;
+  box-shadow:
+    0 8px 18px rgb(15 23 42 / 0.08),
+    0 1px 0 rgb(255 255 255 / 0.92) inset;
+}
+
+.settings-tab-active::before {
+  opacity: 0;
+}
+
+.settings-tab-active::after {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.25rem;
+  left: 0.75rem;
+  height: 2px;
+  border-radius: 9999px;
+  content: "";
+  background: linear-gradient(90deg, #14b8a6, #0ea5e9);
+}
+
+.settings-tab-icon {
+  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors duration-200 dark:text-gray-400;
+}
+
+.settings-tab:hover .settings-tab-icon,
+.settings-tab:focus-visible .settings-tab-icon {
+  @apply text-gray-700 dark:text-gray-200;
+}
+
+.settings-tab-active .settings-tab-icon {
+  @apply bg-primary-50 text-primary-600 dark:bg-primary-400/10 dark:text-primary-300;
+}
+
+.settings-tab-label {
+  @apply min-w-0 overflow-hidden text-ellipsis whitespace-nowrap leading-none;
+}
+
+</style>
+
+<style>
+.dark .settings-tabs-shell {
+  border-color: rgb(51 65 85 / 0.65);
+  background: rgb(15 23 42 / 0.86);
+  box-shadow:
+    0 16px 36px rgb(0 0 0 / 0.28),
+    0 1px 0 rgb(255 255 255 / 0.06) inset;
+}
+
+.dark .settings-tab::before {
+  background: linear-gradient(135deg, rgb(30 41 59 / 0.9), rgb(51 65 85 / 0.62));
+}
+
+.dark .settings-tab-active {
+  box-shadow:
+    0 12px 26px rgb(0 0 0 / 0.22),
+    0 1px 0 rgb(255 255 255 / 0.08) inset;
+}
+</style>

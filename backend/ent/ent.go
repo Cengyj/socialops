@@ -17,6 +17,7 @@ import (
 	"github.com/Wei-Shaw/socialops/ent/apikey"
 	"github.com/Wei-Shaw/socialops/ent/authidentity"
 	"github.com/Wei-Shaw/socialops/ent/authidentitychannel"
+	"github.com/Wei-Shaw/socialops/ent/globalproxy"
 	"github.com/Wei-Shaw/socialops/ent/group"
 	"github.com/Wei-Shaw/socialops/ent/identityadoptiondecision"
 	"github.com/Wei-Shaw/socialops/ent/paymentauditlog"
@@ -104,6 +105,7 @@ func checkColumn(t, c string) error {
 			announcementread.Table:         announcementread.ValidColumn,
 			authidentity.Table:             authidentity.ValidColumn,
 			authidentitychannel.Table:      authidentitychannel.ValidColumn,
+			globalproxy.Table:              globalproxy.ValidColumn,
 			group.Table:                    group.ValidColumn,
 			identityadoptiondecision.Table: identityadoptiondecision.ValidColumn,
 			paymentauditlog.Table:          paymentauditlog.ValidColumn,

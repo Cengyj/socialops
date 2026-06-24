@@ -2,21 +2,23 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"image"
 	"image/png"
 	"strings"
 	"testing"
 
+	infraerrors "github.com/Wei-Shaw/socialops/internal/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateTaskTemplateInputRejectsLegacyAndUnavailableTaskTypes(t *testing.T) {
-	cases := []string{"tweet", "dm", "message"}
+func TestValidateTaskTemplateInputRejectsTweetAliasAndUnavailableTaskTypes(t *testing.T) {
+	cases := []string{"tweet", "unsupported_action"}
 	for _, taskType := range cases {
 		t.Run(taskType, func(t *testing.T) {
 			result := ValidateTaskTemplateInput(&TaskTemplateInput{
-				Name: "legacy action",
+				Name: "unsupported action",
 				Type: taskType,
 				Params: TaskTemplateParams{
 					Targets:  []string{"@target"},
@@ -26,6 +28,70 @@ func TestValidateTaskTemplateInputRejectsLegacyAndUnavailableTaskTypes(t *testin
 
 			require.False(t, result.Valid)
 			require.Contains(t, result.Errors[0], "unsupported")
+		})
+	}
+}
+
+func TestTaskSettingsServiceValidateTemplateInputUsesExistingValidationRules(t *testing.T) {
+	result := (*TaskSettingsService)(nil).ValidateTemplateInput(&TaskTemplateInput{
+		Name: "follow targets",
+		Type: SocialTaskActionFollow,
+		Params: TaskTemplateParams{
+			Targets: []string{" @northwind "},
+		},
+	})
+
+	require.True(t, result.Valid)
+	require.Empty(t, result.Errors)
+	require.Equal(t, SocialTaskActionFollow, result.Type)
+	require.Equal(t, 1, result.Targets)
+}
+
+func TestTaskSettingsTemplateIDOperationsRejectBlankIDsConsistently(t *testing.T) {
+	ctx := context.Background()
+	svc := (*TaskSettingsService)(nil)
+
+	tests := []struct {
+		name string
+		call func() error
+	}{
+		{
+			name: "get template",
+			call: func() error {
+				_, err := svc.GetTemplate(ctx, 42, "  ")
+				return err
+			},
+		},
+		{
+			name: "delete template",
+			call: func() error {
+				return svc.DeleteTemplate(ctx, 42, "  ")
+			},
+		},
+		{
+			name: "copy template",
+			call: func() error {
+				_, err := svc.CopyTemplate(ctx, 42, "  ")
+				return err
+			},
+		},
+		{
+			name: "set default template",
+			call: func() error {
+				_, err := svc.SetDefaultTemplate(ctx, 42, "  ")
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.call()
+
+			require.Error(t, err)
+			require.True(t, infraerrors.IsBadRequest(err))
+			require.Equal(t, "TASK_TEMPLATE_ID_REQUIRED", infraerrors.Reason(err))
+			require.Equal(t, "task template id is required", infraerrors.Message(err))
 		})
 	}
 }
@@ -69,14 +135,6 @@ func TestNormalizeTaskTemplateInputDropsParamsUnusedByTemplateType(t *testing.T)
 		expectedTargets  []string
 		expectedContents []string
 	}{
-		{
-			name:         "login check drops all params",
-			templateType: SocialTaskActionLoginCheck,
-			params: TaskTemplateParams{
-				Targets:  []string{"@target"},
-				Contents: []string{"hello"},
-			},
-		},
 		{
 			name:         "follow keeps only targets",
 			templateType: SocialTaskActionFollow,
@@ -178,12 +236,38 @@ func TestValidateTaskTemplateInputSupportsMediaOnlyPostTemplates(t *testing.T) {
 	require.Empty(t, mediaOnlyResult.Errors)
 }
 
+func TestValidateTaskTemplateInputRejectsTooManyPostMediaItems(t *testing.T) {
+	media := make([]SocialTaskMediaRef, 5)
+	for i := range media {
+		media[i] = SocialTaskMediaRef{
+			Source:      "inline",
+			ContentType: "image/png",
+			URL:         inlinePNGDataURLForTaskTemplateValidation(t, 640, 640),
+			FileName:    "post-image.png",
+			Width:       640,
+			Height:      640,
+		}
+	}
+
+	result := ValidateTaskTemplateInput(&TaskTemplateInput{
+		Name: "Too many post images",
+		Type: SocialTaskActionPost,
+		Params: TaskTemplateParams{
+			Contents: []string{"hello media"},
+			Media:    media,
+		},
+	})
+
+	require.False(t, result.Valid)
+	require.Contains(t, result.Errors, "post media cannot exceed 4 items")
+}
+
 func TestValidateTaskTemplateInputRejectsQuoteOnlyPostTemplates(t *testing.T) {
 	quoteOnlyResult := ValidateTaskTemplateInput(&TaskTemplateInput{
 		Name: "Quote only post",
 		Type: SocialTaskActionPost,
 		Params: TaskTemplateParams{
-			QuotePostURL: "https://x.com/openai/status/1",
+			QuotePostURL: "https://x.com/northwind/status/1",
 		},
 	})
 
@@ -206,7 +290,7 @@ func TestValidateTaskTemplateInputRejectsSingleVideoPostMediaTemplates(t *testin
 		},
 	})
 	require.False(t, videoResult.Valid)
-	require.Contains(t, videoResult.Errors, "video media is not implemented yet")
+	require.Contains(t, videoResult.Errors, "video media is not supported for SocialOps execution")
 }
 
 func TestValidateTaskTemplateInputRejectsPostMediaWithUnsupportedContentTypes(t *testing.T) {
@@ -227,7 +311,7 @@ func TestValidateTaskTemplateInputRejectsPostMediaWithUnsupportedContentTypes(t 
 	require.Contains(t, unsupportedResult.Errors, "post media content type is not supported")
 }
 
-func TestValidateTaskTemplateInputRejectsNonInlineExecutableMediaSources(t *testing.T) {
+func TestValidateTaskTemplateInputRejectsNonExecutableMediaLibraryRefs(t *testing.T) {
 	postResult := ValidateTaskTemplateInput(&TaskTemplateInput{
 		Name: "Library post",
 		Type: SocialTaskActionPost,
@@ -241,7 +325,7 @@ func TestValidateTaskTemplateInputRejectsNonInlineExecutableMediaSources(t *test
 		},
 	})
 	require.False(t, postResult.Valid)
-	require.Contains(t, postResult.Errors, "post media #1 media source is not supported yet")
+	require.Contains(t, postResult.Errors, "post media #1 media source is not supported for SocialOps execution")
 
 	avatarResult := ValidateTaskTemplateInput(&TaskTemplateInput{
 		Name: "Avatar refresh",
@@ -257,7 +341,7 @@ func TestValidateTaskTemplateInputRejectsNonInlineExecutableMediaSources(t *test
 		},
 	})
 	require.False(t, avatarResult.Valid)
-	require.Contains(t, avatarResult.Errors, "avatar media source is not supported yet")
+	require.Contains(t, avatarResult.Errors, "avatar media source is not supported for SocialOps execution")
 
 	bannerResult := ValidateTaskTemplateInput(&TaskTemplateInput{
 		Name: "Banner refresh",
@@ -273,7 +357,7 @@ func TestValidateTaskTemplateInputRejectsNonInlineExecutableMediaSources(t *test
 		},
 	})
 	require.False(t, bannerResult.Valid)
-	require.Contains(t, bannerResult.Errors, "banner media source is not supported yet")
+	require.Contains(t, bannerResult.Errors, "banner media source is not supported for SocialOps execution")
 }
 
 func TestValidateTaskTemplateInputAcceptsInternalTaskMediaLibraryRefs(t *testing.T) {
@@ -325,7 +409,7 @@ func TestValidateTaskTemplateInputAcceptsInternalTaskMediaLibraryRefs(t *testing
 	require.Empty(t, bannerResult.Errors)
 }
 
-func TestValidateTaskTemplateInputAcceptsAvatarAndBannerThatNeedNormalization(t *testing.T) {
+func TestValidateTaskTemplateInputRejectsAvatarAndBannerThatNeedNormalization(t *testing.T) {
 	avatarResult := ValidateTaskTemplateInput(&TaskTemplateInput{
 		Name: "Avatar refresh",
 		Type: SocialTaskActionUpdateAvatar,
@@ -337,8 +421,8 @@ func TestValidateTaskTemplateInputAcceptsAvatarAndBannerThatNeedNormalization(t 
 			},
 		},
 	})
-	require.True(t, avatarResult.Valid)
-	require.Empty(t, avatarResult.Errors)
+	require.False(t, avatarResult.Valid)
+	require.Contains(t, avatarResult.Errors, "avatar image must be 400x400 pixels")
 
 	bannerResult := ValidateTaskTemplateInput(&TaskTemplateInput{
 		Name: "Banner refresh",
@@ -351,8 +435,8 @@ func TestValidateTaskTemplateInputAcceptsAvatarAndBannerThatNeedNormalization(t 
 			},
 		},
 	})
-	require.True(t, bannerResult.Valid)
-	require.Empty(t, bannerResult.Errors)
+	require.False(t, bannerResult.Valid)
+	require.Contains(t, bannerResult.Errors, "banner image must be 1500x500 pixels")
 }
 
 func TestValidateTaskTemplateInputAcceptsExactAvatarAndBannerImageDimensions(t *testing.T) {
@@ -399,8 +483,8 @@ func TestValidateTaskTemplateInputUsesActualInlineImageDimensionsOverSuppliedMet
 			},
 		},
 	})
-	require.True(t, avatarResult.Valid)
-	require.Empty(t, avatarResult.Errors)
+	require.False(t, avatarResult.Valid)
+	require.Contains(t, avatarResult.Errors, "avatar image must be 400x400 pixels")
 
 	bannerResult := ValidateTaskTemplateInput(&TaskTemplateInput{
 		Name: "Banner refresh",
@@ -415,11 +499,11 @@ func TestValidateTaskTemplateInputUsesActualInlineImageDimensionsOverSuppliedMet
 			},
 		},
 	})
-	require.True(t, bannerResult.Valid)
-	require.Empty(t, bannerResult.Errors)
+	require.False(t, bannerResult.Valid)
+	require.Contains(t, bannerResult.Errors, "banner image must be 1500x500 pixels")
 }
 
-func TestValidateTaskTemplateInputRejectsLibraryAvatarAndBannerWithoutExactDimensionsMetadata(t *testing.T) {
+func TestValidateTaskTemplateInputRejectsExternalLibraryAvatarAndBannerWithoutExactDimensionsMetadata(t *testing.T) {
 	avatarResult := ValidateTaskTemplateInput(&TaskTemplateInput{
 		Name: "Avatar refresh",
 		Type: SocialTaskActionUpdateAvatar,
@@ -432,7 +516,7 @@ func TestValidateTaskTemplateInputRejectsLibraryAvatarAndBannerWithoutExactDimen
 		},
 	})
 	require.False(t, avatarResult.Valid)
-	require.Contains(t, avatarResult.Errors, "avatar media source is not supported yet")
+	require.Contains(t, avatarResult.Errors, "avatar media source is not supported for SocialOps execution")
 
 	bannerResult := ValidateTaskTemplateInput(&TaskTemplateInput{
 		Name: "Banner refresh",
@@ -447,7 +531,38 @@ func TestValidateTaskTemplateInputRejectsLibraryAvatarAndBannerWithoutExactDimen
 		},
 	})
 	require.False(t, bannerResult.Valid)
-	require.Contains(t, bannerResult.Errors, "banner media source is not supported yet")
+	require.Contains(t, bannerResult.Errors, "banner media source is not supported for SocialOps execution")
+}
+
+func TestValidateTaskTemplateInputRejectsInternalLibraryAvatarAndBannerWithoutExactDimensionsMetadata(t *testing.T) {
+	avatarResult := ValidateTaskTemplateInput(&TaskTemplateInput{
+		Name: "Avatar refresh",
+		Type: SocialTaskActionUpdateAvatar,
+		Params: TaskTemplateParams{
+			Avatar: &SocialTaskMediaRef{
+				Source:      "library",
+				StorageKey:  "social-task/42/avatar.jpg",
+				ContentType: "image/jpeg",
+			},
+		},
+	})
+	require.False(t, avatarResult.Valid)
+	require.Contains(t, avatarResult.Errors, "avatar image must be 400x400 pixels")
+
+	bannerResult := ValidateTaskTemplateInput(&TaskTemplateInput{
+		Name: "Banner refresh",
+		Type: SocialTaskActionUpdateBanner,
+		Params: TaskTemplateParams{
+			Banner: &SocialTaskMediaRef{
+				Source:      "library",
+				StorageKey:  "social-task/42/banner.jpg",
+				ContentType: "image/jpeg",
+				Width:       1500,
+			},
+		},
+	})
+	require.False(t, bannerResult.Valid)
+	require.Contains(t, bannerResult.Errors, "banner image must be 1500x500 pixels")
 }
 
 func TestNormalizeTaskTemplateInputPreservesStructuredPostAndProfileParams(t *testing.T) {
@@ -457,11 +572,11 @@ func TestNormalizeTaskTemplateInputPreservesStructuredPostAndProfileParams(t *te
 		Params: TaskTemplateParams{
 			Targets:      []string{"ignored"},
 			Contents:     []string{" hello "},
-			QuotePostURL: " https://x.com/openai/status/1 ",
+			QuotePostURL: " https://x.com/northwind/status/1 ",
 			Media: []SocialTaskMediaRef{
 				{
 					Source:      "library",
-					StorageKey:  "media/post-image.jpg",
+					StorageKey:  "social-task/media/post-image.jpg",
 					ContentType: "image/jpeg",
 				},
 			},
@@ -474,7 +589,7 @@ func TestNormalizeTaskTemplateInputPreservesStructuredPostAndProfileParams(t *te
 	require.NoError(t, err)
 	require.Empty(t, tmpl.Params.Targets)
 	require.Equal(t, []string{"hello"}, tmpl.Params.Contents)
-	require.Equal(t, "https://x.com/openai/status/1", tmpl.Params.QuotePostURL)
+	require.Equal(t, "https://x.com/northwind/status/1", tmpl.Params.QuotePostURL)
 	require.Len(t, tmpl.Params.Media, 1)
 	require.Nil(t, tmpl.Params.Profile)
 

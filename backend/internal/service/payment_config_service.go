@@ -187,8 +187,8 @@ type UpdatePlanRequest struct {
 	MonthlyLimitUSD *float64 `json:"monthly_limit_usd"`
 }
 
-// PaymentConfigService manages payment configuration and CRUD for
-// provider instances, channels, and subscription plans.
+// PaymentConfigService manages payment configuration, provider instances, and
+// subscription plans.
 type PaymentConfigService struct {
 	entClient     *dbent.Client
 	settingRepo   SettingRepository

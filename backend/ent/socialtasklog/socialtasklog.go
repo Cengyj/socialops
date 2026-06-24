@@ -7,6 +7,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/Wei-Shaw/socialops/internal/domain"
 )
 
 const (
@@ -120,6 +121,10 @@ var (
 	UpdateDefaultUpdatedAt func() time.Time
 	// ActionValidator is a validator for the "action" field. It is called by the builders before save.
 	ActionValidator func(string) error
+	// DefaultPayload holds the default value on creation for the "payload" field.
+	DefaultPayload func() domain.SocialTaskPayload
+	// DefaultTemplateSnapshot holds the default value on creation for the "template_snapshot" field.
+	DefaultTemplateSnapshot func() domain.SocialTaskTemplateSnapshot
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.

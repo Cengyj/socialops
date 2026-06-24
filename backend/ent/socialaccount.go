@@ -22,8 +22,6 @@ type SocialAccount struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
-	// DeletedAt holds the value of the "deleted_at" field.
-	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 	// 账号名称 / 用户名，如 @northwind_ops
 	Name string `json:"name,omitempty"`
 	// 平台：x_twitter / instagram / tiktok / facebook
@@ -58,7 +56,7 @@ type SocialAccount struct {
 	RegistrationIP *string `json:"registration_ip,omitempty"`
 	// Platform auth cookie captured for account operations
 	AuthCookie *string `json:"auth_cookie,omitempty"`
-	// Platform execution authentication JSON/base64 JSON
+	// Encrypted platform execution authentication
 	ExecutionAuth *string `json:"execution_auth,omitempty"`
 	// 账号状态：pending_check / available / limited / invalid / not_stored
 	AccountStatus string `json:"account_status,omitempty"`
@@ -70,8 +68,6 @@ type SocialAccount struct {
 	DefaultProxySnapshot *string `json:"default_proxy_snapshot,omitempty"`
 	// 分配给的用户 ID
 	AssignedUserID *int64 `json:"assigned_user_id,omitempty"`
-	// Timestamp when the assigned user removed this account from their workbench
-	UserWorkbenchDeletedAt *time.Time `json:"user_workbench_deleted_at,omitempty"`
 	// 备注
 	Remark *string `json:"remark,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -120,7 +116,7 @@ func (*SocialAccount) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullInt64)
 		case socialaccount.FieldName, socialaccount.FieldPlatform, socialaccount.FieldPlatformKey, socialaccount.FieldNameKey, socialaccount.FieldIdentityKind, socialaccount.FieldIdentityKey, socialaccount.FieldPlatformUserID, socialaccount.FieldPassword, socialaccount.FieldPhone, socialaccount.FieldEmail, socialaccount.FieldEmailPassword, socialaccount.FieldTwoFactor, socialaccount.FieldBackupCode, socialaccount.FieldEmailClientID, socialaccount.FieldEmailToken, socialaccount.FieldRegistrationIP, socialaccount.FieldAuthCookie, socialaccount.FieldExecutionAuth, socialaccount.FieldAccountStatus, socialaccount.FieldTaskStatus, socialaccount.FieldTaskMessage, socialaccount.FieldDefaultProxySnapshot, socialaccount.FieldRemark:
 			values[i] = new(sql.NullString)
-		case socialaccount.FieldCreatedAt, socialaccount.FieldUpdatedAt, socialaccount.FieldDeletedAt, socialaccount.FieldUserWorkbenchDeletedAt:
+		case socialaccount.FieldCreatedAt, socialaccount.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -154,13 +150,6 @@ func (_m *SocialAccount) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
-			}
-		case socialaccount.FieldDeletedAt:
-			if value, ok := values[i].(*sql.NullTime); !ok {
-				return fmt.Errorf("unexpected type %T for field deleted_at", values[i])
-			} else if value.Valid {
-				_m.DeletedAt = new(time.Time)
-				*_m.DeletedAt = value.Time
 			}
 		case socialaccount.FieldName:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -315,13 +304,6 @@ func (_m *SocialAccount) assignValues(columns []string, values []any) error {
 				_m.AssignedUserID = new(int64)
 				*_m.AssignedUserID = value.Int64
 			}
-		case socialaccount.FieldUserWorkbenchDeletedAt:
-			if value, ok := values[i].(*sql.NullTime); !ok {
-				return fmt.Errorf("unexpected type %T for field user_workbench_deleted_at", values[i])
-			} else if value.Valid {
-				_m.UserWorkbenchDeletedAt = new(time.Time)
-				*_m.UserWorkbenchDeletedAt = value.Time
-			}
 		case socialaccount.FieldRemark:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field remark", values[i])
@@ -380,11 +362,6 @@ func (_m *SocialAccount) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
-	builder.WriteString(", ")
-	if v := _m.DeletedAt; v != nil {
-		builder.WriteString("deleted_at=")
-		builder.WriteString(v.Format(time.ANSIC))
-	}
 	builder.WriteString(", ")
 	builder.WriteString("name=")
 	builder.WriteString(_m.Name)
@@ -483,11 +460,6 @@ func (_m *SocialAccount) String() string {
 	if v := _m.AssignedUserID; v != nil {
 		builder.WriteString("assigned_user_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
-	}
-	builder.WriteString(", ")
-	if v := _m.UserWorkbenchDeletedAt; v != nil {
-		builder.WriteString("user_workbench_deleted_at=")
-		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")
 	if v := _m.Remark; v != nil {

@@ -41,7 +41,7 @@ func TestAdminAuthJWTValidatesTokenVersion(t *testing.T) {
 			return &clone, nil
 		},
 	}
-	userService := service.NewUserService(userRepo, nil, nil, nil)
+	userService := service.NewUserService(userRepo, nil, nil)
 
 	router := gin.New()
 	router.Use(gin.HandlerFunc(NewAdminAuthMiddleware(authService, userService, nil)))
@@ -176,12 +176,12 @@ func TestAdminAccountMutationEndpointsRejectNonAdminJWT(t *testing.T) {
 			return &clone, nil
 		},
 	}
-	userService := service.NewUserService(userRepo, nil, nil, nil)
+	userService := service.NewUserService(userRepo, nil, nil)
 
 	router := gin.New()
 	admin := router.Group("/api/v1/admin")
 	admin.Use(gin.HandlerFunc(NewAdminAuthMiddleware(authService, userService, nil)))
-	admin.POST("/accounts/register", func(c *gin.Context) {
+	admin.POST("/accounts", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"unexpected": true})
 	})
 	admin.POST("/accounts/import", func(c *gin.Context) {
@@ -190,22 +190,31 @@ func TestAdminAccountMutationEndpointsRejectNonAdminJWT(t *testing.T) {
 	admin.POST("/accounts/store-workbench", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"unexpected": true})
 	})
+	admin.POST("/total-accounts/import", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"unexpected": true})
+	})
+	admin.PUT("/total-accounts/:id", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"unexpected": true})
+	})
 
 	token, err := authService.GenerateToken(regular)
 	require.NoError(t, err)
 
 	for _, tc := range []struct {
-		name string
-		path string
-		body string
+		name   string
+		method string
+		path   string
+		body   string
 	}{
-		{name: "register", path: "/api/v1/admin/accounts/register", body: `{"name":"@u","platform":"x_twitter"}`},
-		{name: "import", path: "/api/v1/admin/accounts/import", body: ""},
-		{name: "store-workbench", path: "/api/v1/admin/accounts/store-workbench", body: `{"account_ids":[1]}`},
+		{name: "create", method: http.MethodPost, path: "/api/v1/admin/accounts", body: `{"name":"@u","platform":"x_twitter"}`},
+		{name: "import", method: http.MethodPost, path: "/api/v1/admin/accounts/import", body: ""},
+		{name: "store-workbench", method: http.MethodPost, path: "/api/v1/admin/accounts/store-workbench", body: `{"account_ids":[1]}`},
+		{name: "total-import", method: http.MethodPost, path: "/api/v1/admin/total-accounts/import", body: ""},
+		{name: "total-update", method: http.MethodPut, path: "/api/v1/admin/total-accounts/1", body: `{"account_status":"available"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
+			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
 			req.Header.Set("Authorization", "Bearer "+token)
 			router.ServeHTTP(w, req)
 

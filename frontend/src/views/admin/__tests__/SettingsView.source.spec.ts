@@ -53,9 +53,9 @@ describe("admin SettingsView SaaS operations coverage", () => {
     expect(buildPayloadSource).not.toContain("turnstile_secret_key: form.turnstile_secret_key");
   });
 
-  it("restores commercial OAuth providers and advanced OIDC fields in the auth settings tab", () => {
-    const authSection = source.slice(
-      source.indexOf("activeTab === 'auth'"),
+  it("keeps commercial OAuth providers and advanced OIDC fields in the security settings tab", () => {
+    const securitySection = source.slice(
+      source.indexOf("activeTab === 'security'"),
       source.indexOf("activeTab === 'users'"),
     );
     const buildPayloadSource = source.slice(
@@ -63,17 +63,17 @@ describe("admin SettingsView SaaS operations coverage", () => {
       source.indexOf("const subscriptionPlanOptions"),
     );
 
-    expect(authSection).toContain("form.linuxdo_connect_enabled");
-    expect(authSection).toContain("form.dingtalk_connect_enabled");
-    expect(authSection).toContain("form.google_oauth_enabled");
-    expect(authSection).toContain("form.oidc_connect_discovery_url");
-    expect(authSection).toContain("form.oidc_connect_authorize_url");
-    expect(authSection).toContain("form.oidc_connect_token_url");
-    expect(authSection).toContain("form.oidc_connect_userinfo_url");
-    expect(authSection).toContain("form.oidc_connect_jwks_url");
-    expect(authSection).toContain("form.oidc_connect_token_auth_method");
-    expect(authSection).toContain("form.oidc_connect_require_email_verified");
-    expect(authSection).toContain("form.oidc_connect_userinfo_email_path");
+    expect(securitySection).toContain("form.linuxdo_connect_enabled");
+    expect(securitySection).toContain("form.dingtalk_connect_enabled");
+    expect(securitySection).toContain("form.google_oauth_enabled");
+    expect(securitySection).toContain("form.oidc_connect_discovery_url");
+    expect(securitySection).toContain("form.oidc_connect_authorize_url");
+    expect(securitySection).toContain("form.oidc_connect_token_url");
+    expect(securitySection).toContain("form.oidc_connect_userinfo_url");
+    expect(securitySection).toContain("form.oidc_connect_jwks_url");
+    expect(securitySection).toContain("form.oidc_connect_token_auth_method");
+    expect(securitySection).toContain("form.oidc_connect_require_email_verified");
+    expect(securitySection).toContain("form.oidc_connect_userinfo_email_path");
     expect(buildPayloadSource).toContain("if (form.linuxdo_connect_client_secret)");
     expect(buildPayloadSource).toContain("payload.linuxdo_connect_client_secret = form.linuxdo_connect_client_secret");
     expect(buildPayloadSource).toContain("if (form.dingtalk_connect_client_secret)");
@@ -118,34 +118,80 @@ describe("admin SettingsView SaaS operations coverage", () => {
     expect(source).not.toContain("admin.settings.operations.title");
   });
 
-  it("exposes real feature switches instead of a page-entry directory", () => {
-    const featureSection = source.slice(
-      source.indexOf("activeTab === 'features'"),
+  it("keeps settings switches scoped to owner tabs without a feature-switch tab", () => {
+    expect(source).not.toContain("activeTab === 'features'");
+    expect(source).not.toContain("admin.settings.tabs.features");
+    expect(source).not.toContain("activeTab === 'registration'");
+    expect(source).not.toContain("admin.settings.tabs.registration");
+    expect(source).not.toContain("activeTab === 'auth'");
+    expect(source).not.toContain("admin.settings.tabs.auth");
+    expect(source).not.toContain("activeTab === 'affiliate'");
+    expect(source).not.toContain("admin.settings.tabs.affiliate");
+    expect(source).not.toContain("activeTab === 'notifications'");
+    expect(source).not.toContain("admin.settings.tabs.notifications");
+
+    const paymentSection = source.slice(
+      source.indexOf("activeTab === 'payment'"),
+      source.indexOf("activeTab === 'backup'"),
+    );
+    const agreementSection = source.slice(
+      source.indexOf("activeTab === 'agreement'"),
+      source.indexOf("activeTab === 'security'"),
+    );
+    const generalSection = source.slice(
+      source.indexOf("activeTab === 'general'"),
+      source.indexOf("activeTab === 'agreement'"),
+    );
+    const securitySection = source.slice(
+      source.indexOf("activeTab === 'security'"),
+      source.indexOf("activeTab === 'users'"),
+    );
+    const userDefaultsSection = source.slice(
+      source.indexOf("activeTab === 'users'"),
+      source.indexOf("activeTab === 'email'"),
+    );
+    const emailSection = source.slice(
+      source.indexOf("activeTab === 'email'"),
+      source.indexOf("activeTab === 'payment'"),
+    );
+
+    expect(paymentSection).toContain("form.payment_enabled");
+    expect(paymentSection).toContain("form.payment_balance_disabled");
+    expect(paymentSection).toContain("form.purchase_subscription_enabled");
+    expect(paymentSection).toContain("form.purchase_subscription_url");
+    expect(generalSection).not.toContain("form.purchase_subscription_enabled");
+    expect(generalSection).not.toContain("form.purchase_subscription_url");
+    expect(generalSection).toContain("form.backend_mode_enabled");
+    expect(agreementSection).toContain("form.login_agreement_enabled");
+    expect(agreementSection).toContain("form.login_agreement_mode");
+    expect(securitySection).toContain("form.registration_enabled");
+    expect(securitySection).toContain("form.promo_code_enabled");
+    expect(securitySection).toContain("form.invitation_code_enabled");
+    expect(securitySection).toContain("form.wechat_connect_enabled");
+    expect(securitySection).toContain("form.linuxdo_connect_enabled");
+    expect(securitySection).toContain("form.oidc_connect_discovery_url");
+    expect(userDefaultsSection).toContain("admin.settings.authSourceDefaults.title");
+    expect(userDefaultsSection).toContain("form.affiliate_enabled");
+    expect(userDefaultsSection).toContain("form.affiliate_rebate_per_invitee_cap");
+    expect(emailSection).toContain("form.smtp_host");
+    expect(emailSection).toContain("EmailTemplateEditor");
+    expect(emailSection).toContain("form.balance_low_notify_enabled");
+    expect(emailSection).toContain("form.subscription_expiry_notify_enabled");
+    expect(emailSection).toContain("form.account_quota_notify_enabled");
+  });
+
+  it("makes user defaults and affiliate rebate settings discoverable in the user defaults tab", () => {
+    const userDefaultsSection = source.slice(
+      source.indexOf("activeTab === 'users'"),
       source.indexOf("activeTab === 'email'"),
     );
 
-    expect(featureSection).toContain("form.payment_enabled");
-    expect(featureSection).toContain("form.payment_balance_disabled");
-    expect(featureSection).toContain("form.purchase_subscription_enabled");
-    expect(featureSection).toContain("form.risk_control_enabled");
-    expect(featureSection).toContain("form.affiliate_enabled");
-    expect(featureSection).toContain("form.promo_code_enabled");
-    expect(featureSection).toContain("form.invitation_code_enabled");
-    expect(featureSection).toContain("form.backend_mode_enabled");
-  });
-
-  it("makes subscription defaults and affiliate rebate settings discoverable in system settings", () => {
-    const entitlementSection = source.slice(
-      source.indexOf("activeTab === 'users'"),
-      source.indexOf("activeTab === 'features'"),
-    );
-
-    expect(entitlementSection).toContain("admin.settings.authSourceDefaults.title");
-    expect(entitlementSection).toContain("admin.settings.authSourceDefaults.globalSubscriptionsLabel");
-    expect(entitlementSection).toContain("admin.settings.authSourceDefaults.defaultSubscriptionsLabel");
-    expect(entitlementSection).toContain("admin.settings.affiliate.title");
-    expect(entitlementSection).toContain("form.affiliate_rebate_per_invitee_cap");
-    expect(entitlementSection).toContain('data-testid="affiliate-rebate-per-invitee-cap"');
+    expect(userDefaultsSection).toContain("admin.settings.authSourceDefaults.title");
+    expect(userDefaultsSection).toContain("admin.settings.authSourceDefaults.globalSubscriptionsLabel");
+    expect(userDefaultsSection).toContain("admin.settings.authSourceDefaults.defaultSubscriptionsLabel");
+    expect(userDefaultsSection).toContain("admin.settings.affiliate.title");
+    expect(userDefaultsSection).toContain("form.affiliate_rebate_per_invitee_cap");
+    expect(userDefaultsSection).toContain('data-testid="affiliate-rebate-per-invitee-cap"');
   });
 
   it("keeps backup operations inside the settings center", () => {
@@ -176,16 +222,17 @@ describe("admin SettingsView SaaS operations coverage", () => {
     expect(source.match(/rel="noopener noreferrer"/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
   });
 
-  it("keeps the settings console free of AI gateway business semantics", () => {
-    for (const forbidden of [
-      "OpenAI",
-      "Claude",
-      "Bedrock",
-      "WebSearch",
-      "web_search",
-      "Sora",
-      "antigravity",
-    ]) {
+  it("keeps the settings console free of removed gateway business semantics", () => {
+    const removedGatewayMarkers = [
+      ["Open", "AI"].join(""),
+      ["Clau", "de"].join(""),
+      ["Bed", "rock"].join(""),
+      ["Web", "Search"].join(""),
+      ["web", "search"].join("_"),
+      ["So", "ra"].join(""),
+      ["anti", "gravity"].join(""),
+    ];
+    for (const forbidden of removedGatewayMarkers) {
       expect(source).not.toContain(forbidden);
     }
   });

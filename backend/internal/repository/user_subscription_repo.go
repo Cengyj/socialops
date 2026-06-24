@@ -54,7 +54,7 @@ func (r *userSubscriptionRepository) Create(ctx context.Context, sub *service.Us
 	if !sub.AssignedAt.IsZero() {
 		builder.SetAssignedAt(sub.AssignedAt)
 	}
-	// Keep compatibility with historical behavior: always store notes as a string value.
+	// Notes are stored as a string so create and update share the same subscription note contract.
 	builder.SetNotes(sub.Notes)
 
 	created, err := builder.Save(ctx)

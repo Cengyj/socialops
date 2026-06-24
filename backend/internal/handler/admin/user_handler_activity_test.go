@@ -112,3 +112,26 @@ func TestUserHandlerGetByIDIncludesActivityFields(t *testing.T) {
 	require.WithinDuration(t, lastActiveAt, *resp.Data.LastActiveAt, time.Second)
 	require.WithinDuration(t, lastUsedAt, *resp.Data.LastUsedAt, time.Second)
 }
+
+func TestUserHandlerGetUserUsageUsesSocialOpsStatsContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	adminSvc := newStubAdminService()
+	handler := NewUserHandler(adminSvc, nil)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Params = gin.Params{{Key: "id", Value: "8"}}
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/users/8/usage?period=month", nil)
+
+	handler.GetUserUsage(c)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	payload := recorder.Body.String()
+	require.Contains(t, payload, `"total_operations":8`)
+	require.Contains(t, payload, `"total_charged":0.8`)
+	require.NotContains(t, payload, "period")
+	require.NotContains(t, payload, "total_requests")
+	require.NotContains(t, payload, "total_cost")
+	require.NotContains(t, payload, "total_tokens")
+}

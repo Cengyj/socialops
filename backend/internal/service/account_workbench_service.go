@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"strings"
 	"time"
@@ -54,14 +55,19 @@ type accountWorkbenchPendingTask struct {
 }
 
 type AccountWorkbenchService struct {
-	accounts *SocialAccountService
-	ips      *SocialIPService
-	billing  *SocialBillingService
-	executor *SocialTaskExecutor
+	accounts      *SocialAccountService
+	ips           *SocialIPService
+	globalProxies *GlobalProxyService
+	billing       *SocialBillingService
+	executor      *SocialTaskExecutor
 }
 
 func NewAccountWorkbenchService(accounts *SocialAccountService, ips *SocialIPService, billing *SocialBillingService, executor *SocialTaskExecutor) *AccountWorkbenchService {
 	return &AccountWorkbenchService{accounts: accounts, ips: ips, billing: billing, executor: executor}
+}
+
+func NewAccountWorkbenchServiceWithGlobalProxies(accounts *SocialAccountService, ips *SocialIPService, globalProxies *GlobalProxyService, billing *SocialBillingService, executor *SocialTaskExecutor) *AccountWorkbenchService {
+	return &AccountWorkbenchService{accounts: accounts, ips: ips, globalProxies: globalProxies, billing: billing, executor: executor}
 }
 
 func (s *AccountWorkbenchService) SubmitTask(ctx context.Context, input *AccountWorkbenchTaskInput) (*AccountWorkbenchSubmitResult, error) {
@@ -84,18 +90,31 @@ func (s *AccountWorkbenchService) SubmitTask(ctx context.Context, input *Account
 	pending := make([]accountWorkbenchPendingTask, 0, len(input.AccountIDs))
 	buckets := make(map[int64]accountWorkbenchBillingBucket)
 
-	for _, accountID := range input.AccountIDs {
+	for index, accountID := range input.AccountIDs {
 		account := accountByID[accountID]
 		ownerID := *account.AssignedUserID
+		target := selectTaskTemplateValue(input.Target, input.TargetPool, index)
+		content := selectTaskTemplateValue(input.Content, input.ContentPool, index)
+		payload := buildAccountWorkbenchTaskPayload(input, index)
 		if input.IdempotencyKey != "" {
 			existing, err := s.accounts.FindTaskLogByIdempotency(ctx, ownerID, accountID, input.Action, input.IdempotencyKey)
 			if err != nil {
 				return nil, err
 			}
 			if existing != nil {
+				if !socialTaskLogMatchesAccountWorkbenchTask(existing, input, target, content, payload) {
+					return nil, ErrSocialTaskIdempotencyConflict
+				}
 				logs = append(logs, existing)
 				continue
 			}
+		}
+		active, err := s.accounts.HasActiveTaskLogForAccount(ctx, ownerID, accountID)
+		if err != nil {
+			return nil, err
+		}
+		if active {
+			return nil, ErrSocialTaskAccountBusy
 		}
 		if err := addAccountWorkbenchBillingBucket(input.Mode, buckets, ownerID, account.Platform); err != nil {
 			return nil, err
@@ -105,7 +124,14 @@ func (s *AccountWorkbenchService) SubmitTask(ctx context.Context, input *Account
 		var taskProxySnapshot *string
 		defaultProxySnapshot := trimPtr(account.DefaultProxySnapshot)
 		if defaultProxySnapshot == "" && input.Mode == AccountWorkbenchTaskModeUser {
-			return nil, infraerrors.BadRequest("SOCIAL_IP_NOT_AVAILABLE", "default social IP is required for execution")
+			if input.Action != SocialTaskActionLogin {
+				return nil, infraerrors.BadRequest("SOCIAL_IP_NOT_AVAILABLE", "default social IP is required for execution")
+			}
+			var err error
+			taskProxySnapshot, err = s.resolveGlobalFallbackProxy(ctx)
+			if err != nil {
+				return nil, err
+			}
 		}
 		if defaultProxySnapshot != "" {
 			var err error
@@ -119,15 +145,17 @@ func (s *AccountWorkbenchService) SubmitTask(ctx context.Context, input *Account
 			userID:        ownerID,
 			proxyID:       taskProxyID,
 			proxySnapshot: taskProxySnapshot,
-			target:        selectTaskTemplateValue(input.Target, input.TargetPool, len(pending)),
-			content:       selectTaskTemplateValue(input.Content, input.ContentPool, len(pending)),
-			payload:       buildAccountWorkbenchTaskPayload(input, len(pending)),
+			target:        target,
+			content:       content,
+			payload:       payload,
 		})
 	}
 
-	for userID, bucket := range buckets {
-		if _, err := s.billing.EnsureCanAffordForPlatform(ctx, userID, bucket.platform, bucket.count); err != nil {
-			return nil, err
+	if IsBillableSocialTaskAction(input.Action) {
+		for userID, bucket := range buckets {
+			if _, err := s.billing.EnsureCanAffordForPlatform(ctx, userID, bucket.platform, bucket.count); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -190,13 +218,6 @@ func normalizeAccountWorkbenchTaskInput(input *AccountWorkbenchTaskInput) error 
 	input.TargetPool = normalizeAccountWorkbenchTaskValues(input.TargetPool)
 	input.ContentPool = normalizeAccountWorkbenchTaskValues(input.ContentPool)
 	switch input.Action {
-	case SocialTaskActionMessage:
-		if isEmptyTaskValue(input.Target) && len(input.TargetPool) == 0 {
-			return infraerrors.BadRequest("SOCIAL_TASK_TARGET_REQUIRED", "target is required for messages")
-		}
-		if isEmptyTaskValue(input.Content) && len(input.ContentPool) == 0 {
-			return infraerrors.BadRequest("SOCIAL_TASK_CONTENT_REQUIRED", "content is required for messages")
-		}
 	case SocialTaskActionFollow, SocialTaskActionLike, SocialTaskActionRetweet:
 		if isEmptyTaskValue(input.Target) && len(input.TargetPool) == 0 && !taskPayloadHasTarget(input.Payload) {
 			return infraerrors.BadRequest("SOCIAL_TASK_TARGET_REQUIRED", "target is required for this action")
@@ -295,7 +316,7 @@ func (s *AccountWorkbenchService) validTaskAccounts(ctx context.Context, input *
 		if account.AssignedUserID == nil {
 			return nil, ErrSocialAccountNotAssigned
 		}
-		if input.Mode == AccountWorkbenchTaskModeUser && (*account.AssignedUserID != input.UserID || account.UserWorkbenchDeletedAt != nil) {
+		if input.Mode == AccountWorkbenchTaskModeUser && *account.AssignedUserID != input.UserID {
 			return nil, ErrSocialAccountNotAssigned
 		}
 		// The login action acquires/refreshes credentials, so it is the path that
@@ -359,9 +380,32 @@ func (s *AccountWorkbenchService) resolveAccountDefaultProxy(ctx context.Context
 	}
 	defaultProxyID, ok := SocialIPIDFromSnapshot(snapshot)
 	if !ok {
-		return nil, nil, infraerrors.BadRequest("SOCIAL_IP_NOT_AVAILABLE", "default social IP snapshot is stale")
+		return nil, nil, staleAccountDefaultProxyError()
 	}
-	return s.resolveTaskProxy(ctx, ownerID, defaultProxyID)
+	proxyID, proxySnapshot, err := s.resolveTaskProxy(ctx, ownerID, defaultProxyID)
+	if err != nil && infraerrors.Reason(err) == "SOCIAL_IP_NOT_FOUND" {
+		return nil, nil, staleAccountDefaultProxyError()
+	}
+	return proxyID, proxySnapshot, err
+}
+
+func staleAccountDefaultProxyError() error {
+	return infraerrors.BadRequest("SOCIAL_IP_NOT_AVAILABLE", "default social IP snapshot is stale")
+}
+
+func (s *AccountWorkbenchService) resolveGlobalFallbackProxy(ctx context.Context) (*string, error) {
+	if s == nil || s.globalProxies == nil {
+		return nil, infraerrors.ServiceUnavailable("GLOBAL_PROXY_SERVICE_UNAVAILABLE", "global proxy service is unavailable")
+	}
+	ip, err := s.globalProxies.NextAvailable(ctx)
+	if err != nil {
+		if infraerrors.Reason(err) == "GLOBAL_PROXY_NOT_AVAILABLE" {
+			return nil, infraerrors.BadRequest("GLOBAL_PROXY_NOT_AVAILABLE", "global proxy is not available")
+		}
+		return nil, err
+	}
+	snapshot := GlobalProxyTaskSnapshot(ip)
+	return &snapshot, nil
 }
 
 func (s *AccountWorkbenchService) resolveTaskProxy(ctx context.Context, ownerID, proxyID int64) (*int64, *string, error) {
@@ -372,24 +416,11 @@ func (s *AccountWorkbenchService) resolveTaskProxy(ctx context.Context, ownerID,
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := ensureAccountWorkbenchIPUsable(ip); err != nil {
+	if err := EnsureSocialIPUsableForExecution(ip); err != nil {
 		return nil, nil, err
 	}
 	snapshot := SocialIPTaskSnapshot(ip)
 	return &proxyID, &snapshot, nil
-}
-
-func ensureAccountWorkbenchIPUsable(ip *SocialIP) error {
-	if ip == nil {
-		return infraerrors.BadRequest("SOCIAL_IP_NOT_AVAILABLE", "social IP is not available")
-	}
-	if ip.Status != SocialIPStatusOnline {
-		return infraerrors.BadRequest("SOCIAL_IP_NOT_AVAILABLE", "social IP must pass a connectivity test before execution")
-	}
-	if strings.TrimSpace(stringValue(ip.Endpoint)) == "" {
-		return infraerrors.BadRequest("SOCIAL_IP_NOT_AVAILABLE", "social IP endpoint is required for execution")
-	}
-	return nil
 }
 
 func (s *AccountWorkbenchService) enqueueOrFailClosed(ctx context.Context, taskLogIDs []int64, logs *[]*SocialTaskLog) (int, int, error) {
@@ -397,7 +428,7 @@ func (s *AccountWorkbenchService) enqueueOrFailClosed(ctx context.Context, taskL
 		return 0, 0, nil
 	}
 	if s.executor == nil || s.executor.isStopped() {
-		message := "social platform executor queue is not configured; task was not charged"
+		message := safeSocialTaskFailureMessage(fmt.Errorf("social platform executor queue is not configured; task was not charged"))
 		for _, taskLogID := range taskLogIDs {
 			log, err := s.accounts.MarkTaskLogFailedNotCharged(ctx, taskLogID, message)
 			if err != nil {
@@ -409,7 +440,7 @@ func (s *AccountWorkbenchService) enqueueOrFailClosed(ctx context.Context, taskL
 	}
 	enqueued, failedIDs := s.executor.EnqueueBatch(taskLogIDs)
 	if len(failedIDs) > 0 {
-		message := "social platform executor queue is full; task was not charged"
+		message := safeSocialTaskFailureMessage(fmt.Errorf("social platform executor queue is full; task was not charged"))
 		failedClosed := 0
 		for _, taskLogID := range failedIDs {
 			log, err := s.accounts.MarkTaskLogFailedNotCharged(ctx, taskLogID, message)
@@ -443,6 +474,21 @@ func optionalAccountWorkbenchString(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func socialTaskLogMatchesAccountWorkbenchTask(log *SocialTaskLog, input *AccountWorkbenchTaskInput, target, content *string, payload *SocialTaskPayload) bool {
+	if log == nil || input == nil {
+		return false
+	}
+	return socialTaskLogMatchesIdempotentInput(log, &CreateSocialTaskLogInput{
+		AccountID:        log.SocialAccountID,
+		UserID:           log.UserID,
+		Action:           input.Action,
+		Target:           target,
+		Content:          content,
+		Payload:          payload,
+		TemplateSnapshot: input.TemplateSnapshot,
+	})
 }
 
 func buildAccountWorkbenchTaskPayload(input *AccountWorkbenchTaskInput, index int) *SocialTaskPayload {

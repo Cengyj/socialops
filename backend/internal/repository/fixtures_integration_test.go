@@ -117,133 +117,18 @@ func mustCreateGroup(t *testing.T, client *dbent.Client, g *service.Group) *serv
 	return g
 }
 
-func mustCreateProxy(t *testing.T, client *dbent.Client, p *service.Proxy) *service.Proxy {
-	t.Helper()
-	ctx := context.Background()
-
-	if p.Protocol == "" {
-		p.Protocol = "http"
-	}
-	if p.Host == "" {
-		p.Host = "127.0.0.1"
-	}
-	if p.Port == 0 {
-		p.Port = 8080
-	}
-	if p.Status == "" {
-		p.Status = service.StatusActive
-	}
-
-	create := client.Proxy.Create().
-		SetName(p.Name).
-		SetProtocol(p.Protocol).
-		SetHost(p.Host).
-		SetPort(p.Port).
-		SetStatus(p.Status)
-	if p.Username != "" {
-		create.SetUsername(p.Username)
-	}
-	if p.Password != "" {
-		create.SetPassword(p.Password)
-	}
-	if !p.CreatedAt.IsZero() {
-		create.SetCreatedAt(p.CreatedAt)
-	}
-	if !p.UpdatedAt.IsZero() {
-		create.SetUpdatedAt(p.UpdatedAt)
-	}
-
-	created, err := create.Save(ctx)
-	require.NoError(t, err, "create proxy")
-
-	p.ID = created.ID
-	p.CreatedAt = created.CreatedAt
-	p.UpdatedAt = created.UpdatedAt
-	return p
+type historicalAPIKeyRow struct {
+	ID        int64
+	UserID    int64
+	Key       string
+	Name      string
+	GroupID   *int64
+	Status    string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
-func mustCreateAccount(t *testing.T, client *dbent.Client, a *service.Account) *service.Account {
-	t.Helper()
-	ctx := context.Background()
-
-	if a.Platform == "" {
-		a.Platform = "social"
-	}
-	if a.Type == "" {
-		a.Type = "social"
-	}
-	if a.Status == "" {
-		a.Status = service.StatusActive
-	}
-	if a.Concurrency == 0 {
-		a.Concurrency = 3
-	}
-	if a.Priority == 0 {
-		a.Priority = 50
-	}
-	if !a.Schedulable {
-		a.Schedulable = true
-	}
-	if a.Credentials == nil {
-		a.Credentials = map[string]any{}
-	}
-	if a.Extra == nil {
-		a.Extra = map[string]any{}
-	}
-
-	create := client.Account.Create().
-		SetName(a.Name).
-		SetPlatform(a.Platform).
-		SetType(a.Type).
-		SetCredentials(a.Credentials).
-		SetExtra(a.Extra).
-		SetConcurrency(a.Concurrency).
-		SetPriority(a.Priority).
-		SetStatus(a.Status).
-		SetSchedulable(a.Schedulable).
-		SetErrorMessage(a.ErrorMessage)
-
-	if a.ProxyID != nil {
-		create.SetProxyID(*a.ProxyID)
-	}
-	if a.LastUsedAt != nil {
-		create.SetLastUsedAt(*a.LastUsedAt)
-	}
-	if a.RateLimitedAt != nil {
-		create.SetRateLimitedAt(*a.RateLimitedAt)
-	}
-	if a.RateLimitResetAt != nil {
-		create.SetRateLimitResetAt(*a.RateLimitResetAt)
-	}
-	if a.OverloadUntil != nil {
-		create.SetOverloadUntil(*a.OverloadUntil)
-	}
-	if a.SessionWindowStart != nil {
-		create.SetSessionWindowStart(*a.SessionWindowStart)
-	}
-	if a.SessionWindowEnd != nil {
-		create.SetSessionWindowEnd(*a.SessionWindowEnd)
-	}
-	if a.SessionWindowStatus != "" {
-		create.SetSessionWindowStatus(a.SessionWindowStatus)
-	}
-	if !a.CreatedAt.IsZero() {
-		create.SetCreatedAt(a.CreatedAt)
-	}
-	if !a.UpdatedAt.IsZero() {
-		create.SetUpdatedAt(a.UpdatedAt)
-	}
-
-	created, err := create.Save(ctx)
-	require.NoError(t, err, "create account")
-
-	a.ID = created.ID
-	a.CreatedAt = created.CreatedAt
-	a.UpdatedAt = created.UpdatedAt
-	return a
-}
-
-func mustCreateApiKey(t *testing.T, client *dbent.Client, k *service.APIKey) *service.APIKey {
+func mustCreateHistoricalAPIKey(t *testing.T, client *dbent.Client, k historicalAPIKeyRow) *dbent.APIKey {
 	t.Helper()
 	ctx := context.Background()
 
@@ -262,42 +147,6 @@ func mustCreateApiKey(t *testing.T, client *dbent.Client, k *service.APIKey) *se
 		SetKey(k.Key).
 		SetName(k.Name).
 		SetStatus(k.Status)
-	if k.Quota != 0 {
-		create.SetQuota(k.Quota)
-	}
-	if k.QuotaUsed != 0 {
-		create.SetQuotaUsed(k.QuotaUsed)
-	}
-	if k.RateLimit5h != 0 {
-		create.SetRateLimit5h(k.RateLimit5h)
-	}
-	if k.RateLimit1d != 0 {
-		create.SetRateLimit1d(k.RateLimit1d)
-	}
-	if k.RateLimit7d != 0 {
-		create.SetRateLimit7d(k.RateLimit7d)
-	}
-	if k.Usage5h != 0 {
-		create.SetUsage5h(k.Usage5h)
-	}
-	if k.Usage1d != 0 {
-		create.SetUsage1d(k.Usage1d)
-	}
-	if k.Usage7d != 0 {
-		create.SetUsage7d(k.Usage7d)
-	}
-	if k.Window5hStart != nil {
-		create.SetWindow5hStart(*k.Window5hStart)
-	}
-	if k.Window1dStart != nil {
-		create.SetWindow1dStart(*k.Window1dStart)
-	}
-	if k.Window7dStart != nil {
-		create.SetWindow7dStart(*k.Window7dStart)
-	}
-	if k.ExpiresAt != nil {
-		create.SetExpiresAt(*k.ExpiresAt)
-	}
 	if k.GroupID != nil {
 		create.SetGroupID(*k.GroupID)
 	}
@@ -309,12 +158,9 @@ func mustCreateApiKey(t *testing.T, client *dbent.Client, k *service.APIKey) *se
 	}
 
 	created, err := create.Save(ctx)
-	require.NoError(t, err, "create api key")
+	require.NoError(t, err, "create historical api key row")
 
-	k.ID = created.ID
-	k.CreatedAt = created.CreatedAt
-	k.UpdatedAt = created.UpdatedAt
-	return k
+	return created
 }
 
 func mustCreateRedeemCode(t *testing.T, client *dbent.Client, c *service.RedeemCode) *service.RedeemCode {
@@ -412,16 +258,4 @@ func mustCreateSubscription(t *testing.T, client *dbent.Client, s *service.UserS
 	s.CreatedAt = created.CreatedAt
 	s.UpdatedAt = created.UpdatedAt
 	return s
-}
-
-func mustBindAccountToGroup(t *testing.T, client *dbent.Client, accountID, groupID int64, priority int) {
-	t.Helper()
-	ctx := context.Background()
-
-	_, err := client.AccountGroup.Create().
-		SetAccountID(accountID).
-		SetGroupID(groupID).
-		SetPriority(priority).
-		Save(ctx)
-	require.NoError(t, err, "create account_group")
 }

@@ -52,9 +52,11 @@ afterEach(async () => {
 describe('mock API announcements contract', () => {
   it('keeps read state and targeting aligned with backend announcement APIs', async () => {
     const baseUrl = await startMockApi()
+    const adminToken = 'dev-mock-admin-token'
 
     const created = await requestJson<MockAnnouncement>(`${baseUrl}/api/v1/admin/announcements`, {
       method: 'POST',
+      token: adminToken,
       body: {
         title: 'Announcement contract',
         content: 'Contract body',
@@ -89,6 +91,7 @@ describe('mock API announcements contract', () => {
 
     const readStatus = await requestJson<MockPage<MockReadStatus>>(
       `${baseUrl}/api/v1/admin/announcements/${created.data.id}/read-status`,
+      { token: adminToken },
     )
     expect(readStatus.code).toBe(0)
     expect(readStatus.data.items).toEqual(

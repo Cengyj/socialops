@@ -1,0 +1,19 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Go Backend Unit Tests" type="GoTestRunConfiguration" factoryName="Go Test">
+    <module name="socialops" />
+    <working_directory value="$PROJECT_DIR$/backend" />
+    <kind value="DIRECTORY" />
+    <directory value="$PROJECT_DIR$/backend" />
+    <filePath value="" />
+    <package value="" />
+    <pattern value="" />
+    <go_parameters value="-tags=unit" />
+    <envs>
+      <env name="TZ" value="Asia/Shanghai" />
+      <env name="GOTOOLCHAIN" value="auto" />
+    </envs>
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

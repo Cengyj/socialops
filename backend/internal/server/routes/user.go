@@ -53,16 +53,6 @@ func RegisterUserRoutes(
 			}
 		}
 
-		// API key management.
-		keys := authenticated.Group("/keys")
-		{
-			keys.GET("", h.APIKey.List)
-			keys.GET("/:id", h.APIKey.GetByID)
-			keys.POST("", h.APIKey.Create)
-			keys.PUT("/:id", h.APIKey.Update)
-			keys.DELETE("/:id", h.APIKey.Delete)
-		}
-
 		// Usage records and dashboard summaries.
 		usage := authenticated.Group("/usage")
 		{
@@ -72,7 +62,6 @@ func RegisterUserRoutes(
 			usage.GET("/stats", h.Usage.Stats)
 			usage.GET("/dashboard/stats", h.Usage.DashboardStats)
 			usage.GET("/dashboard/trend", h.Usage.DashboardTrend)
-			usage.POST("/dashboard/api-keys-usage", h.Usage.DashboardAPIKeysUsage)
 		}
 
 		// User announcements.
@@ -106,6 +95,7 @@ func RegisterUserRoutes(
 			accounts.POST("/batch-delete", h.AccountWorkbench.BatchDeleteMyAccounts)
 			accounts.GET("/export", h.AccountWorkbench.ExportMyAccounts)
 			accounts.POST("/default-proxy", h.AccountWorkbench.BatchSetDefaultProxy)
+			accounts.GET("/tasks", h.AccountWorkbench.ListTaskLogs)
 			accounts.PUT("/:id", h.AccountWorkbench.UpdateMyAccount)
 			accounts.DELETE("/:id", h.AccountWorkbench.DeleteMyAccount)
 			accounts.PUT("/:id/default-proxy", h.AccountWorkbench.SetDefaultProxy)
@@ -137,8 +127,5 @@ func RegisterUserRoutes(
 			}
 		}
 
-		// Public plan catalog.
-		authenticated.GET("/plans", h.Plan.ListPlansForSale)
-		authenticated.GET("/my-plan", h.Plan.GetMyPlan)
 	}
 }

@@ -137,7 +137,7 @@ func TestSettingService_UpdateAuthSourceDefaultSettings_PersistsAllKeys(t *testi
 	require.Equal(t, []DefaultSubscriptionSetting{{PlanID: 204, GroupID: 24, ValidityDays: 90}}, got)
 }
 
-func TestSettingService_GetAuthSourceDefaultSettings_KeepsLegacyGroupOnlySubscriptions(t *testing.T) {
+func TestSettingService_GetAuthSourceDefaultSettings_KeepsGroupOnlySubscriptions(t *testing.T) {
 	repo := &authSourceDefaultsRepoStub{
 		values: map[string]string{
 			SettingKeyAuthSourceDefaultEmailSubscriptions: `[{"group_id":11,"validity_days":30}]`,

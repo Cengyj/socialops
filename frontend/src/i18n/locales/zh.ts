@@ -10,11 +10,11 @@ export default {
     "getStarted": "立即开始",
     "goToDashboard": "进入控制台",
     "heroSubtitle": "网站总账号池 + 社交执行计费平台",
-    "heroDescription": "使用已分配的池内社交账号，绑定稳定 IP，并在一个工作台批量提交关注、私信、发帖、点赞和登录检测。",
+    "heroDescription": "使用已分配的池内社交账号，绑定稳定 IP，并在一个工作台批量提交关注、发帖、点赞和登录检测。",
     "tags": {
-      "subscriptionToApi": "订阅授权",
-      "stickySession": "账号分配",
-      "realtimeBilling": "任务记录"
+      "subscriptionAccess": "订阅授权",
+      "accountAssignment": "账号分配",
+      "taskRecords": "任务记录"
     },
     "painPoints": {
       "title": "你是否也遇到这些问题？",
@@ -25,7 +25,7 @@ export default {
         },
         "complex": {
           "title": "批量操作繁琐",
-          "desc": "关注、私信、发帖、检测等任务逐个处理，效率低且容易漏记"
+          "desc": "关注、发帖、点赞、检测等任务逐个处理，效率低且容易漏记"
         },
         "unstable": {
           "title": "风控压力高",
@@ -43,56 +43,11 @@ export default {
     },
     "features": {
       "accountPool": "账号池分配",
-      "accountPoolDesc": "管理员导入、注册、分配和回收社交账号，用户只操作已分配账号。",
+      "accountPoolDesc": "管理员导入、分配、回收和清理社交账号，用户只操作已分配账号。",
       "multiAccount": "任务分发",
       "multiAccountDesc": "批量提交社交动作，集中查看账号状态、任务进度和执行记录。",
       "balanceQuota": "订阅管控",
       "balanceQuotaDesc": "套餐、兑换码、支付和用量记录让授权与履约更清晰。"
-    },
-    "comparison": {
-      "title": "为什么选择我们？",
-      "headers": {
-        "feature": "对比项",
-        "official": "官方订阅",
-        "us": "本平台"
-      },
-      "items": {
-        "pricing": {
-          "feature": "付费方式",
-          "official": "固定月费，用不完也付",
-          "us": "按量付费，用多少付多少"
-        },
-        "models": {
-          "feature": "账号操作",
-          "official": "人工切换多个账号",
-          "us": "分配账号和任务记录统一管理"
-        },
-        "management": {
-          "feature": "账号管理",
-          "official": "表格和人工交接",
-          "us": "集中账号池和分配工作台"
-        },
-        "stability": {
-          "feature": "服务稳定性",
-          "official": "账号/IP 健康不透明",
-          "us": "状态、IP 绑定与风控流程可追踪"
-        },
-        "control": {
-          "feature": "用量控制",
-          "official": "无法限制",
-          "us": "可设配额、查明细"
-        }
-      }
-    },
-    "providers": {
-      "title": "支持的社交平台",
-      "description": "一个工作流，覆盖多类社交平台",
-      "supported": "已支持",
-      "soon": "即将推出",
-      "xTwitter": "X / Twitter",
-      "instagram": "Instagram",
-      "tiktok": "TikTok",
-      "more": "更多"
     },
     "cta": {
       "title": "准备好开始了吗？",
@@ -214,6 +169,7 @@ export default {
     "balance": "余额",
     "available": "可用",
     "copiedToClipboard": "已复制到剪贴板",
+    "copyToClipboard": "复制到剪贴板",
     "copied": "已复制",
     "copyFailed": "复制失败",
     "verifying": "验证中...",
@@ -221,7 +177,7 @@ export default {
     "imageUpload": {
       "fileTooLarge": "文件过大（当前 {size}，上限 {max}）",
       "invalidImageType": "请选择图片文件",
-      "invalidMediaType": "请选择支持的媒体文件",
+      "invalidMediaType": "请选择图片文件",
       "readFailed": "读取所选文件失败"
     },
     "sending": "发送中...",
@@ -305,12 +261,9 @@ export default {
     "paymentDashboard": "支付概览",
     "paymentConfig": "支付配置",
     "paymentPlans": "订阅套餐",
-    "riskControl": "风控中心",
-    "dataOperations": "运维与数据",
-    "dataManagement": "数据管理",
-    "backup": "备份管理",
     "accountWorkbenchHome": "工作台",
-    "accountWorkbench": "账号工作台"
+    "accountWorkbench": "账号工作台",
+    "globalProxies": "全局代理池"
   },
   "auth": {
     "welcomeBack": "欢迎回来",
@@ -322,7 +275,6 @@ export default {
     "signUp": "注册",
     "processing": "处理中...",
     "continue": "继续",
-    "rememberMe": "记住我",
     "dontHaveAccount": "还没有账户？",
     "alreadyHaveAccount": "已有账户？",
     "registrationDisabled": "注册功能暂时关闭，请联系管理员。",
@@ -558,7 +510,7 @@ export default {
     "platformDistribution": "平台分布",
     "platformDistributionDescription": "优先按任务记录统计，暂无任务时按已绑定账号统计。",
     "platformDistributionEmpty": "暂无平台数据",
-    "recentUsageDescription": "显示最近的操作、状态、数量和费用。",
+    "recentUsageDescription": "显示最近的平台、操作、结果和费用。",
     "allRecords": "全部记录",
     "quickEntries": "快捷入口",
     "quickEntriesDescription": "进入常用的账户、日志和付费页面。",
@@ -568,7 +520,7 @@ export default {
     "executableAccounts": "可执行账号",
     "totalPoolAccounts": "来自总账号池的绑定账号",
     "totalRequests": "累计任务",
-    "recentRpm": "近 5 分钟 {count} 次/分",
+    "recentOperationsPerMinute": "近 5 分钟 {count} 次/分",
     "totalCharged": "累计扣费",
     "successOnlyBilling": "仅成功任务会扣费",
     "recentSuccessRate": "近期成功率",
@@ -595,45 +547,24 @@ export default {
     },
     "welcomeMessage": "欢迎回来！这是您账户的概览。",
     "balance": "余额",
-    "apiKeys": "访问密钥",
     "todayRequests": "今日任务",
     "todayCost": "今日消费",
-    "todayTokens": "今日动作",
-    "totalTokens": "累计动作",
-    "cacheToday": "今日缓存",
-    "performance": "性能指标",
-    "avgResponse": "平均响应",
-    "averageTime": "平均时间",
     "timeRange": "时间范围",
     "granularity": "粒度",
     "day": "按天",
     "hour": "按小时",
-    "modelDistribution": "动作分布",
-    "groupDistribution": "分组使用分布",
     "platformBreakdown": "按平台拆分",
     "platformBreakdownEmpty": "暂无平台用量",
     "platformCount": "{count} 个平台",
     "platformOther": "其他",
-    "tokenUsageTrend": "动作使用趋势",
     "noDataAvailable": "暂无数据",
-    "model": "动作",
-    "group": "分组",
-    "noGroup": "无分组",
     "requests": "请求",
-    "tokens": "动作",
     "actual": "实际",
-    "standard": "标准",
-    "input": "输入",
-    "output": "输出",
-    "cache": "缓存",
     "recentUsage": "最近使用",
     "last7Days": "近 7 天",
     "noUsageRecords": "暂无使用记录",
-    "startUsingApi": "开始使用 API 后，您的使用历史将显示在这里。",
     "viewAllUsage": "查看全部",
     "quickActions": "快捷操作",
-    "createApiKey": "创建 API 密钥",
-    "generateNewKey": "生成新的 API 密钥",
     "viewUsage": "查看使用记录",
     "checkDetailedLogs": "查看详细的使用日志",
     "redeemCode": "兑换码",
@@ -641,108 +572,6 @@ export default {
   },
   "groups": {
     "subscription": "订阅"
-  },
-  "keys": {
-    "title": "API 密钥",
-    "description": "管理您的 API 密钥和访问令牌",
-    "searchPlaceholder": "搜索名称或Key...",
-    "allGroups": "全部分组",
-    "allStatus": "全部状态",
-    "createKey": "创建密钥",
-    "editKey": "编辑密钥",
-    "deleteKey": "删除密钥",
-    "deleteConfirmMessage": "确定要删除 '{name}' 吗？此操作无法撤销。",
-    "apiKey": "API 密钥",
-    "group": "分组",
-    "noGroup": "无分组",
-    "searchGroup": "搜索分组...",
-    "noGroupFound": "未找到匹配的分组",
-    "created": "创建时间",
-    "copyToClipboard": "复制到剪贴板",
-    "copied": "已复制！",
-    "enable": "启用",
-    "disable": "禁用",
-    "nameLabel": "名称",
-    "namePlaceholder": "我的 API 密钥",
-    "groupLabel": "分组",
-    "selectGroup": "选择分组",
-    "statusLabel": "状态",
-    "selectStatus": "选择状态",
-    "saving": "保存中...",
-    "noKeysYet": "暂无 API 密钥",
-    "createFirstKey": "创建您的第一个 API 密钥以开始使用 API。",
-    "keyCreatedSuccess": "API 密钥创建成功",
-    "keyUpdatedSuccess": "API 密钥更新成功",
-    "keyDeletedSuccess": "API 密钥删除成功",
-    "keyEnabledSuccess": "API 密钥已启用",
-    "keyDisabledSuccess": "API 密钥已禁用",
-    "failedToLoad": "加载 API 密钥失败",
-    "failedToSave": "保存 API 密钥失败",
-    "failedToDelete": "删除 API 密钥失败",
-    "failedToUpdateStatus": "更新 API 密钥状态失败",
-    "clickToChangeGroup": "点击更换分组",
-    "groupChangedSuccess": "分组更换成功",
-    "failedToChangeGroup": "更换分组失败",
-    "groupRequired": "请选择分组",
-    "usage": "用量",
-    "today": "今日",
-    "total": "近30天",
-    "quota": "额度",
-    "lastUsedAt": "上次使用时间",
-    "customKeyLabel": "自定义密钥",
-    "customKeyPlaceholder": "输入自定义密钥（至少16个字符）",
-    "customKeyHint": "仅允许字母、数字、下划线和连字符，最少16个字符。",
-    "customKeyTooShort": "自定义密钥至少需要16个字符",
-    "customKeyInvalidChars": "自定义密钥只能包含字母、数字、下划线和连字符",
-    "customKeyRequired": "请输入自定义密钥",
-    "ipRestriction": "IP 限制",
-    "ipWhitelist": "IP 白名单",
-    "ipWhitelistPlaceholder": "192.168.1.100\n10.0.0.0/8",
-    "ipWhitelistHint": "每行一个 IP 或 CIDR，设置后仅允许这些 IP 使用此密钥",
-    "ipBlacklist": "IP 黑名单",
-    "ipBlacklistPlaceholder": "1.2.3.4\n5.6.0.0/16",
-    "ipBlacklistHint": "每行一个 IP 或 CIDR，这些 IP 将被禁止使用此密钥",
-    "ipRestrictionEnabled": "已配置 IP 限制",
-    "quotaLimit": "额度限制",
-    "quotaAmount": "额度金额 (USD)",
-    "quotaAmountPlaceholder": "输入 USD 额度限制",
-    "quotaAmountHint": "设置此密钥可消费的最大金额。0 = 无限制。",
-    "quotaUsed": "已用额度",
-    "reset": "重置",
-    "resetQuotaUsed": "将已用额度重置为 0",
-    "resetQuotaTitle": "确认重置额度",
-    "resetQuotaConfirmMessage": "确定要将密钥 \"{name}\" 的已用额度（${used}）重置为 0 吗？此操作不可撤销。",
-    "quotaResetSuccess": "额度重置成功",
-    "failedToResetQuota": "重置额度失败",
-    "rateLimitColumn": "速率限制",
-    "rateLimitSection": "速率限制",
-    "resetUsage": "重置",
-    "rateLimit5h": "5小时限额 (USD)",
-    "rateLimit1d": "日限额 (USD)",
-    "rateLimit7d": "7天限额 (USD)",
-    "rateLimitHint": "设置此密钥在指定时间窗口内的最大消费额。0 = 无限制。",
-    "rateLimitUsage": "速率限制用量",
-    "resetRateLimitUsage": "重置速率限制用量",
-    "resetRateLimitTitle": "确认重置速率限制",
-    "resetRateLimitConfirmMessage": "确定要重置密钥 \"{name}\" 的速率限制用量吗？所有时间窗口的已用额度将归零。此操作不可撤销。",
-    "rateLimitResetSuccess": "速率限制已重置",
-    "failedToResetRateLimit": "重置速率限制失败",
-    "resetNow": "即将重置",
-    "expiration": "密钥有效期",
-    "expiresInDays": "{days} 天",
-    "extendDays": "+{days} 天",
-    "customDate": "自定义",
-    "expirationDate": "过期时间",
-    "expirationDateHint": "选择此 API 密钥的过期时间。",
-    "currentExpiration": "当前过期时间",
-    "expiresAt": "过期时间",
-    "noExpiration": "永久有效",
-    "status": {
-      "active": "活跃",
-      "inactive": "已停用",
-      "quota_exhausted": "额度耗尽",
-      "expired": "已过期"
-    }
   },
   "usage": {
     "title": "使用记录",
@@ -752,6 +581,7 @@ export default {
       "status": "状态筛选",
       "allOperations": "全部操作",
       "allStatuses": "全部状态",
+      "allPlatforms": "全部平台",
       "clear": "清空筛选"
     },
     "records": "操作记录",
@@ -759,18 +589,21 @@ export default {
     "platform": "平台",
     "account": "账号",
     "status": "状态",
+    "timeRange": "时间范围",
     "quantity": "数量",
-    "chargeStatus": "扣费状态",
-    "serviceTier": "服务档位",
-    "serviceTierPriority": "Fast",
-    "serviceTierFlex": "Flex",
-    "serviceTierStandard": "Standard",
+    "loading": "正在加载使用记录...",
     "empty": "暂无 SocialOps 操作记录。",
+    "emptyFiltered": "当前筛选条件下没有匹配的使用记录。",
     "totalOperations": "操作总数",
-    "totalQuantity": "数量合计",
     "successCount": "成功数",
     "failedCount": "失败数",
-    "totalCost": "总消费",
+    "successRate": "成功率",
+    "totalCharged": "总扣费",
+    "inSelectedRange": "选定时间范围内",
+    "successOnlyBilling": "成功任务扣费",
+    "exportCsv": "导出 CSV",
+    "exportFailed": "导出使用记录失败",
+    "exportEmpty": "当前筛选条件下没有可导出的使用记录。",
     "exportingProgress": "正在导出数据...",
     "exportedCount": "已导出 {current}/{total} 条",
     "estimatedTime": "预计剩余时间：{time}",
@@ -778,6 +611,7 @@ export default {
     "exporting": "导出中...",
     "cost": "费用",
     "result": "结果",
+    "summary": "摘要",
     "detailTitle": "任务详情",
     "detailDescription": "查看本次提交的配置快照与执行摘要。",
     "detailEmpty": "当前记录暂无结构化详情。",
@@ -785,12 +619,14 @@ export default {
     "detailLoadFailed": "加载任务详情失败",
     "detailSections": {
       "summary": "摘要",
+      "proxy": "执行代理",
       "payload": "执行参数",
       "template": "模板快照",
       "profile": "资料字段",
       "media": "媒体",
       "targets": "目标池",
-      "contents": "内容池"
+      "contents": "内容池",
+      "technical": "技术信息"
     },
     "detailLabels": {
       "operation": "动作",
@@ -842,11 +678,16 @@ export default {
     "taskResults": {
       "completedHidden": "任务已完成，详细结果已隐藏",
       "failedNoCharge": "任务执行失败，本次未扣费",
+      "executionTimeout": "任务执行超时，本次未扣费",
       "queueBusy": "任务队列繁忙，本次未扣费",
       "platformUnavailable": "该平台动作暂不可用，本次未扣费",
       "billingAnomaly": "执行已完成，但扣费确认异常，请联系管理员处理",
       "authUnavailable": "账号认证信息不可用，本次未扣费",
+      "accountNotFound": "账号不存在，本次未扣费",
       "proxyUnavailable": "执行代理不可用，本次未扣费",
+      "platformNetworkFailed": "平台网络请求失败，本次未扣费",
+      "passwordInvalid": "密码错误，本次未扣费",
+      "loginDependencyNotConfigured": "登录依赖服务未配置，本次未扣费",
       "unsupportedAction": "该动作暂不支持，本次未扣费",
       "invalidParams": "任务参数不完整，本次未扣费",
       "avatarSizeInvalid": "头像图片尺寸必须为 400x400，本次未扣费",
@@ -874,29 +715,23 @@ export default {
       "social": "通用平台"
     },
     "actions": {
-      "login_check": "登录检测",
-      "login": "登录",
-      "follow": "关注",
-      "message": "私信",
-      "dm": "私信",
-      "like": "点赞",
-      "post": "发帖",
-      "tweet": "发帖",
-      "retweet": "转推",
-      "repost": "转推",
-      "reply": "回复",
-      "quote": "引用",
-      "update_profile": "修改资料",
-      "update_avatar": "修改头像",
-      "update_banner": "修改背景图",
+      "login_check": "Login Check",
+      "login": "Login",
+      "follow": "Follow",
+      "like": "Like",
+      "post": "Post",
+      "retweet": "Retweet",
+      "repost": "Retweet",
+      "reply": "Reply",
+      "quote": "Quote",
+      "update_profile": "Update Profile",
+      "update_avatar": "Update Avatar",
+      "update_banner": "Update Banner",
       "viewDetails": "查看详情"
     },
     "statuses": {
       "success": "成功",
-      "failed": "失败",
-      "pending": "待执行",
-      "running": "执行中",
-      "queued": "排队中"
+      "failed": "失败"
     },
     "chargeStatuses": {
       "charged": "已扣费",
@@ -1257,7 +1092,7 @@ export default {
       "allocatableAccounts": "可分配账号",
       "storedAccountsMeta": "入库 {count} 个",
       "todayTasks": "今日任务",
-      "recentRpmMeta": "近 5 分钟 {count} 次/分",
+      "recentOperationsPerMinuteMeta": "近 5 分钟 {count} 次/分",
       "totalTasks": "累计任务",
       "executionRecordsMeta": "成功与失败都计入执行记录",
       "todaySuccessfulCharges": "今日成功扣费",
@@ -1283,9 +1118,6 @@ export default {
           "description": "维护账号分配状态"
         }
       },
-      "apiKeys": "API 密钥",
-      "totalApiKeys": "API 密钥总数",
-      "activeApiKeys": "活跃密钥",
       "users": "用户",
       "totalUsers": "用户总数",
       "activeUsers": "活跃用户",
@@ -1297,48 +1129,25 @@ export default {
       "todayCost": "今日消费",
       "totalCost": "总消费",
       "actual": "实际",
-      "standard": "标准",
-      "accountCost": "成本",
-      "todayTokens": "今日动作",
-      "totalTokens": "总动作",
-      "input": "输入",
-      "output": "输出",
-      "cacheToday": "今日缓存",
-      "performance": "性能指标",
-      "avgResponse": "平均响应",
-      "averageTime": "平均时间",
       "timeRange": "时间范围",
       "granularity": "粒度",
       "day": "按天",
       "hour": "按小时",
-      "modelDistribution": "动作分布",
-      "groupDistribution": "分组使用分布",
-      "metricTokens": "按动作",
       "metricActualCost": "按实际消费",
-      "tokenUsageTrend": "动作使用趋势",
       "noDataAvailable": "暂无数据",
-      "model": "动作",
-      "group": "分组",
-      "noGroup": "无分组",
       "requests": "请求",
-      "tokens": "动作",
-      "cache": "缓存",
       "recentUsage": "最近使用",
-      "viewModelDistribution": "动作分布",
       "viewSpendingRanking": "用户消费榜",
       "spendingRankingTitle": "用户消费榜",
       "spendingRankingUser": "用户",
       "spendingRankingRequests": "请求",
-      "spendingRankingTokens": "动作",
       "spendingRankingSpend": "消费",
       "spendingRankingOther": "其他",
       "spendingRankingUsage": "用量",
       "spendShort": "消费",
       "requestsShort": "请求",
-      "tokensShort": "动作",
       "last7Days": "近 7 天",
       "noUsageRecords": "暂无使用记录",
-      "startUsingApi": "提交 SocialOps 任务后，使用历史将显示在这里。",
       "viewAllUsage": "查看全部",
       "quickActions": "快捷操作",
       "manageUsers": "管理用户",
@@ -1355,23 +1164,44 @@ export default {
     },
     "socialAccountWorkbench": {
       "title": "账号管理",
-      "description": "统一管理网站总账号池：导入、注册入口、编辑、分配、回收和导出",
+      "description": "统一管理网站总账号池：导入、编辑、分配、回收、导出和清理记录",
       "searchPlaceholder": "搜索账号 / 平台 / 手机号 / 邮箱 / IP / 分配用户",
       "batchRetry": "批量重试",
       "exportFailed": "导出失败",
+      "importFailed": "导入失败",
       "detailTitle": "账号详情",
+      "createTitle": "创建账号",
+      "createHint": "在总账号池中创建一个未分配账号。账号分配仍通过总账号池分配操作完成。",
       "editTitle": "编辑账号",
       "mockHint": "账号数据来自后端，总账号池导入会去重。",
       "failedToLoad": "加载账号池记录失败",
-      "placeholderSaved": "配置已保存。",
-      "placeholderAction": "已执行 {action}。",
-      "placeholderRowAction": "已为 {account} 执行 {action}。",
       "saved": "账号已保存。",
-      "created": "账号已导入总账号池。",
+      "created": "账号已创建到总账号池。",
+      "saveFailed": "保存账号失败",
+      "noChanges": "没有可保存的更改。",
+      "createFailed": "账号创建失败",
+      "assignFailed": "分配账号失败",
+      "reclaimFailed": "回收账号失败",
+      "deleteFailed": "删除账号失败",
+      "errors": {
+        "SOCIAL_ACCOUNT_SERVICE_UNAVAILABLE": "账号服务暂不可用，请稍后重试。",
+        "SOCIAL_ACCOUNT_INPUT_REQUIRED": "账号信息不完整，请检查后重试。",
+        "SOCIAL_ACCOUNT_NAME_REQUIRED": "请输入账号名称。",
+        "SOCIAL_ACCOUNT_PLATFORM_REQUIRED": "请选择账号平台。",
+        "SOCIAL_ACCOUNT_IDENTITY_REQUIRED": "账号身份信息不完整，请检查账号名称和平台。",
+        "SOCIAL_ACCOUNT_PASSWORD_REQUIRED": "请输入账号密码。",
+        "SOCIAL_ACCOUNT_IMPORT_REQUIRED": "请选择有效的导入文件后重试。",
+        "SOCIAL_ACCOUNT_IMPORT_INCOMPLETE": "账号交付信息不完整，请填写账号密码，并至少填写 2FA、完整邮箱凭据或认证 Cookie 中的一项。",
+        "SOCIAL_ACCOUNT_DUPLICATE": "该账号已存在于总账号池，请不要重复创建或导入。",
+        "SOCIAL_ACCOUNT_NOT_FOUND": "账号不存在或已被更新，请刷新列表后重试。",
+        "SOCIAL_ACCOUNT_ALREADY_ASSIGNED": "该账号已分配给用户，请刷新列表后重试。",
+        "SOCIAL_ACCOUNT_ASSIGNMENT_CHANGED": "账号分配状态已变化，请刷新列表后重试。",
+        "SOCIAL_ACCOUNT_EXECUTION_AUTH_INVALID": "执行认证格式无效，请使用已保存的密文或重新执行登录刷新。",
+        "USER_NOT_FOUND": "目标用户不存在或不可用，请刷新用户列表后重试。"
+      },
       "imported": "已导入 {count} 个账号。",
-      "registerNotConfigured": "SocialOps 会尝试登录并保存执行凭证；如遇验证码或二次验证，账号会保留为人工处理状态。",
       "tabs": {
-        "managementDescription": "导入、注册和整理社交账号资料；账号归属由总账号池统一处理",
+        "managementDescription": "导入和整理社交账号资料；账号归属由总账号池统一处理",
         "poolDescription": "查看池内账号分配状态，处理分配、回收、导出和批量清理"
       },
       "stats": {
@@ -1386,7 +1216,6 @@ export default {
         "unassigned": "未分配"
       },
       "actions": {
-        "register": "注册账号",
         "manualImport": "手动导入",
         "fileUpload": "上传入库",
         "assign": "分配",
@@ -1394,8 +1223,10 @@ export default {
         "delete": "删除"
       },
       "toolbar": {
+        "createAccount": "创建账号",
         "importAccounts": "导入账号",
-        "exportRecords": "导出记录"
+        "exportRecords": "导出记录",
+        "exportSelectedRecords": "导出所选记录"
       },
       "credentials": {
         "configured": "已配置",
@@ -1413,24 +1244,23 @@ export default {
       "executionBar": {
         "selectedCount": "已选择 {count} 个账号",
         "clear": "清空选择",
-        "start": "开始执行",
-        "placeholderStarted": "已为 {count} 个账号启动 {action} 占位任务。"
+        "selectionRequired": "请至少选择一个账号。",
+        "noAssignedSelection": "请至少选择一个已分配账号后再回收。",
+        "start": "开始执行"
       },
       "executionActions": {
         "login": "登录",
         "login_check": "登录检测",
-        "message": "私信",
-        "messageUnavailable": "暂未接入",
-        "post": "发推文",
+        "post": "发帖",
         "follow": "关注",
         "like": "点赞",
-        "retweet": "转推"
+        "retweet": "转发"
       },
       "executionParams": {
         "title": "执行参数",
         "hint": "准备对 {count} 个选中账号执行{action}，后端会逐个校验账号、代理和计费条件。",
         "target": "目标用户名、URL 或帖子 ID",
-        "content": "私信或发帖内容"
+        "content": "发帖内容"
       },
       "executionLog": {
         "title": "执行日志",
@@ -1482,7 +1312,6 @@ export default {
         "emailToken": "邮箱 Token",
         "registrationIp": "注册 IP",
         "executionAuth": "执行认证",
-        "credentials": "凭证状态",
         "accountStatus": "账号状态",
         "taskStatus": "执行结果",
         "taskMessage": "结果消息",
@@ -1543,10 +1372,11 @@ export default {
         "emailClientId": "邮箱 Client ID",
         "emailToken": "邮箱 Token",
         "registrationIp": "注册 IP",
-        "executionAuth": "执行认证 JSON",
+        "executionAuth": "执行认证密文",
+        "executionAuthHelp": "该字段只保存加密后的执行认证密文；不要在这里填写完整 Cookie、设备请求头或未加密的执行凭证。",
         "defaultProxySnapshot": "默认代理快照",
         "filePlaceholder": "选择 CSV / JSON 文件",
-        "fileHint": "CSV/JSON 字段：name, password, phone, email, email_password, two_factor, backup_code, email_client_id, email_token, registration_ip, auth_cookie, execution_auth, default_proxy_snapshot, remark。平台由导入页面选择。"
+        "fileHint": "CSV/JSON 字段：name, password, two_factor, backup_code, email, email_password, email_client_id, email_token, registration_ip, auth_cookie, execution_auth, phone, remark。平台由导入页面选择。"
       },
       "uploadPreview": {
         "total": "总数",
@@ -1584,9 +1414,10 @@ export default {
         "searchPlaceholder": "搜索邮箱、用户名或角色",
         "userListLabel": "可分配用户",
         "selectedUserLabel": "已选用户",
-        "assignedCountLabel": "已分配 {count} 个账号",
+        "assignedCountLabel": "当前可见已分配 {count} 个账号",
         "noSelectedUserPrompt": "从左侧选择一个用户后，将在这里确认分配对象。",
         "noUsersFound": "未找到匹配的目标用户，请调整关键词。",
+        "userLoadFailed": "目标用户列表加载失败，请刷新页面后重试。",
         "userStatus": {
           "active": "启用",
           "disabled": "禁用"
@@ -1613,12 +1444,29 @@ export default {
         "impactHint": "删除后账号凭证、分配关系和列表记录都会从总账号池移除。",
         "confirm": "确认永久删除"
       },
+      "batchResult": {
+        "dismiss": "清除批量操作结果",
+        "rowsMore": "还有 {count} 条结果",
+        "statuses": {
+          "succeeded": "成功",
+          "skipped": "跳过",
+          "failed": "失败",
+          "duplicate": "重复"
+        }
+      },
+      "importResult": {
+        "dismiss": "清除导入结果",
+        "summary": "导入结果：共 {total} 个，导入 {created} 个，跳过 {skipped} 个，失败 {failed} 个，重复 {duplicates} 个。"
+      },
       "toasts": {
         "assignRequiresUnassigned": "分配账号仅支持未分配账号；当前选择中有 {count} 个账号已分配，请调整选择后重试。",
         "selectTargetUser": "请选择目标用户。",
         "assigned": "已将 {count} 个账号分配给 {user}。",
+        "assignedResult": "分配结果：共 {total} 个，成功 {succeeded} 个，跳过 {skipped} 个，失败 {failed} 个。目标用户：{user}。",
         "reclaimed": "已回收 {count} 个账号并设为未分配。",
-        "deleted": "已删除 {count} 个账号。"
+        "reclaimedResult": "回收结果：共 {total} 个，成功 {succeeded} 个，跳过 {skipped} 个，失败 {failed} 个。",
+        "deleted": "已删除 {count} 个账号。",
+        "deletedResult": "删除结果：共 {total} 个，成功 {succeeded} 个，跳过 {skipped} 个，失败 {failed} 个。"
       }
     },
     "backup": {
@@ -1735,186 +1583,6 @@ export default {
         "freeTier": "R2 免费额度：10GB 存储 + 每月 100 万次 A 类请求 + 1000 万次 B 类请求，对数据库备份完全够用。"
       }
     },
-    "dataManagement": {
-      "title": "数据管理",
-      "description": "统一管理数据管理代理状态、对象存储配置和备份任务",
-      "agent": {
-        "title": "数据管理代理状态",
-        "description": "系统会自动探测固定 Unix Socket，仅在可连通时启用数据管理功能。",
-        "enabled": "数据管理代理已就绪，可继续进行数据管理操作。",
-        "disabled": "数据管理代理不可用，当前仅可查看诊断信息。",
-        "socketPath": "Socket 路径",
-        "version": "版本",
-        "status": "状态",
-        "uptime": "运行时长",
-        "reasonLabel": "不可用原因",
-        "reason": {
-          "DATA_MANAGEMENT_AGENT_SOCKET_MISSING": "未检测到数据管理 Socket 文件",
-          "DATA_MANAGEMENT_AGENT_UNAVAILABLE": "数据管理代理不可连通",
-          "DATA_MANAGEMENT_DEPRECATED": "数据管理代理已关闭，当前版本仅保留诊断入口",
-          "BACKUP_AGENT_SOCKET_MISSING": "未检测到备份 Socket 文件",
-          "BACKUP_AGENT_UNAVAILABLE": "备份代理不可连通",
-          "UNKNOWN": "未知原因"
-        }
-      },
-      "sections": {
-        "config": {
-          "title": "备份配置",
-          "description": "配置备份源、保留策略与 S3 存储参数。"
-        },
-        "s3": {
-          "title": "S3 对象存储",
-          "description": "配置并测试备份产物上传到标准 S3 对象存储。"
-        },
-        "backup": {
-          "title": "备份操作",
-          "description": "触发 PostgreSQL、Redis 与全量备份任务。"
-        },
-        "history": {
-          "title": "备份历史",
-          "description": "查看备份任务执行状态、错误与产物信息。"
-        }
-      },
-      "form": {
-        "sourceMode": "源模式",
-        "backupRoot": "备份根目录",
-        "activePostgresProfile": "当前激活 PostgreSQL 配置",
-        "activeRedisProfile": "当前激活 Redis 配置",
-        "activeS3Profile": "当前激活 S3 账号",
-        "retentionDays": "保留天数",
-        "keepLast": "至少保留最近任务数",
-        "uploadToS3": "上传到 S3",
-        "useActivePostgresProfile": "使用当前激活 PostgreSQL 配置",
-        "useActiveRedisProfile": "使用当前激活 Redis 配置",
-        "useActiveS3Profile": "使用当前激活账号",
-        "idempotencyKey": "幂等键（可选）",
-        "secretConfigured": "已配置，留空不变",
-        "source": {
-          "profileID": "配置 ID（唯一）",
-          "profileName": "配置名称",
-          "setActive": "创建后立即设为激活配置"
-        },
-        "postgres": {
-          "title": "PostgreSQL",
-          "host": "主机",
-          "port": "端口",
-          "user": "用户名",
-          "password": "密码",
-          "database": "数据库",
-          "sslMode": "SSL 模式",
-          "containerName": "容器名（docker_exec 模式）"
-        },
-        "redis": {
-          "title": "Redis",
-          "addr": "地址（host:port）",
-          "username": "用户名",
-          "password": "密码",
-          "db": "数据库编号",
-          "containerName": "容器名（docker_exec 模式）"
-        },
-        "s3": {
-          "enabled": "启用 S3 上传",
-          "profileID": "账号 ID（唯一）",
-          "profileName": "账号名称",
-          "endpoint": "Endpoint（可选）",
-          "region": "Region",
-          "bucket": "Bucket",
-          "accessKeyID": "Access Key ID",
-          "secretAccessKey": "Secret Access Key",
-          "prefix": "对象前缀",
-          "forcePathStyle": "强制 path-style",
-          "useSSL": "使用 SSL",
-          "setActive": "创建后立即设为激活账号"
-        }
-      },
-      "sourceProfiles": {
-        "createTitle": "创建数据源配置",
-        "editTitle": "编辑数据源配置",
-        "empty": "暂无配置，请先创建",
-        "deleteConfirm": "确定删除配置 {profileID} 吗？",
-        "columns": {
-          "profile": "配置",
-          "active": "激活状态",
-          "connection": "连接信息",
-          "database": "数据库",
-          "updatedAt": "更新时间",
-          "actions": "操作"
-        }
-      },
-      "s3Profiles": {
-        "createTitle": "创建 S3 账号",
-        "editTitle": "编辑 S3 账号",
-        "empty": "暂无 S3 账号，请先创建",
-        "editHint": "点击“编辑”将在右侧抽屉中修改账号信息。",
-        "deleteConfirm": "确定删除 S3 账号 {profileID} 吗？",
-        "columns": {
-          "profile": "账号",
-          "active": "激活状态",
-          "storage": "存储配置",
-          "updatedAt": "更新时间",
-          "actions": "操作"
-        }
-      },
-      "history": {
-        "total": "共 {count} 条",
-        "empty": "暂无备份任务",
-        "columns": {
-          "jobID": "任务 ID",
-          "type": "类型",
-          "status": "状态",
-          "triggeredBy": "触发人",
-          "pgProfile": "PostgreSQL 配置",
-          "redisProfile": "Redis 配置",
-          "s3Profile": "S3 账号",
-          "finishedAt": "完成时间",
-          "artifact": "产物",
-          "error": "错误"
-        },
-        "status": {
-          "queued": "排队中",
-          "running": "执行中",
-          "succeeded": "成功",
-          "failed": "失败",
-          "partial_succeeded": "部分成功"
-        },
-        "types": {
-          "postgres": "PostgreSQL",
-          "redis": "Redis",
-          "full": "全量"
-        }
-      },
-      "actions": {
-        "refresh": "刷新状态",
-        "disabledHint": "请先启动 datamanagementd 并确认 Socket 可连通。",
-        "reloadConfig": "加载配置",
-        "reloadSourceProfiles": "刷新数据源配置",
-        "reloadProfiles": "刷新账号列表",
-        "newSourceProfile": "新建数据源配置",
-        "saveConfig": "保存配置",
-        "configSaved": "配置保存成功",
-        "testS3": "测试 S3 连接",
-        "s3TestOK": "S3 连接测试成功",
-        "s3TestFailed": "S3 连接测试失败",
-        "newProfile": "新建账号",
-        "saveProfile": "保存账号",
-        "activateProfile": "设为激活",
-        "profileIDRequired": "请输入账号 ID",
-        "profileNameRequired": "请输入账号名称",
-        "profileSelectRequired": "请先选择要编辑的账号",
-        "profileCreated": "S3 账号创建成功",
-        "profileSaved": "S3 账号保存成功",
-        "profileActivated": "S3 账号已切换为激活",
-        "profileDeleted": "S3 账号删除成功",
-        "sourceProfileCreated": "数据源配置创建成功",
-        "sourceProfileSaved": "数据源配置保存成功",
-        "sourceProfileActivated": "数据源配置已切换为激活",
-        "sourceProfileDeleted": "数据源配置删除成功",
-        "createBackup": "创建备份任务",
-        "jobCreated": "备份任务已创建：{jobID}（{status}）",
-        "refreshJobs": "刷新任务",
-        "loadMore": "加载更多"
-      }
-    },
     "affiliates": {
       "invitesDescription": "查看全站邀请关系和被邀请用户累计返利",
       "rebatesDescription": "查看每一笔产生返利的充值订单",
@@ -1964,8 +1632,8 @@ export default {
       "editUser": "编辑用户",
       "deleteUser": "删除用户",
       "deleteConfirmMessage": "确定要删除用户 '{email}' 吗？此操作无法撤销。",
-      "searchPlaceholder": "邮箱/用户名/备注/API Key 模糊搜索...",
-      "searchUsers": "邮箱/用户名/备注/API Key 模糊搜索",
+      "searchPlaceholder": "邮箱/用户名/备注模糊搜索...",
+      "searchUsers": "邮箱/用户名/备注模糊搜索",
       "roleFilter": "角色筛选",
       "allRoles": "全部角色",
       "allStatus": "全部状态",
@@ -2024,11 +1692,7 @@ export default {
       "enable": "启用",
       "disableUser": "禁用用户",
       "enableUser": "启用用户",
-      "viewApiKeys": "查看 API 密钥",
       "groups": "分组",
-      "apiKeys": "API密钥",
-      "userApiKeys": "用户 API 密钥",
-      "noApiKeys": "此用户暂无 API 密钥",
       "group": "分组",
       "none": "无",
       "groupChangedSuccess": "分组修改成功",
@@ -2046,7 +1710,6 @@ export default {
       "failedToUpdate": "更新用户失败",
       "failedToDelete": "删除用户失败",
       "failedToToggle": "更新用户状态失败",
-      "failedToLoadApiKeys": "加载用户 API 密钥失败",
       "deleteConfirm": "确定要删除用户 '{email}' 吗？此操作无法撤销。",
       "roles": {
         "admin": "管理员",
@@ -2109,12 +1772,6 @@ export default {
       "useDefaultRate": "使用默认",
       "customRatePlaceholder": "留空使用默认",
       "groupConfigUpdated": "分组配置更新成功",
-      "replaceGroup": "替换分组",
-      "clickToReplace": "点击替换分组",
-      "replaceGroupTitle": "替换专属分组",
-      "replaceGroupHint": "选择新分组替换「{old}」，将自动迁移绑定的 Key 并更新分组权限",
-      "replaceGroupConfirm": "确认替换",
-      "replaceGroupSuccess": "分组替换成功，已迁移 {count} 个 Key",
       "selectNewGroup": "请选择目标分组",
       "noOtherGroups": "没有其他可用的专属分组",
       "deposit": "充值",
@@ -2216,22 +1873,6 @@ export default {
         "keyExists": "属性键已存在",
         "dragToReorder": "拖拽排序"
       }
-    },
-    "riskControl": {
-      "title": "风控中心",
-      "description": "查看 SocialOps 账号风险信号",
-      "runtimeStatus": "运行状态",
-      "accountRules": "账号规则",
-      "recentEvents": "近期事件",
-      "skeletonMessage": "SocialOps 风控后端尚未配置。",
-      "records": "风险事件",
-      "scope": "范围",
-      "target": "目标",
-      "status": "状态",
-      "enabled": "启用",
-      "disabled": "禁用",
-      "empty": "暂无风险事件。",
-      "loadFailed": "加载风控数据失败"
     },
     "subscriptions": {
       "title": "订阅管理",
@@ -2372,7 +2013,7 @@ export default {
     },
     "accounts": {
       "title": "社交账号工作台",
-      "description": "注册、导入并整理社交账号；账号归属由总账号池统一处理。",
+      "description": "导入、上传入库并整理社交账号；账号归属由总账号池统一处理。",
       "leaveEmptyToKeep": "留空则保留当前值"
     },
     "proxies": {
@@ -2412,6 +2053,7 @@ export default {
       "types": {
         "residential": "住宅",
         "static": "静态",
+        "dynamic": "动态",
         "mobile": "移动",
         "datacenter": "机房"
       },
@@ -2428,6 +2070,39 @@ export default {
       },
       "ad": {
         "inline": "需要代理 IP？"
+      }
+    },
+    "globalProxies": {
+      "title": "全局代理池",
+      "description": "维护系统级代理；当前在账号没有用户默认代理时供登录任务兜底，后续可扩展给其他执行功能。",
+      "searchPlaceholder": "搜索名称、代理地址或备注",
+      "addProxy": "新增全局代理",
+      "editTitle": "编辑全局代理",
+      "failedToLoad": "加载全局代理失败",
+      "saved": "全局代理已保存。",
+      "created": "全局代理已创建。",
+      "deleted": "全局代理已删除。",
+      "saveFailed": "保存全局代理失败",
+      "deleteFailed": "删除全局代理失败",
+      "columns": {
+        "lastUsed": "最近使用"
+      },
+      "form": {
+        "namePlaceholder": "全局代理 01",
+        "endpointHint": "可填写静态代理地址，或填写返回 ip/port/username/password 的提取链接；执行时会从链接获取新的代理。"
+      },
+      "empty": {
+        "title": "还没有全局代理",
+        "description": "新增并测试为在线后，当前登录任务才能在账号没有用户默认代理时使用它。"
+      },
+      "noResults": {
+        "title": "没有匹配的全局代理",
+        "description": "调整搜索、状态或类型筛选后再试。"
+      },
+      "deleteDialog": {
+        "title": "删除全局代理",
+        "description": "确认删除「{name}」？",
+        "impact": "删除后，当前登录任务将不再使用该代理作为全局兜底。"
       }
     },
     "redeem": {
@@ -2693,14 +2368,12 @@ export default {
     },
     "settings": {
       "title": "系统设置",
-      "description": "管理站点、注册登录、OAuth、订阅默认、功能开关、支付、通知和备份配置",
+      "description": "管理站点、登录协议、安全认证、用户默认、支付、邮件通知和备份配置",
       "tabs": {
         "general": "基础",
-        "registration": "注册",
+        "agreement": "登录协议",
         "security": "安全",
-        "auth": "认证",
-        "users": "订阅与返利",
-        "features": "功能开关",
+        "users": "用户默认",
         "payment": "支付",
         "email": "邮件",
         "backup": "备份"
@@ -2756,19 +2429,22 @@ export default {
       },
       "loginAgreement": {
         "title": "登录协议",
+        "description": "控制登录页是否要求用户阅读并同意服务条款、隐私政策或其他 Markdown 文档。",
         "enabled": "启用登录协议",
         "mode": "展示方式",
         "modal": "弹窗",
         "checkbox": "勾选确认",
         "add": "添加文档",
+        "documents": "协议文档",
+        "documentsHint": "文档名称可自定义，内容按 Markdown 保存。",
+        "untitled": "未命名文档",
         "empty": "暂未配置登录协议文档",
         "documentTitle": "文档标题",
         "content": "Markdown 内容"
       },
       "security": {
         "title": "安全设置",
-        "totp": "启用 TOTP 双因素认证",
-        "trustForwardedIp": "信任转发 IP"
+        "totp": "启用 TOTP 双因素认证"
       },
       "turnstile": {
         "enabled": "启用 Turnstile",
@@ -2910,31 +2586,17 @@ export default {
       "defaultUserRpmLimit": "默认 RPM",
       "affiliate": {
         "title": "推广返利配置",
+        "description": "配置邀请返利的启用状态、比例、结算冻结和受邀人上限。",
         "enabled": "启用邀请返利",
+        "enabledHint": "开启后使用当前项目已有的邀请返利记录与结算流程。",
         "rate": "返利比例",
+        "rateHint": "填写 0 到 1 之间的小数，例如 0.2 表示 20%。",
         "freezeHours": "冻结小时数",
+        "freezeHoursHint": "返利进入可结算前的冻结时长。",
         "durationDays": "有效天数",
-        "perInviteeCap": "单个受邀人返利上限"
-      },
-      "features": {
-        "title": "功能开关",
-        "description": "只管理当前商用项目真实存在的系统级开关，不作为业务页面入口目录。",
-        "payment": "启用支付系统",
-        "paymentHint": "控制充值、订阅购买和订单支付能力。",
-        "disableBalanceRecharge": "禁用余额充值",
-        "disableBalanceRechargeHint": "保留支付系统时，可单独关闭余额充值入口。",
-        "purchaseEntry": "启用充值/订阅入口",
-        "purchaseEntryHint": "控制用户侧购买入口是否展示。",
-        "riskControl": "启用风控",
-        "riskControlHint": "启用当前项目已有的滥用防护与执行安全策略。",
-        "affiliate": "启用邀请返利",
-        "affiliateHint": "控制推广邀请、返利记录与转账流程。",
-        "promoCode": "启用推广码",
-        "promoCodeHint": "控制推广码注册或兑换相关能力。",
-        "invitationCode": "启用邀请码",
-        "invitationCodeHint": "开启后注册需要邀请码。",
-        "backendMode": "后台模式",
-        "backendModeHint": "限制普通前台页面访问，仅保留必要登录和管理能力。"
+        "durationDaysHint": "邀请关系可产生返利的有效天数。",
+        "perInviteeCap": "单个受邀人返利上限",
+        "perInviteeCapHint": "限制同一受邀人累计产生的返利金额。"
       },
       "smtp": {
         "title": "SMTP 配置",
@@ -2957,6 +2619,7 @@ export default {
       },
       "notifications": {
         "title": "通知设置",
+        "description": "配置余额、订阅到期和账号额度相关的系统提醒。",
         "balanceLow": "余额不足提醒",
         "balanceThreshold": "余额阈值",
         "rechargeUrl": "充值链接",
@@ -3001,6 +2664,8 @@ export default {
         "findProvider": "服务商指南",
         "helpImagePlaceholder": "支付帮助图片地址",
         "balanceDisabled": "禁用余额充值",
+        "purchaseEntry": "启用充值/订阅入口",
+        "purchaseUrl": "充值/订阅地址",
         "alipayForceQr": "支付宝强制二维码",
         "minAmount": "最小金额",
         "maxAmount": "最大金额",
@@ -3013,7 +2678,7 @@ export default {
         "productSuffix": "商品名后缀",
         "loadBalanceStrategy": "支付路由策略",
         "loadBalanceRoundRobin": "轮询分配",
-        "loadBalanceLeastAmount": "优先低消耗通道",
+        "loadBalanceLeastAmount": "优先低消耗服务商",
         "cancelRateLimitEnabled": "启用取消订单频控",
         "cancelRateLimitMax": "允许取消次数",
         "cancelRateLimitWindow": "统计窗口",
@@ -3274,7 +2939,7 @@ export default {
       },
       "accountManage": {
         "title": "社交账号工作台",
-        "description": "<div style=\"line-height: 1.7;\"><p>在工作台注册、导入、上传和查看账号；分配与回收统一在总账号池处理。</p></div>"
+        "description": "<div style=\"line-height: 1.7;\"><p>在工作台导入、上传入库和查看账号；分配与回收统一在总账号池处理。</p></div>"
       },
       "proxies": {
         "title": "代理管理",
@@ -3483,8 +3148,7 @@ export default {
       "todayQuota": "今日额度",
       "thisWeekQuota": "本周额度",
       "thisMonthQuota": "本月额度",
-      "unlimited": "无限制",
-      "models": "模型"
+      "unlimited": "无限制"
     },
     "platformFallback": "通用平台",
     "subscriptionPicker": {
@@ -3505,7 +3169,6 @@ export default {
       "tabs": {
         "overview": "概览",
         "orders": "订单管理",
-        "channels": "支付渠道",
         "plans": "订阅套餐"
       },
       "todayRevenue": "今日收入",
@@ -3564,12 +3227,6 @@ export default {
       "refundRequestReason": "申请原因",
       "auditLogs": "操作日志",
       "operator": "操作人",
-      "channelName": "渠道名称",
-      "channelDescription": "渠道描述",
-      "createChannel": "创建渠道",
-      "editChannel": "编辑渠道",
-      "deleteChannel": "删除渠道",
-      "deleteChannelConfirm": "确定要删除此渠道吗？",
       "planName": "套餐名称",
       "planDescription": "套餐描述",
       "createPlan": "创建套餐",
@@ -3649,7 +3306,7 @@ export default {
   },
   "proxies": {
     "title": "代理管理",
-    "description": "管理你自己的执行代理。只有在线且 endpoint 有效的代理可以分配给账号。",
+    "description": "管理你自己的执行代理。只有在线且代理地址有效的代理可以分配给账号。",
     "failedToLoad": "加载代理失败",
     "searchPlaceholder": "搜索代理名称、地址或备注",
     "addProxy": "新增代理",
@@ -3657,22 +3314,24 @@ export default {
     "test": "测试",
     "testSelected": "测试所选",
     "testAll": "测试全部",
-    "batchTestSubmitted": "已提交 {count} 个代理连通性测试。",
-    "batchTestPartial": "已完成 {total} 个代理测试，其中 {failed} 个请求失败，请查看结果明细。",
-    "testResult": "连通性测试完成：{status}",
+    "selection": {
+      "selectedCount": "已选择 {count} 个",
+      "noneSelected": "请至少选择一个代理后再测试。"
+    },
+    "noProxiesToTest": "当前没有可测试的代理。",
+    "batchTestPartial": "连通性测试完成：已测试 {total} 个 · 在线 {online} 个 · 离线 {offline} 个 · 未知 {unknown} 个；其中 {failed} 个请求失败。",
+    "testResultSummary": "连通性测试完成：已测试 {total} 个 · 在线 {online} 个 · 离线 {offline} 个 · 未知 {unknown} 个",
     "testFailed": "代理测试失败",
     "saved": "代理已保存。",
     "created": "代理已创建。",
     "deleted": "代理已删除。",
+    "noChanges": "没有可保存的更改。",
+    "saveFailed": "保存代理失败",
     "deleteFailed": "删除代理失败",
     "deleteDialog": {
       "title": "删除代理",
       "description": "确定从代理池删除 {name} 吗？",
       "snapshotWarning": "引用此代理的账号默认代理会被清空。"
-    },
-    "testResults": {
-      "title": "连通性测试结果",
-      "summary": "已测试 {total} 个 · 在线 {online} 个 · 离线 {offline} 个 · 未知 {unknown} 个"
     },
     "stats": {
       "total": "总数",
@@ -3687,7 +3346,7 @@ export default {
     "columns": {
       "name": "名称",
       "type": "类型",
-      "endpoint": "Endpoint",
+      "endpoint": "代理地址",
       "status": "状态",
       "latency": "延迟",
       "lastCheck": "最近测试"
@@ -3696,15 +3355,26 @@ export default {
       "name": "代理名称",
       "namePlaceholder": "工作台代理名称",
       "type": "代理类型",
-      "endpoint": "Endpoint",
-      "endpointPlaceholder": "http://user:pass{'@'}host:port 或 socks5://host:port",
-      "endpointHint": "Endpoint 完整后才能通过连通性测试并用于执行。",
+      "endpoint": "代理地址",
+      "endpointPlaceholder": "http://user:pass{'@'}host:port、socks5://host:port 或提取链接",
+      "endpointHint": "可填写静态代理地址，或填写返回 ip/port/username/password 的提取链接；执行时会从链接获取新的代理。",
       "remark": "备注",
       "remarkPlaceholder": "内部备注"
+    },
+    "errors": {
+      "SOCIAL_IP_SERVICE_UNAVAILABLE": "代理服务暂不可用，请稍后重试。",
+      "SOCIAL_IP_INPUT_REQUIRED": "请填写代理信息。",
+      "SOCIAL_IP_NAME_REQUIRED": "请输入代理名称。",
+      "SOCIAL_IP_TYPE_INVALID": "请选择有效的代理类型。",
+      "INVALID_PROXY_ENDPOINT": "代理地址格式无效，请填写完整的 http、https、socks5 地址或有效的代理提取链接。",
+      "SOCIAL_IP_NOT_FOUND": "代理不存在或不属于当前账号，请刷新后重试。",
+      "SOCIAL_IP_OWNER_NOT_FOUND": "无法确认当前登录账号，请重新登录后重试。",
+      "SOCIAL_IP_USER_ID_NOT_ACCEPTED": "代理归属由当前登录账号决定，请刷新后重试。"
     },
     "types": {
       "residential": "住宅",
       "static": "静态",
+      "dynamic": "动态",
       "mobile": "移动",
       "datacenter": "机房"
     },
@@ -3737,6 +3407,7 @@ export default {
     "copied": "模板已复制。",
     "copyFailed": "复制模板失败",
     "setDefault": "设为默认",
+    "alreadyDefault": "该模板已经是默认模板。",
     "defaultSaved": "默认模板已保存。",
     "defaultFailed": "设置默认模板失败",
     "defaultToggle": "设为此任务类型的默认模板",
@@ -3751,9 +3422,19 @@ export default {
     "save": "保存模板",
     "saved": "模板已保存。",
     "saveFailed": "保存模板失败",
+    "errors": {
+      "serviceUnavailable": "任务模板服务暂不可用，请稍后重试。",
+      "templateMissing": "模板信息缺失，请刷新列表后重试。",
+      "templateNotFound": "模板不存在或已被删除，请刷新列表后重试。",
+      "templateInvalid": "模板内容不完整，请根据校验提示补齐后重试。",
+      "storeInvalid": "模板数据暂时无法读取，请刷新后重试。",
+      "mediaServiceUnavailable": "模板媒体服务暂不可用，请稍后重试。",
+      "mediaMissing": "模板媒体信息缺失，请重新上传后重试。"
+    },
     "validate": "完整性校验",
     "importFile": "导入文件",
     "imported": "已导入 {count} 条参数。",
+    "importEmpty": "所选文件中没有可导入的有效参数。",
     "importFailed": "导入文件失败",
     "viewAll": "查看全部",
     "clearValues": "清空",
@@ -3774,6 +3455,7 @@ export default {
       "emptyTitle": "此类型暂无保存配置",
       "emptyDescription": "当前还没有 {type} 模板。补齐参数并保存后，即可用于账号任务执行。",
       "newForType": "新建 {type} 模板",
+      "selectTemplateFirst": "请先选择一个已保存模板。",
       "allTypesHint": "这里会展示所有任务类型的模板。",
       "unsavedTitle": "未保存模板",
       "unsavedDescription": "保存后才能在账号工作台中选择使用。",
@@ -3789,7 +3471,6 @@ export default {
       "unusable": "不可用"
     },
     "types": {
-      "login": "登录",
       "follow": "关注",
       "like": "点赞",
       "retweet": "转发",
@@ -3799,20 +3480,18 @@ export default {
       "update_banner": "修改背景图"
     },
     "typeDescriptions": {
-      "login": "用账号密码登录平台并采集执行凭证（cookie / 令牌）写回账号。",
       "follow": "将关注用户任务分发给所选账号。",
-      "like": "从目标池分发点赞推文任务。",
-      "retweet": "从目标池分发转发推文任务。",
-      "post": "从内容池分发发帖任务，并可附带引用链接、站内图片或单个 MP4 视频。",
+      "like": "从目标池分发点赞任务。",
+      "retweet": "从目标池分发转发任务。",
+      "post": "从内容池分发发帖任务，并可附带引用链接和站内图片。",
       "update_profile": "分发资料字段修改任务，例如昵称、简介、位置和网站。",
       "update_avatar": "分发头像更新任务，并固化执行所需图片。",
       "update_banner": "分发背景图更新任务，并固化执行所需图片。"
     },
     "typeRequirements": {
-      "login": "无需额外参数，使用账号自身的密码与凭证",
       "follow": "目标：用户 ID、用户名或主页链接",
-      "like": "目标：推文链接或推文 ID",
-      "retweet": "目标：推文链接或推文 ID",
+      "like": "目标：帖子链接或帖子 ID",
+      "retweet": "目标：帖子链接或帖子 ID",
       "post": "内容池：每行一条发帖内容",
       "update_profile": "资料字段：至少填写一项",
       "update_avatar": "头像：上传一张图片",
@@ -3837,7 +3516,7 @@ export default {
       "profileUrl": "网站",
       "profileUrlPlaceholder": "https://example.com",
       "followTargetsPlaceholder": "每行一个目标用户 ID 或用户名",
-      "tweetTargetsPlaceholder": "每行一个推文链接或推文 ID",
+      "postTargetsPlaceholder": "每行一个目标帖子链接或帖子 ID",
       "contentsPlaceholder": "每行一条发帖内容"
     },
     "summary": {
@@ -3866,12 +3545,13 @@ export default {
       "emptyLinesHint": "检测到 {count} 个空行，保存前会自动忽略。",
       "tooLongHint": "存在超过 {max} 字符的参数，缩短后才能保存。",
       "duplicateHint": "检测到 {count} 条重复参数。可以直接保存，也可以先去重。",
-      "empty": "当前参数池暂无内容。"
+      "empty": "当前参数池暂无内容。",
+      "noDuplicates": "当前没有可移除的重复参数。"
     },
     "media": {
       "postEnhancementsTitle": "引用与媒体",
       "postImages": "发帖媒体",
-      "postImagesHint": "最多附加 4 张图片，或 1 个 MP4 视频用于发帖。",
+      "postImagesHint": "最多附加 4 张图片用于发帖。",
       "postImagesEmpty": "当前还没有附加发帖媒体。",
       "postImageCount": "已使用 {count} / {max} 个媒体位",
       "postImageItem": "媒体 {index}",
@@ -3892,12 +3572,16 @@ export default {
       "invalid": "模板需补齐",
       "failed": "校验失败",
       "nameRequired": "保存前请填写模板名称。",
+      "templateRequired": "模板信息缺失，请刷新后重试。",
+      "unsupportedType": "当前任务类型不支持，请重新选择任务类型。",
       "targetsRequired": "保存此模板前请至少添加一个目标。",
       "contentsRequired": "保存此模板前请至少添加一条发帖文本。",
       "postConfigurationRequired": "保存此模板前请至少填写一条发帖文本或添加一个媒体项。",
-      "postVideoUnavailable": "当前发帖媒体仅支持单个 MP4 视频，其他视频配置暂不可用。",
-      "postMediaTypeUnsupported": "当前仅支持图片媒体，或单个 MP4 视频作为发帖媒体。",
+      "postMediaTooMany": "发帖模板最多可包含 {max} 个媒体项。",
+      "postVideoUnavailable": "当前执行暂不支持视频发帖媒体。",
+      "postMediaTypeUnsupported": "当前仅支持图片媒体。",
       "mediaSourceUnsupported": "当前仅支持可直接执行的站内内联媒体。",
+      "mediaInvalid": "图片无法读取，请重新上传后再保存。",
       "profileRequired": "保存此模板前请至少填写一个资料字段。",
       "avatarRequired": "保存此模板前请上传一张头像图片。",
       "bannerRequired": "保存此模板前请上传一张背景图图片。",
@@ -3924,16 +3608,18 @@ export default {
     "title": "账号管理",
     "description": "管理当前权限范围内的社交账号，完成导入、批量操作、任务执行和执行结果查看。",
     "failedToLoad": "加载社交账号失败",
-    "dependencyLoadWarning": "部分账号工作台控件暂时不可用。",
+    "dependencyLoadWarning": "部分账号工作台控件加载失败。",
     "exportAccounts": "导出账号",
+    "exportSelectedAccounts": "导出所选账号",
     "exportFailed": "导出账号失败",
     "deleteSelected": "删除所选",
     "deleteOne": "删除账号",
-    "deleteConfirm": "确定从你的账号工作台移除 {name} 吗？",
-    "batchDeleteConfirm": "确定从你的账号工作台移除所选 {count} 个账号吗？",
-    "deleteSuccess": "已移除 {count} 个账号。",
-    "batchDeleteSuccess": "已移除 {count} 个账号，跳过 {skipped} 个。",
-    "deleteFailed": "移除账号失败",
+    "deleteConfirm": "确定彻底删除账号 {name} 吗？删除后该账号会从总账号池删除。",
+    "batchDeleteConfirm": "确定彻底删除所选 {count} 个账号吗？删除后这些账号会从总账号池删除。",
+    "deleteSuccess": "已删除 {count} 个账号。",
+    "batchDeleteSuccess": "已删除 {count} 个账号，跳过 {skipped} 个。",
+    "batchDeleteResultSummary": "共 {total} 个，已删除 {removed} 个，失败 {failed} 个，跳过 {skipped} 个。",
+    "deleteFailed": "删除账号失败",
     "searchPlaceholder": "搜索账号、平台、状态或备注",
       "columns": {
         "name": "账号",
@@ -3954,6 +3640,14 @@ export default {
       "executableMeta": "可提交任务的可用账号",
       "selected": "已选择",
       "selectedMeta": "当前批次账号数量",
+      "pending": "排队中",
+      "pendingMeta": "等待开始的任务",
+      "running": "执行中",
+      "runningMeta": "正在处理的任务",
+      "success": "成功",
+      "successMeta": "最近成功的任务",
+      "failed": "失败",
+      "failedMeta": "最近失败的任务",
       "abnormal": "异常/不可用",
       "abnormalMeta": "不可提交任务的账号"
     },
@@ -3965,12 +3659,81 @@ export default {
     "selection": {
       "selectedCount": "已选择 {count} 个"
     },
+    "batchResultReasons": {
+      "invalidId": "账号 ID 无效",
+      "invalidInput": "输入参数无效",
+      "duplicateInBatch": "本批次重复",
+      "duplicateInDatabase": "总账号池中已存在该账号",
+      "accountNotFound": "未找到该账号",
+      "accountNotAssigned": "该账号未分配到你的工作台",
+      "proxyNotAvailable": "所选代理不可用",
+      "assignFailed": "账号分配失败",
+      "notFound": "未找到该记录",
+      "alreadyStored": "该账号已在总账号池中",
+      "invalidCredentials": "必要凭证不完整",
+      "alreadyAssigned": "该账号已被分配",
+      "alreadyUnassigned": "该账号已是未分配状态",
+      "targetUserNotFound": "未找到目标用户",
+      "reclaimFailed": "账号回收失败",
+      "deleteFailed": "账号删除失败",
+      "createFailed": "账号创建失败",
+      "loadFailed": "账号加载失败",
+      "uploadFailed": "账号上传失败",
+      "operationFailed": "账号处理失败",
+      "stateChanged": "账号状态已变化"
+    },
+    "storeWorkbench": {
+      "title": "上传入库",
+      "hint": "将所选 {count} 个未入库账号上传到总账号池；这不是文件上传，只处理当前已选账号。",
+      "storeable": "可入库",
+      "skippedSelection": "不可入库",
+      "accountSummary": "将入库的账号",
+      "selectAccountsFirst": "请先选择至少一个未入库账号。",
+      "onlyNotStored": "当前选择中没有未入库账号；只有账号状态为未入库、任务状态为待处理的账号可以上传入库。",
+      "confirm": "确认入库",
+      "resultTitle": "上传入库结果",
+      "resultSummary": "总数 {total}；成功 {succeeded}；失败 {failed}；跳过 {skipped}。",
+      "resultRowsMore": "还有 {count} 行未显示。",
+      "savedWithSummary": "上传入库完成：成功 {succeeded}，失败 {failed}，跳过 {skipped}。",
+      "failed": "上传入库失败"
+    },
     "edit": {
       "title": "编辑账号凭证",
       "identityTitle": "只读身份",
       "identityHint": "账号 ID、平台、screen_name、平台 rest_id 和注册 IP 属于只读元数据，此处不可修改。",
       "saved": "账号凭证已保存。",
-      "failed": "保存账号凭证失败"
+      "failed": "保存账号凭证失败",
+      "noChanges": "没有可保存的更改。",
+      "errors": {
+        "SOCIAL_ACCOUNT_EXECUTION_AUTH_INVALID": "执行认证格式无效，请使用已保存的密文或重新执行登录刷新。"
+      }
+    },
+    "credentials": {
+      "title": "认证字段详情",
+      "previewHint": "长认证字段在此按字符数概览；复制仍使用完整存储原文。",
+      "authCookieDescription": "导入或登录保存的该社交账号认证 Cookie。",
+      "executionAuthDescription": "执行认证按密文保存和交付，页面只显示字符数，不展示明文内容。",
+      "copy": "复制",
+      "copyRaw": "复制{field}原文",
+      "copied": "认证字段已复制。",
+      "copyFailed": "复制认证字段失败",
+      "emptyCopy": "该字段为空，无法复制。",
+      "refresh": "刷新",
+      "refreshTitle": "刷新执行认证",
+      "refreshSubmitted": "已提交 {count} 个登录刷新任务，{enqueued} 个进入执行队列。",
+      "refreshFailed": "刷新执行认证失败",
+      "executionAuthAlreadyReady": "执行认证已可用，无需刷新。",
+      "refreshNeedsProxy": "刷新执行认证需要先设置默认代理。",
+      "refreshNeedsPassword": "刷新执行认证需要账号密码。",
+      "refreshNeedsProxyAndPassword": "刷新执行认证需要默认代理和账号密码。",
+      "empty": "未配置",
+      "length": "{count} 个字符",
+      "encryptedStored": "密文已保存",
+      "oauthReady": "OAuth 已完整",
+      "rawCookieDetected": "原始 Cookie",
+      "oauthPartial": "OAuth 不完整",
+      "jsonDetected": "JSON 已识别",
+      "loginRefreshRequired": "需重新登录采集执行认证"
     },
     "detailSections": {
       "identity": "身份元数据",
@@ -3991,26 +3754,29 @@ export default {
       "update_profile": "修改资料",
       "update_avatar": "修改头像",
       "update_banner": "修改背景图",
-      "message": "私信",
-      "messageUnavailable": "私信暂未接入",
       "platformUnavailable": "当前平台暂未接入"
     },
     "execution": {
       "panelTitle": "任务执行",
-      "panelDescription": "选择同平台可用账号和已保存的任务模板后提交批量任务。",
-      "templatePlaceholder": "选择任务模板",
+      "panelDescription": "选择同平台账号和要执行的功能；关注、发帖等需要参数的功能会使用执行参数中的默认模板。",
+      "actionPlaceholder": "选择执行功能",
+      "noActions": "暂无可用功能",
       "noTemplates": "暂无可用模板",
+      "defaultTemplateMissing": "请先在任务设置中为该功能设置默认模板",
+      "defaultTemplateDescription": "默认模板：{template} · {summary}",
       "defaultTemplate": "默认",
       "start": "提交任务",
       "confirmTitle": "确认执行任务",
-      "confirmHint": "将使用模板 {template} 提交 {count} 个账号。",
+      "confirmHint": "将使用 {action} 的默认模板 {template} 提交 {count} 个账号。",
       "confirmSubmit": "提交任务",
+      "actionType": "执行功能",
       "templateType": "模板类型",
       "targets": "目标数",
       "contents": "内容数",
       "profileFields": "资料字段数",
       "media": "媒体数",
       "templateDetails": "模板细节",
+      "executionDetails": "执行细节",
       "accountSummary": "账号摘要",
       "loginCheckSummary": "登录检查不需要额外参数。",
       "loginSummary": "用账号密码登录并采集执行凭证，无需额外参数。",
@@ -4021,9 +3787,6 @@ export default {
       "avatarSummary": "执行时将应用 1 张头像图片。",
       "bannerSummary": "执行时将应用 1 张背景图图片。",
       "resultSummary": "已提交 {submitted} 条；入队 {enqueued} 条；失败关闭 {failed} 条。",
-      "failureNoChargeSummary": "失败或失败关闭的任务未扣费。",
-      "resultRows": "任务结果明细",
-      "resultRowsMore": "还有 {count} 条结果可在使用记录中查看。",
       "taskSummaryTarget": "目标：{value}",
       "taskSummaryContent": "文本：{value}",
       "taskSummaryQuote": "引用：{value}",
@@ -4032,35 +3795,55 @@ export default {
       "taskSummaryAvatar": "头像图片已就绪",
       "taskSummaryBanner": "背景图图片已就绪",
       "taskSummaryNoDetails": "暂无结构化摘要",
-      "taskStatuses": {
-        "pending": "待执行",
-        "running": "执行中",
-        "success": "成功",
-        "failed": "失败"
-      },
-      "chargeStatuses": {
-        "charged": "已扣费",
-        "not_charged": "未扣费",
-        "charge_failed": "扣费失败"
-      },
       "selectAccountsFirst": "请先选择至少一个可执行账号。",
       "nonExecutableSelected": "只能提交可用且可执行的账号。请先从选择中移除不可执行账号再提交。",
+      "loginProxyRequired": "登录任务需要先给选中账号设置默认代理。",
+      "loginPasswordRequired": "登录任务需要账号密码，请先编辑或重新导入账号密码。",
+      "loginProxyAndPasswordRequired": "登录任务需要默认代理和账号密码，请先补齐后再提交。",
       "mixedPlatforms": "同一批次只能选择同一平台账号。",
       "platformUnavailable": "所选平台暂未接入真实执行器，动作已禁用。",
-      "templateRequired": "提交前请选择已保存的任务模板。",
+      "defaultTemplateRequired": "提交前请先选择已有默认模板的参数功能。",
       "templatesUnavailable": "任务模板暂不可用，请重新加载后再提交任务。",
-      "templateInvalid": "所选任务模板不完整。",
+      "defaultTemplateInvalid": "该功能的默认模板不完整，请先到任务设置中修正。",
       "submitFailed": "提交任务失败",
+      "errors": {
+        "SOCIAL_TASK_SERVICE_UNAVAILABLE": "任务服务暂不可用，请稍后重试。",
+        "TASK_TEMPLATE_SERVICE_UNAVAILABLE": "任务模板服务暂不可用，请稍后重试。",
+        "SOCIAL_IP_SERVICE_UNAVAILABLE": "代理服务暂不可用，请稍后重试。",
+        "SOCIAL_TASK_INSUFFICIENT_FUNDS": "额度不足：本次需要 ${required_total}，钱包余额 ${wallet_balance}，还需 ${wallet_required}。",
+        "SOCIAL_TASK_INPUT_REQUIRED": "任务提交信息不完整，请刷新页面后重新提交。",
+        "SOCIAL_TASK_ACCOUNTS_REQUIRED": "请至少选择一个账号后再提交任务。",
+        "TASK_DEFAULT_TEMPLATE_REQUIRED": "默认任务模板已不存在或未设置，请到执行参数中重新设置默认模板后再提交。",
+        "TASK_TEMPLATE_INVALID": "默认任务模板不完整，请到执行参数中修正后再提交。",
+        "SOCIAL_IP_NOT_AVAILABLE": "选中账号的默认代理不可用，请重新设置默认代理后再提交。",
+        "GLOBAL_PROXY_NOT_AVAILABLE": "全局代理不可用，请联系管理员处理。",
+        "GLOBAL_PROXY_SERVICE_UNAVAILABLE": "全局代理服务暂不可用，请稍后重试。",
+        "SOCIAL_ACCOUNT_NOT_AVAILABLE": "选中账号当前不可执行，请刷新列表并移除不可用账号后再提交。",
+        "SOCIAL_TASK_LOGIN_PASSWORD_REQUIRED": "登录任务需要账号密码，请先编辑或重新导入账号密码。",
+        "SOCIAL_TASK_PLATFORM_REQUIRED": "选中账号缺少平台信息，请刷新列表后重新选择账号。",
+        "SOCIAL_TASK_ACCOUNT_ID_INVALID": "选中账号列表已失效，请刷新列表后重新选择账号再提交。",
+        "SOCIAL_TASK_ACCOUNT_BUSY": "选中账号已有任务正在执行，请等待完成后再提交。",
+        "SOCIAL_TASK_MIXED_PLATFORMS": "选中账号必须属于同一平台，请刷新列表后按平台分别提交。",
+        "SOCIAL_TASK_UNSUPPORTED_ACTION": "该任务动作暂不支持，请重新选择执行功能。",
+        "SOCIAL_TASK_TARGET_REQUIRED": "该任务需要目标参数，请修正默认模板后再提交。",
+        "SOCIAL_TASK_POST_CONFIGURATION_REQUIRED": "发帖任务需要内容或媒体，请修正默认模板后再提交。",
+        "SOCIAL_TASK_PAYLOAD_REQUIRED": "该任务缺少必要执行参数，请修正默认模板后再提交。",
+        "SOCIAL_TASK_MEDIA_UNSUPPORTED": "默认模板中的媒体暂不支持执行，请更换符合要求的媒体。",
+        "SOCIAL_TASK_IDEMPOTENCY_CONFLICT": "本次提交请求已被用于不同任务，请刷新后重试。"
+      },
       "submitted": "已提交 {count} 个任务，{enqueued} 个进入执行队列。"
     },
       "import": {
         "platformPlaceholder": "默认平台，例如 x_twitter",
-        "batchPlaceholder": "可粘贴 TXT/表格内容，每行字段顺序：账号、密码、2FA、备份码、邮箱账号、邮箱密码、邮箱客户端ID、邮箱令牌、注册IP、认证Cookie、执行认证",
+        "batchPlaceholder": "可粘贴 TXT/表格内容，每行字段顺序：账号、密码、2FA、备份码、邮箱账号、邮箱密码、邮箱客户端ID、邮箱令牌、注册IP、认证Cookie、执行认证、手机号、备注",
         "batchAction": "批量导入",
         "batchTitle": "批量导入账号",
-        "batchHint": "支持粘贴文本或选择 txt / xls / xlsx 文件。每条数据必须包含账号、密码，并至少包含 2FA、完整邮箱资料或认证 Cookie 之一；执行认证只作为补充凭证。",
+        "batchHint": "支持粘贴文本或选择 txt / xls / xlsx 文件。XLSX 固定列顺序：账号、密码、2FA、手机号、邮箱账号、邮箱密码、邮箱 Client ID、邮箱 Token。每条数据必须包含账号、密码，并至少包含 2FA 或完整邮箱资料。",
         "defaultPlatform": "默认平台",
         "fileLabel": "导入文件",
+        "fileDropTitle": "拖拽文件到这里",
+        "fileDropHint": "支持 txt / xls / xlsx；XLSX 按固定 8 列读取，不按表头匹配。",
+        "chooseFile": "选择文件",
         "fileEmpty": "未选择文件",
         "clearSource": "清空来源",
         "pendingCount": "可提交数据",
@@ -4076,8 +3859,20 @@ export default {
           "batchDuplicate": "本批次重复",
           "existingWorkbenchDuplicate": "当前工作台重复",
           "needsData": "需补齐",
+          "pendingBackendMatch": "待后端匹配",
           "duplicate": "重复",
           "skipped": "已跳过"
+        },
+        "resultReasons": {
+          "matchedTotalPool": "已匹配总账号池账号",
+          "stagedNotStored": "已暂存为未入库工作台账号",
+          "duplicateInBatch": "本批次重复",
+          "duplicateInDatabase": "总账号池中已存在该账号",
+          "alreadyInWorkbench": "当前工作台已存在该账号",
+          "alreadyAssigned": "账号已分配到工作台",
+          "ambiguousTotalPoolMatch": "总账号池中有多个账号匹配该用户名",
+          "invalidInput": "导入数据无效",
+          "importFailed": "账号导入失败"
         },
         "resultTitle": "导入结果",
         "resultSummary": "总数 {total}；成功 {succeeded}；导入 {imported}；失败 {failed}；跳过 {skipped}；重复 {duplicates}。",
@@ -4098,8 +3893,8 @@ export default {
         "duplicateAccount": "文件中存在重复账号",
         "duplicateInWorkbench": "当前工作台已存在该账号",
         "credentialRequired": "需要 2FA、完整邮箱资料或认证 Cookie",
-        "invalidExecutionAuth": "执行认证必须包含 access_token 和 token_secret",
         "unsupportedFile": "仅支持 txt、xls 或 xlsx 文件",
+        "emptyFile": "所选文件中没有可导入的账号数据",
         "fileReadFailed": "读取文件失败，请检查文件格式"
       }
       },
@@ -4145,11 +3940,18 @@ export default {
         },
         "savedWithSummary": "代理分配已保存：成功 {succeeded}，失败 {failed}，跳过 {skipped}。",
         "adminRegisterPlaceholder": "如需注册代理，请从你的在线代理池中选择",
-        "hint": "只能分配属于你且 endpoint 有效的在线代理；清空后会移除账号默认代理。",
+        "hint": "只能分配属于你且代理地址有效的在线代理；清空后会移除账号默认代理。",
         "clear": "清空代理",
         "saved": "默认代理已保存。",
       "cleared": "默认代理已清空。",
-      "failed": "设置默认代理失败"
+      "failed": "设置默认代理失败",
+        "errors": {
+          "SOCIAL_IP_NOT_AVAILABLE": "所选代理不可用，请先在代理管理中测试通过后再分配。",
+          "SOCIAL_IP_NOT_FOUND": "所选代理不存在或不属于当前账号，请刷新代理列表后重试。",
+          "SOCIAL_IP_POOL_EMPTY": "当前没有可随机分配的在线代理，请先新增并测试代理。",
+          "SOCIAL_IP_REQUIRED": "请选择一个在线代理后再分配。",
+          "SOCIAL_IP_ASSIGNMENT_MODE_INVALID": "代理分配模式已变化，请重新打开弹窗后再试。"
+        }
       },
       "empty": {
         "title": "暂无工作台账号",
@@ -4161,11 +3963,11 @@ export default {
       },
       "deleteDialog": {
         "title": "确认删除账号",
-        "singleHint": "请再次确认：从你的账号工作台移除 {name}。此操作不会执行任务，也不会清空你的选择。",
-        "batchHint": "请再次确认：从你的账号工作台移除所选 {count} 个账号。",
+        "singleHint": "请再次确认：彻底删除账号 {name}。该账号会从当前工作台和总账号池删除。",
+        "batchHint": "请再次确认：彻底删除所选 {count} 个账号。这些账号会从当前工作台和总账号池删除。",
         "accountSummary": "将删除的账号",
         "accountSummaryMore": "另有 {count} 个",
-        "impactHint": "删除后这些账号会从当前账号工作台移除；已提交任务和后端校验结果仍由服务端规则处理。",
+        "impactHint": "删除后账号记录、凭证、分配关系和关联任务记录都会被清理，此操作不可恢复。",
         "confirmSingle": "确认删除账号",
         "confirmBatch": "确认删除 {count} 个账号"
       },
@@ -4178,6 +3980,7 @@ export default {
       "not_stored": "未入库"
     },
     "taskStatus": {
+      "idle": "空闲",
       "pending": "待处理",
       "registering": "注册中",
       "importing": "导入中",

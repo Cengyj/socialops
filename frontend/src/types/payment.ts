@@ -121,7 +121,7 @@ export interface SubscriptionPlan {
   platform?: string
   /** Internal execution binding used by the account pool/router; not a user-facing package category. */
   group_id: number
-  /** Admin/compatibility metadata for the internal execution binding. */
+  /** Admin metadata for the internal execution binding. */
   group_platform?: string
   group_name?: string
   group_status?: string
@@ -129,7 +129,7 @@ export interface SubscriptionPlan {
   quota_usd?: number | null
   daily_limit_usd?: number | null
   weekly_limit_usd?: number | null
-  /** Compatibility backing field for period quota; prefer quota_usd in new code. */
+  /** Stored period quota field; prefer quota_usd when deriving current package limits. */
   monthly_limit_usd?: number | null
   name: string
   description: string
@@ -142,17 +142,6 @@ export interface SubscriptionPlan {
   product_name?: string
   for_sale: boolean
   sort_order: number
-}
-
-export interface PaymentChannel {
-  id: number
-  group_id?: number
-  name: string
-  platform: string
-  rate_multiplier: number
-  description: string
-  features: string[]
-  enabled: boolean
 }
 
 // ==================== Providers ====================

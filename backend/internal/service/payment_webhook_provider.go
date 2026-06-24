@@ -14,7 +14,7 @@ import (
 
 // GetWebhookProvider returns the provider instance that should verify a webhook.
 // It resolves the original provider instance from the order whenever possible and
-// only falls back to a registry provider for legacy/single-instance scenarios.
+// only falls back to a registry provider for historical/single-instance scenarios.
 func (s *PaymentService) GetWebhookProvider(ctx context.Context, providerKey, outTradeNo string) (payment.Provider, error) {
 	providers, err := s.GetWebhookProviders(ctx, providerKey, outTradeNo)
 	if err != nil {

@@ -10,6 +10,7 @@ import (
 	"github.com/Wei-Shaw/socialops/ent/apikey"
 	"github.com/Wei-Shaw/socialops/ent/authidentity"
 	"github.com/Wei-Shaw/socialops/ent/authidentitychannel"
+	"github.com/Wei-Shaw/socialops/ent/globalproxy"
 	"github.com/Wei-Shaw/socialops/ent/group"
 	"github.com/Wei-Shaw/socialops/ent/identityadoptiondecision"
 	"github.com/Wei-Shaw/socialops/ent/paymentauditlog"
@@ -33,6 +34,7 @@ import (
 	"github.com/Wei-Shaw/socialops/ent/userattributedefinition"
 	"github.com/Wei-Shaw/socialops/ent/userattributevalue"
 	"github.com/Wei-Shaw/socialops/ent/usersubscription"
+	"github.com/Wei-Shaw/socialops/internal/domain"
 )
 
 // The init function reads all schema descriptors with runtime code
@@ -302,6 +304,45 @@ func init() {
 	authidentitychannelDescMetadata := authidentitychannelFields[6].Descriptor()
 	// authidentitychannel.DefaultMetadata holds the default value on creation for the metadata field.
 	authidentitychannel.DefaultMetadata = authidentitychannelDescMetadata.Default.(func() map[string]interface{})
+	globalproxyMixin := schema.GlobalProxy{}.Mixin()
+	globalproxyMixinHooks1 := globalproxyMixin[1].Hooks()
+	globalproxy.Hooks[0] = globalproxyMixinHooks1[0]
+	globalproxyMixinInters1 := globalproxyMixin[1].Interceptors()
+	globalproxy.Interceptors[0] = globalproxyMixinInters1[0]
+	globalproxyMixinFields0 := globalproxyMixin[0].Fields()
+	_ = globalproxyMixinFields0
+	globalproxyFields := schema.GlobalProxy{}.Fields()
+	_ = globalproxyFields
+	// globalproxyDescCreatedAt is the schema descriptor for created_at field.
+	globalproxyDescCreatedAt := globalproxyMixinFields0[0].Descriptor()
+	// globalproxy.DefaultCreatedAt holds the default value on creation for the created_at field.
+	globalproxy.DefaultCreatedAt = globalproxyDescCreatedAt.Default.(func() time.Time)
+	// globalproxyDescUpdatedAt is the schema descriptor for updated_at field.
+	globalproxyDescUpdatedAt := globalproxyMixinFields0[1].Descriptor()
+	// globalproxy.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	globalproxy.DefaultUpdatedAt = globalproxyDescUpdatedAt.Default.(func() time.Time)
+	// globalproxy.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	globalproxy.UpdateDefaultUpdatedAt = globalproxyDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// globalproxyDescName is the schema descriptor for name field.
+	globalproxyDescName := globalproxyFields[0].Descriptor()
+	// globalproxy.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	globalproxy.NameValidator = globalproxyDescName.Validators[0].(func(string) error)
+	// globalproxyDescIPType is the schema descriptor for ip_type field.
+	globalproxyDescIPType := globalproxyFields[1].Descriptor()
+	// globalproxy.DefaultIPType holds the default value on creation for the ip_type field.
+	globalproxy.DefaultIPType = globalproxyDescIPType.Default.(string)
+	// globalproxy.IPTypeValidator is a validator for the "ip_type" field. It is called by the builders before save.
+	globalproxy.IPTypeValidator = globalproxyDescIPType.Validators[0].(func(string) error)
+	// globalproxyDescEndpoint is the schema descriptor for endpoint field.
+	globalproxyDescEndpoint := globalproxyFields[2].Descriptor()
+	// globalproxy.EndpointValidator is a validator for the "endpoint" field. It is called by the builders before save.
+	globalproxy.EndpointValidator = globalproxyDescEndpoint.Validators[0].(func(string) error)
+	// globalproxyDescStatus is the schema descriptor for status field.
+	globalproxyDescStatus := globalproxyFields[3].Descriptor()
+	// globalproxy.DefaultStatus holds the default value on creation for the status field.
+	globalproxy.DefaultStatus = globalproxyDescStatus.Default.(string)
+	// globalproxy.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	globalproxy.StatusValidator = globalproxyDescStatus.Validators[0].(func(string) error)
 	groupMixin := schema.Group{}.Mixin()
 	groupMixinHooks1 := groupMixin[1].Hooks()
 	group.Hooks[0] = groupMixinHooks1[0]
@@ -847,12 +888,8 @@ func init() {
 	// setting.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	setting.UpdateDefaultUpdatedAt = settingDescUpdatedAt.UpdateDefault.(func() time.Time)
 	socialaccountMixin := schema.SocialAccount{}.Mixin()
-	socialaccountMixinHooks1 := socialaccountMixin[1].Hooks()
 	socialaccountHooks := schema.SocialAccount{}.Hooks()
-	socialaccount.Hooks[0] = socialaccountMixinHooks1[0]
-	socialaccount.Hooks[1] = socialaccountHooks[0]
-	socialaccountMixinInters1 := socialaccountMixin[1].Interceptors()
-	socialaccount.Interceptors[0] = socialaccountMixinInters1[0]
+	socialaccount.Hooks[0] = socialaccountHooks[0]
 	socialaccountMixinFields0 := socialaccountMixin[0].Fields()
 	_ = socialaccountMixinFields0
 	socialaccountFields := schema.SocialAccount{}.Fields()
@@ -999,6 +1036,14 @@ func init() {
 	socialtasklogDescAction := socialtasklogFields[2].Descriptor()
 	// socialtasklog.ActionValidator is a validator for the "action" field. It is called by the builders before save.
 	socialtasklog.ActionValidator = socialtasklogDescAction.Validators[0].(func(string) error)
+	// socialtasklogDescPayload is the schema descriptor for payload field.
+	socialtasklogDescPayload := socialtasklogFields[5].Descriptor()
+	// socialtasklog.DefaultPayload holds the default value on creation for the payload field.
+	socialtasklog.DefaultPayload = socialtasklogDescPayload.Default.(func() domain.SocialTaskPayload)
+	// socialtasklogDescTemplateSnapshot is the schema descriptor for template_snapshot field.
+	socialtasklogDescTemplateSnapshot := socialtasklogFields[6].Descriptor()
+	// socialtasklog.DefaultTemplateSnapshot holds the default value on creation for the template_snapshot field.
+	socialtasklog.DefaultTemplateSnapshot = socialtasklogDescTemplateSnapshot.Default.(func() domain.SocialTaskTemplateSnapshot)
 	// socialtasklogDescStatus is the schema descriptor for status field.
 	socialtasklogDescStatus := socialtasklogFields[7].Descriptor()
 	// socialtasklog.DefaultStatus holds the default value on creation for the status field.

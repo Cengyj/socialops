@@ -32,8 +32,8 @@ var (
 	ErrIdempotencyInvalidPayload = infraerrors.BadRequest("IDEMPOTENCY_PAYLOAD_INVALID", "failed to normalize request payload")
 )
 
-// IdempotencyRepository is the storage interface for idempotency records.
-// Implementation removed in Phase 2D; kept as interface for SystemOperationLockService.
+// IdempotencyRepository is the storage interface for write idempotency records
+// and system operation locks.
 type IdempotencyRepository interface {
 	CreateProcessing(ctx context.Context, record *IdempotencyRecord) (owner bool, err error)
 	GetByScopeAndKeyHash(ctx context.Context, scope, keyHash string) (*IdempotencyRecord, error)
@@ -41,7 +41,6 @@ type IdempotencyRepository interface {
 	ExtendProcessingLock(ctx context.Context, id int64, operationID string, lockedUntil, expiresAt time.Time) (bool, error)
 	MarkSucceeded(ctx context.Context, id int64, responseStatus int, responseBody string, expiresAt time.Time) error
 	MarkFailedRetryable(ctx context.Context, id int64, reason string, failedAt, expiresAt time.Time) error
-	DeleteExpired(ctx context.Context, now time.Time, limit int) (int64, error)
 }
 
 // IdempotencyConfig holds configuration for the idempotency coordinator.
@@ -321,20 +320,6 @@ func (c *IdempotencyCoordinator) Execute(
 	}
 	return &IdempotencyExecuteResult{Data: data}, nil
 }
-
-// IdempotencyCleanupService is a no-op placeholder.
-type IdempotencyCleanupService struct{}
-
-// NewIdempotencyCleanupService creates a no-op cleanup service.
-func NewIdempotencyCleanupService(_ IdempotencyRepository, _ *any) *IdempotencyCleanupService {
-	return &IdempotencyCleanupService{}
-}
-
-// Start is a no-op.
-func (s *IdempotencyCleanupService) Start() {}
-
-// Stop is a no-op.
-func (s *IdempotencyCleanupService) Stop() {}
 
 // NormalizeIdempotencyKey validates and normalizes an idempotency key.
 func NormalizeIdempotencyKey(key string) (string, error) {

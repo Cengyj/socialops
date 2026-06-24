@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 
 import UsageView from '../UsageView.vue'
 
@@ -18,6 +19,7 @@ const messages: Record<string, string> = {
   'usage.filters.status': 'Status filter',
   'usage.filters.allOperations': 'All operations',
   'usage.filters.allStatuses': 'All statuses',
+  'usage.filters.allPlatforms': 'All platforms',
   'usage.filters.clear': 'Clear filters',
   'usage.records': 'Operation Records',
   'usage.operation': 'Operation',
@@ -25,7 +27,6 @@ const messages: Record<string, string> = {
   'usage.account': 'Account',
   'usage.status': 'Status',
   'usage.quantity': 'Quantity',
-  'usage.chargeStatus': 'Charge Status',
   'usage.cost': 'Cost',
   'usage.result': 'Result',
   'usage.time': 'Time',
@@ -33,12 +34,14 @@ const messages: Record<string, string> = {
   'usage.detailTitle': 'Task Detail',
   'usage.detailDescription': 'Review the submitted configuration and execution summary.',
   'usage.detailSections.summary': 'Summary',
+  'usage.detailSections.proxy': 'Execution Proxy',
   'usage.detailSections.payload': 'Execution Payload',
   'usage.detailSections.template': 'Template Snapshot',
   'usage.detailSections.profile': 'Profile Fields',
   'usage.detailSections.media': 'Media',
   'usage.detailSections.targets': 'Targets',
   'usage.detailSections.contents': 'Contents',
+  'usage.detailSections.technical': 'Technical Info',
   'usage.detailLabels.target': 'Target',
   'usage.detailLabels.content': 'Content',
   'usage.detailLabels.quotePostUrl': 'Quote link',
@@ -78,11 +81,21 @@ const messages: Record<string, string> = {
   'usage.detailEmpty': 'No structured detail is available for this record.',
   'usage.detailLoading': 'Loading detail...',
   'usage.detailLoadFailed': 'Failed to load task detail',
+  'usage.loading': 'Loading usage records...',
   'usage.empty': 'No SocialOps operations yet',
+  'usage.emptyFiltered': 'No usage records match the current filters.',
   'usage.totalOperations': 'Total Operations',
-  'usage.totalQuantity': 'Total Quantity',
   'usage.successCount': 'Successful',
-  'usage.totalCost': 'Total Cost',
+  'usage.failedCount': 'Failed',
+  'usage.successRate': 'Success Rate',
+  'usage.totalCharged': 'Total Charged',
+  'usage.inSelectedRange': 'In selected range',
+  'usage.successOnlyBilling': 'Charged successful tasks',
+  'usage.summary': 'Summary',
+  'usage.exportCsv': 'Export CSV',
+  'usage.exportFailed': 'Failed to export usage records',
+  'usage.exportEmpty': 'No usage records match the current filters.',
+  'usage.exporting': 'Exporting...',
   'usage.failedToLoad': 'Failed to load usage records',
   'usage.safeResult': 'Task failed; diagnostic details are hidden',
   'usage.taskResults.proxyUnavailable': 'Execution proxy unavailable; not charged',
@@ -100,7 +113,7 @@ const messages: Record<string, string> = {
   'usage.platforms.x_twitter': 'Twitter / X',
   'usage.actions.follow': 'Follow',
   'usage.actions.post': 'Post',
-  'usage.statuses.success': 'Succeeded',
+  'usage.statuses.success': 'Success',
   'usage.statuses.failed': 'Failed',
   'usage.chargeStatuses.not_charged': 'Not Charged',
   'usage.chargeStatuses.charged': 'Charged',
@@ -110,6 +123,7 @@ const messages: Record<string, string> = {
   'usage.proxyStatuses.online': 'Online',
   'usage.proxyStatuses.offline': 'Offline',
   'common.refresh': 'Refresh',
+  'common.actions': 'Actions',
   'common.close': 'Close',
   'common.unknown': 'Unknown',
   'common.none': 'None',
@@ -148,8 +162,51 @@ vi.mock('vue-i18n', async () => {
 })
 
 const AppLayoutStub = { template: '<div><slot /></div>' }
+const DateRangePickerStub = {
+  props: ['startDate', 'endDate'],
+  emits: ['update:startDate', 'update:endDate', 'change'],
+  template: '<button type="button" data-testid="usage-date-range" @click="$emit(\'change\', { startDate, endDate, preset: null })">Date range</button>',
+}
+const PaginationStub = {
+  props: ['total', 'page', 'pageSize'],
+  emits: ['update:page', 'update:pageSize'],
+  template: '<div data-testid="usage-pagination">{{ total }}</div>',
+}
+const viewStubs = {
+  AppLayout: AppLayoutStub,
+  DateRangePicker: DateRangePickerStub,
+  Pagination: PaginationStub,
+}
+const defaultListParams = () => expect.objectContaining({
+  page: 1,
+  page_size: 20,
+  sort_by: 'time',
+  sort_order: 'desc',
+  start_date: expect.any(String),
+  end_date: expect.any(String),
+})
+const defaultStatsParams = () => expect.objectContaining({
+  start_date: expect.any(String),
+  end_date: expect.any(String),
+})
+const readBlobText = (blob: Blob) => new Promise<string>((resolve, reject) => {
+  const reader = new FileReader()
+  reader.onload = () => resolve(String(reader.result || ''))
+  reader.onerror = () => reject(reader.error)
+  reader.readAsText(blob)
+})
+const createDeferred = <T>() => {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, resolve, reject }
+}
 const originalCreateObjectURL = globalThis.URL.createObjectURL
 const originalRevokeObjectURL = globalThis.URL.revokeObjectURL
+const originalAnchorClick = HTMLAnchorElement.prototype.click
 
 describe('user UsageView', () => {
   beforeEach(() => {
@@ -193,45 +250,70 @@ describe('user UsageView', () => {
       page_size: 20,
       pages: 1,
     })
-    getStats.mockResolvedValueOnce({
-      total_requests: 34,
-      total_tokens: 34,
-      total_actual_cost: 8.25,
-    })
-    getStats.mockResolvedValueOnce({
-      total_requests: 21,
+    getStats.mockResolvedValue({
+      total_operations: 34,
+      success_count: 21,
+      failed_count: 13,
+      total_charged: 8.25,
     })
   })
 
   afterEach(() => {
     globalThis.URL.createObjectURL = originalCreateObjectURL
     globalThis.URL.revokeObjectURL = originalRevokeObjectURL
+    HTMLAnchorElement.prototype.click = originalAnchorClick
     document.body.innerHTML = ''
   })
 
   it('renders SocialOps operation usage records and stats', async () => {
     const wrapper = mount(UsageView, {
       global: {
-        stubs: {
-          AppLayout: AppLayoutStub,
-        },
+        stubs: viewStubs,
       },
     })
 
     await flushPromises()
 
-    expect(listUsage).toHaveBeenCalledWith({ page: 1, page_size: 20 })
-    expect(getStats).toHaveBeenNthCalledWith(1)
-    expect(getStats).toHaveBeenNthCalledWith(2, { status: 'success' })
+    expect(listUsage).toHaveBeenCalledWith(defaultListParams())
+    expect(getStats).toHaveBeenCalledTimes(1)
+    expect(getStats).toHaveBeenCalledWith(defaultStatsParams())
     expect(wrapper.text()).toContain('Total Operations')
-    expect(wrapper.text()).toContain('Total Quantity')
+    expect(wrapper.text()).toContain('Successful')
+    expect(wrapper.text()).toContain('Failed')
+    expect(wrapper.text()).toContain('Success Rate')
+    expect(wrapper.text()).toContain('Total Charged')
+    expect(wrapper.text()).not.toContain('Total Quantity')
+    expect(wrapper.text()).not.toContain('Total Cost')
     expect(wrapper.text()).toContain('34')
     expect(wrapper.text()).toContain('21')
+    expect(wrapper.text()).toContain('13')
+    expect(wrapper.text()).toContain('61.8%')
+    const statCards = wrapper.findAll('[data-testid="usage-stat-card"]')
+    expect(statCards).toHaveLength(5)
+    expect(statCards.every(card => card.find('svg').exists())).toBe(true)
+    expect(statCards.slice(0, 4).every(card => card.text().includes('In selected range'))).toBe(true)
+    expect(statCards[4].text()).toContain('Charged successful tasks')
+    const table = wrapper.get('[data-testid="usage-records-table"]')
+    expect(table.classes()).toContain('min-w-max')
+    expect(table.classes()).not.toContain('table-fixed')
+    const tableHeaders = wrapper.findAll('[data-testid="usage-records-table"] thead th').map(header => header.text())
+    expect(tableHeaders).toEqual([
+      'Platform',
+      'Operation',
+      'Account',
+      'Result',
+      'Cost',
+      'Summary',
+      'Time',
+      'Actions',
+    ])
+    expect(wrapper.findAll('[data-testid="usage-records-table"] thead th').every(header => header.classes().includes('py-3'))).toBe(true)
+    expect(wrapper.findAll('[data-testid="usage-records-table"] tbody tr:first-child td').every(cell => cell.classes().includes('py-4'))).toBe(true)
     expect(wrapper.text()).toContain('Follow')
     expect(wrapper.text()).toContain('Twitter / X')
     expect(wrapper.text()).toContain('x-main')
-    expect(wrapper.text()).toContain('Succeeded')
-    expect(wrapper.text()).toContain('Charged')
+    expect(wrapper.text()).toContain('Success')
+    expect(tableHeaders).not.toContain('Charge Status')
     expect(wrapper.text()).toContain('follow succeeded')
     expect(wrapper.text()).toContain('$8.25')
   })
@@ -239,38 +321,34 @@ describe('user UsageView', () => {
   it('re-queries usage history when the operation filter changes', async () => {
     const wrapper = mount(UsageView, {
       global: {
-        stubs: {
-          AppLayout: AppLayoutStub,
-        },
+        stubs: viewStubs,
       },
     })
 
     await flushPromises()
 
-    expect(listUsage).toHaveBeenNthCalledWith(1, { page: 1, page_size: 20 })
-    expect(getStats).toHaveBeenNthCalledWith(1)
-    expect(getStats).toHaveBeenNthCalledWith(2, { status: 'success' })
+    expect(listUsage).toHaveBeenNthCalledWith(1, defaultListParams())
+    expect(getStats).toHaveBeenCalledTimes(1)
+    expect(getStats).toHaveBeenCalledWith(defaultStatsParams())
 
     listUsage.mockClear()
     getStats.mockClear()
 
     const selects = wrapper.findAllComponents({ name: 'Select' })
-    expect(selects).toHaveLength(2)
+    expect(selects).toHaveLength(3)
 
-    await selects[0].vm.$emit('update:modelValue', 'post')
+    await selects[1].vm.$emit('update:modelValue', 'post')
     await flushPromises()
 
-    expect(listUsage).toHaveBeenCalledWith({ page: 1, page_size: 20, operation: 'post' })
-    expect(getStats).toHaveBeenNthCalledWith(1, { operation: 'post' })
-    expect(getStats).toHaveBeenNthCalledWith(2, { operation: 'post', status: 'success' })
+    expect(listUsage).toHaveBeenCalledWith(expect.objectContaining({ page: 1, page_size: 20, operation: 'post' }))
+    expect(getStats).toHaveBeenCalledTimes(1)
+    expect(getStats).toHaveBeenCalledWith(expect.objectContaining({ operation: 'post' }))
   })
 
   it('re-queries usage history when the status filter changes and clears back to defaults', async () => {
     const wrapper = mount(UsageView, {
       global: {
-        stubs: {
-          AppLayout: AppLayoutStub,
-        },
+        stubs: viewStubs,
       },
     })
 
@@ -280,14 +358,14 @@ describe('user UsageView', () => {
     getStats.mockClear()
 
     const selects = wrapper.findAllComponents({ name: 'Select' })
-    expect(selects).toHaveLength(2)
+    expect(selects).toHaveLength(3)
 
-    await selects[1].vm.$emit('update:modelValue', 'failed')
+    await selects[2].vm.$emit('update:modelValue', 'failed')
     await flushPromises()
 
-    expect(listUsage).toHaveBeenCalledWith({ page: 1, page_size: 20, status: 'failed' })
-    expect(getStats).toHaveBeenNthCalledWith(1, { status: 'failed' })
-    expect(getStats).toHaveBeenNthCalledWith(2, { status: 'success' })
+    expect(listUsage).toHaveBeenCalledWith(expect.objectContaining({ page: 1, page_size: 20, status: 'failed' }))
+    expect(getStats).toHaveBeenCalledTimes(1)
+    expect(getStats).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed' }))
 
     listUsage.mockClear()
     getStats.mockClear()
@@ -295,26 +373,344 @@ describe('user UsageView', () => {
     await wrapper.get('[data-testid="usage-clear-filters"]').trigger('click')
     await flushPromises()
 
-    expect(listUsage).toHaveBeenCalledWith({ page: 1, page_size: 20 })
-    expect(getStats).toHaveBeenNthCalledWith(1)
-    expect(getStats).toHaveBeenNthCalledWith(2, { status: 'success' })
+    expect(listUsage).toHaveBeenCalledWith(defaultListParams())
+    expect(getStats).toHaveBeenCalledTimes(1)
+    expect(getStats).toHaveBeenCalledWith(defaultStatsParams())
+  })
+
+  it('does not send non-final task statuses to usage history queries', async () => {
+    const wrapper = mount(UsageView, {
+      global: {
+        stubs: viewStubs,
+      },
+    })
+
+    await flushPromises()
+
+    listUsage.mockClear()
+    getStats.mockClear()
+
+    const selects = wrapper.findAllComponents({ name: 'Select' })
+    expect(selects).toHaveLength(3)
+
+    await selects[2].vm.$emit('update:modelValue', 'running')
+    await flushPromises()
+
+    expect(listUsage).toHaveBeenCalledTimes(1)
+    expect(listUsage).toHaveBeenCalledWith(defaultListParams())
+    expect(getStats).toHaveBeenCalledTimes(1)
+    expect(getStats).toHaveBeenCalledWith(defaultStatsParams())
+  })
+
+  it('keeps usage records and result filters scoped to final outcomes', async () => {
+    listUsage.mockResolvedValue({
+      items: [
+        {
+          id: 2,
+          user_id: 7,
+          social_account_id: 9,
+          platform: 'x_twitter',
+          account_name: 'x-main',
+          operation: 'follow',
+          status: 'success',
+          charge_status: 'charged',
+          quantity: 1,
+          cost: 0.1,
+          result_message: 'follow succeeded',
+          created_at: '2026-05-31T00:00:00Z',
+        },
+        {
+          id: 1,
+          user_id: 7,
+          social_account_id: 9,
+          platform: 'x_twitter',
+          account_name: 'x-main',
+          operation: 'follow',
+          status: 'running',
+          charge_status: 'not_charged',
+          quantity: 1,
+          cost: 0,
+          created_at: '2026-05-31T00:00:00Z',
+        },
+      ],
+      total: 2,
+      page: 1,
+      page_size: 20,
+      pages: 1,
+    })
+
+    const wrapper = mount(UsageView, {
+      global: {
+        stubs: viewStubs,
+      },
+    })
+
+    await flushPromises()
+
+    const selects = wrapper.findAllComponents({ name: 'Select' })
+    const statusOptions = selects[2].props('options') as Array<{ value: string }>
+    expect(statusOptions.map(option => option.value)).toEqual(['all', 'success', 'failed'])
+    expect(wrapper.text()).toContain('follow succeeded')
+    expect(wrapper.text()).not.toContain('running')
+    expect(wrapper.get('[data-testid="usage-pagination"]').text()).toBe('2')
+  })
+
+  it('orders filters as platform, operation, status, then time and keeps actions in the filter card', async () => {
+    const wrapper = mount(UsageView, {
+      global: {
+        stubs: viewStubs,
+      },
+    })
+
+    await flushPromises()
+    listUsage.mockClear()
+    getStats.mockClear()
+
+    const selects = wrapper.findAllComponents({ name: 'Select' })
+    expect(selects).toHaveLength(3)
+    expect((selects[0].props('options') as Array<{ label: string }>)[0].label).toBe('All platforms')
+    expect((selects[1].props('options') as Array<{ label: string }>)[0].label).toBe('All operations')
+    expect((selects[2].props('options') as Array<{ label: string }>)[0].label).toBe('All statuses')
+    expect(wrapper.find('[data-testid="usage-account-filter"]').exists()).toBe(false)
+    expect(wrapper.find('h1').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Track SocialOps operation history')
+
+    const toolbar = wrapper.get('[data-testid="usage-filter-toolbar"]')
+    expect(toolbar.html().indexOf('All platforms')).toBeLessThan(toolbar.html().indexOf('All operations'))
+    expect(toolbar.html().indexOf('All operations')).toBeLessThan(toolbar.html().indexOf('All statuses'))
+    expect(toolbar.html().indexOf('All statuses')).toBeLessThan(toolbar.html().indexOf('usage-date-range'))
+
+    const actions = wrapper.get('[data-testid="usage-filter-actions"]')
+    expect(actions.html().indexOf('Refresh')).toBeLessThan(actions.html().indexOf('Clear filters'))
+    expect(actions.html().indexOf('Clear filters')).toBeLessThan(actions.html().indexOf('Export CSV'))
+    expect(actions.find('[data-testid="usage-refresh"]').exists()).toBe(true)
+    expect(actions.find('[data-testid="usage-clear-filters"]').exists()).toBe(true)
+    expect(actions.find('[data-testid="usage-export-csv"]').exists()).toBe(true)
+
+    await selects[0].vm.$emit('update:modelValue', 'x_twitter')
+    await flushPromises()
+
+    expect(listUsage).toHaveBeenCalledWith(expect.objectContaining({ platform: 'x_twitter' }))
+    expect(getStats).toHaveBeenCalledWith(expect.objectContaining({ platform: 'x_twitter' }))
+  })
+
+  it('sorts usage records with server-side params and keeps export order consistent', async () => {
+    HTMLAnchorElement.prototype.click = vi.fn()
+    const wrapper = mount(UsageView, {
+      global: {
+        stubs: viewStubs,
+      },
+    })
+
+    await flushPromises()
+    listUsage.mockClear()
+    getStats.mockClear()
+
+    await wrapper.get('[data-testid="usage-sort-status"]').trigger('click')
+    await flushPromises()
+
+    expect(listUsage).toHaveBeenCalledWith(expect.objectContaining({
+      page: 1,
+      page_size: 20,
+      sort_by: 'status',
+      sort_order: 'asc',
+    }))
+
+    listUsage.mockClear()
+    getStats.mockClear()
+
+    await wrapper.get('[data-testid="usage-sort-cost"]').trigger('click')
+    await flushPromises()
+
+    expect(listUsage).toHaveBeenCalledWith(expect.objectContaining({
+      page: 1,
+      page_size: 20,
+      sort_by: 'cost',
+      sort_order: 'asc',
+    }))
+    expect(getStats).toHaveBeenCalledWith(defaultStatsParams())
+
+    listUsage.mockClear()
+    ;(globalThis.URL.createObjectURL as unknown as ReturnType<typeof vi.fn>).mockClear()
+    listUsage.mockResolvedValueOnce({
+      items: [
+        {
+          id: 10,
+          user_id: 7,
+          social_account_id: 9,
+          platform: 'x_twitter',
+          account_name: 'main',
+          operation: 'post',
+          status: 'success',
+          charge_status: 'charged',
+          result_message: 'post succeeded',
+          quantity: 1,
+          cost: 1.5,
+          created_at: '2026-05-31T00:00:00Z',
+          completed_at: '2026-05-31T00:00:01Z',
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 100,
+      pages: 1,
+    })
+
+    await wrapper.get('[data-testid="usage-export-csv"]').trigger('click')
+    await flushPromises()
+
+    expect(listUsage).toHaveBeenCalledWith(expect.objectContaining({
+      page: 1,
+      page_size: 100,
+      sort_by: 'cost',
+      sort_order: 'asc',
+    }))
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled()
+  })
+
+  it('exports filtered SocialOps usage records as a safe CSV', async () => {
+    HTMLAnchorElement.prototype.click = vi.fn()
+    const wrapper = mount(UsageView, {
+      global: {
+        stubs: viewStubs,
+      },
+    })
+
+    await flushPromises()
+    listUsage.mockClear()
+    ;(globalThis.URL.createObjectURL as unknown as ReturnType<typeof vi.fn>).mockClear()
+
+    listUsage.mockResolvedValueOnce({
+      items: [
+        {
+          id: 10,
+          user_id: 7,
+          social_account_id: 9,
+          platform: 'x_twitter',
+          account_name: '=main',
+          operation: 'post',
+          status: 'success',
+          charge_status: 'charged',
+          result_message: 'post succeeded',
+          quantity: 1,
+          cost: 1.5,
+          target: 'https://x.com/northwind/status/1',
+          content: '=HYPERLINK("https://example.com")',
+          payload: {
+            post: {
+              text: '=HYPERLINK("https://example.com")',
+              media: [
+                {
+                  source: 'inline',
+                  file_name: 'post-image-1.png',
+                  content_type: 'image/png',
+                  storage_key: 'social-task/private/post-image-1.png',
+                },
+              ],
+            },
+          },
+          created_at: '2026-05-31T00:00:00Z',
+          completed_at: '2026-05-31T00:00:01Z',
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 100,
+      pages: 1,
+    })
+
+    await wrapper.get('[data-testid="usage-export-csv"]').trigger('click')
+    await flushPromises()
+
+    expect(listUsage).toHaveBeenCalledWith(expect.objectContaining({
+      page: 1,
+      page_size: 100,
+      sort_by: 'time',
+      sort_order: 'desc',
+      start_date: expect.any(String),
+      end_date: expect.any(String),
+    }))
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled()
+    const blob = (globalThis.URL.createObjectURL as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as Blob
+    const csv = await readBlobText(blob)
+
+    expect(csv).toContain('"Platform","Operation","Account","Result","Cost","Summary","Time","Target","Content"')
+    expect(csv).not.toContain('Charge Status')
+    expect(csv).not.toContain('"Charged"')
+    expect(csv).toContain('"Post"')
+    expect(csv).toContain('"Twitter / X"')
+    expect(csv).toContain('"\'=main"')
+    expect(csv).toContain('"\'=HYPERLINK(""https://example.com"")"')
+    expect(csv).not.toContain('storage_key')
+    expect(csv).not.toContain('social-task/private')
+    expect(csv).not.toContain('api_key')
+    expect(csv).not.toContain('token')
   })
 
   it('shows an empty SocialOps usage state', async () => {
     listUsage.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 0 })
-    getStats.mockResolvedValue({ total_requests: 0, total_tokens: 0, total_actual_cost: 0 })
+    getStats.mockResolvedValue({ total_operations: 0, total_charged: 0 })
 
     const wrapper = mount(UsageView, {
       global: {
-        stubs: {
-          AppLayout: AppLayoutStub,
-        },
+        stubs: viewStubs,
       },
     })
 
     await flushPromises()
 
     expect(wrapper.text()).toContain('No SocialOps operations yet')
+    const emptyState = wrapper.get('[data-testid="usage-empty-state"]')
+    expect(emptyState.find('svg').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="usage-empty-clear-filters"]').exists()).toBe(false)
+  })
+
+  it('shows a loading state while usage records are being fetched', async () => {
+    const listDeferred = createDeferred<{ items: unknown[]; total: number; page: number; page_size: number; pages: number }>()
+    const statsDeferred = createDeferred<{ total_operations: number; success_count: number; failed_count: number; total_charged: number }>()
+    listUsage.mockReturnValue(listDeferred.promise)
+    getStats.mockReturnValue(statsDeferred.promise)
+
+    const wrapper = mount(UsageView, {
+      global: {
+        stubs: viewStubs,
+      },
+    })
+
+    await nextTick()
+
+    expect(wrapper.text()).toContain('Loading usage records...')
+    const loadingState = wrapper.get('[data-testid="usage-loading-state"]')
+    expect(loadingState.find('svg').exists()).toBe(true)
+
+    listDeferred.resolve({ items: [], total: 0, page: 1, page_size: 20, pages: 0 })
+    statsDeferred.resolve({ total_operations: 0, success_count: 0, failed_count: 0, total_charged: 0 })
+    await flushPromises()
+  })
+
+  it('distinguishes filtered empty usage results from an empty account history', async () => {
+    const wrapper = mount(UsageView, {
+      global: {
+        stubs: viewStubs,
+      },
+    })
+
+    await flushPromises()
+    listUsage.mockClear()
+    getStats.mockClear()
+    listUsage.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 0 })
+    getStats.mockResolvedValue({ total_operations: 0, success_count: 0, failed_count: 0, total_charged: 0 })
+
+    const selects = wrapper.findAllComponents({ name: 'Select' })
+    await selects[1].vm.$emit('update:modelValue', 'post')
+    await flushPromises()
+
+    expect(listUsage).toHaveBeenCalledWith(expect.objectContaining({ operation: 'post' }))
+    expect(wrapper.text()).toContain('No usage records match the current filters.')
+    const emptyState = wrapper.get('[data-testid="usage-empty-state"]')
+    expect(emptyState.find('svg').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="usage-empty-clear-filters"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('No SocialOps operations yet')
   })
 
   it('renders failed usage rows without task diagnostic payloads', async () => {
@@ -341,13 +737,11 @@ describe('user UsageView', () => {
       page_size: 20,
       pages: 1,
     })
-    getStats.mockResolvedValue({ total_requests: 0, total_tokens: 0, total_actual_cost: 0 })
+    getStats.mockResolvedValue({ total_operations: 0, total_charged: 0 })
 
     const wrapper = mount(UsageView, {
       global: {
-        stubs: {
-          AppLayout: AppLayoutStub,
-        },
+        stubs: viewStubs,
       },
     })
 
@@ -356,13 +750,8 @@ describe('user UsageView', () => {
     expect(wrapper.text()).toContain('Follow')
     expect(wrapper.text()).toContain('Twitter / X')
     expect(wrapper.text()).toContain('x-main')
-    expect(wrapper.text()).toContain('Not Charged')
-    expect(wrapper.text()).toContain('Task failed; diagnostic details are hidden')
-    expect(wrapper.text()).not.toContain('authorization')
-    expect(wrapper.text()).not.toContain('Bearer abc')
-    expect(wrapper.text()).not.toContain('token=secret')
-    expect(wrapper.text()).not.toContain('127.0.0.1')
-    expect(wrapper.text()).not.toContain('trace-123')
+    expect(wrapper.get('[data-testid="usage-records-table"]').text()).not.toContain('Not Charged')
+    expect(wrapper.text()).toContain('authorization Bearer abc token=secret proxy=http://127.0.0.1:8080 trace_id=trace-123')
   })
 
   it('localizes backend safe task result messages', async () => {
@@ -389,13 +778,11 @@ describe('user UsageView', () => {
       page_size: 20,
       pages: 1,
     })
-    getStats.mockResolvedValue({ total_requests: 0, total_tokens: 0, total_actual_cost: 0 })
+    getStats.mockResolvedValue({ total_operations: 0, total_charged: 0 })
 
     const wrapper = mount(UsageView, {
       global: {
-        stubs: {
-          AppLayout: AppLayoutStub,
-        },
+        stubs: viewStubs,
       },
     })
 
@@ -429,13 +816,11 @@ describe('user UsageView', () => {
       page_size: 20,
       pages: 1,
     })
-    getStats.mockResolvedValue({ total_requests: 0, total_tokens: 0, total_actual_cost: 0 })
+    getStats.mockResolvedValue({ total_operations: 0, total_charged: 0 })
 
     const wrapper = mount(UsageView, {
       global: {
-        stubs: {
-          AppLayout: AppLayoutStub,
-        },
+        stubs: viewStubs,
       },
     })
 
@@ -465,7 +850,7 @@ describe('user UsageView', () => {
           payload: {
             post: {
               text: 'hello world',
-              quote_post_url: 'https://x.com/openai/status/2',
+              quote_post_url: 'https://x.com/northwind/status/2',
               media: [
                 {
                   source: 'inline',
@@ -485,19 +870,17 @@ describe('user UsageView', () => {
       page_size: 20,
       pages: 1,
     })
-    getStats.mockResolvedValue({ total_requests: 0, total_tokens: 0, total_actual_cost: 0 })
+    getStats.mockResolvedValue({ total_operations: 0, total_charged: 0 })
 
     const wrapper = mount(UsageView, {
       global: {
-        stubs: {
-          AppLayout: AppLayoutStub,
-        },
+        stubs: viewStubs,
       },
     })
 
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Post · Text: hello world · Quote: https://x.com/openai/status/2 · 1 media item(s)')
+    expect(wrapper.text()).toContain('Post · Text: hello world · Quote: https://x.com/northwind/status/2 · 1 media item(s)')
     expect(wrapper.text()).toContain('Task queue is busy; not charged')
     expect(wrapper.text()).not.toContain('No structured details')
   })
@@ -529,9 +912,7 @@ describe('user UsageView', () => {
 
     const wrapper = mount(UsageView, {
       global: {
-        stubs: {
-          AppLayout: AppLayoutStub,
-        },
+        stubs: viewStubs,
       },
     })
 
@@ -545,17 +926,28 @@ describe('user UsageView', () => {
     listUsage.mockRejectedValue(new Error('network'))
     getStats.mockRejectedValue(new Error('network'))
 
-    mount(UsageView, {
+    const wrapper = mount(UsageView, {
       global: {
-        stubs: {
-          AppLayout: AppLayoutStub,
-        },
+        stubs: viewStubs,
       },
     })
 
     await flushPromises()
 
     expect(showError).toHaveBeenCalledWith('Failed to load usage records')
+    expect(wrapper.text()).toContain('Failed to load usage records')
+    const errorState = wrapper.get('[data-testid="usage-error-state"]')
+    expect(errorState.find('svg').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="usage-retry-load"]').exists()).toBe(true)
+
+    listUsage.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 0 })
+    getStats.mockResolvedValue({ total_operations: 0, success_count: 0, failed_count: 0, total_charged: 0 })
+
+    await wrapper.get('[data-testid="usage-retry-load"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('No SocialOps operations yet')
+    expect(wrapper.text()).not.toContain('Failed to load usage records')
   })
 
   it('opens a detail dialog with safe structured task history', async () => {
@@ -577,13 +969,13 @@ describe('user UsageView', () => {
       cost: 1.5,
       created_at: '2026-05-31T00:00:00Z',
       completed_at: '2026-05-31T00:00:01Z',
-      target: 'https://x.com/openai/status/1',
+      target: 'https://x.com/northwind/status/1',
       content: 'hello world',
       payload: {
-        target: 'https://x.com/openai/status/1',
+        target: 'https://x.com/northwind/status/1',
         post: {
           text: 'hello world',
-          quote_post_url: 'https://x.com/openai/status/2',
+          quote_post_url: 'https://x.com/northwind/status/2',
           media: [
             {
               source: 'inline',
@@ -596,9 +988,9 @@ describe('user UsageView', () => {
           ],
         },
         profile: {
-          display_name: 'OpenAI News',
+          display_name: 'Northwind Updates',
           location: 'San Francisco',
-          url: 'https://openai.com',
+          url: 'https://example.com/northwind',
         },
         avatar: {
           source: 'inline',
@@ -614,9 +1006,9 @@ describe('user UsageView', () => {
         template_name: 'Rich post',
         template_type: 'post',
         params: {
-          targets: ['https://x.com/openai/status/1'],
+          targets: ['https://x.com/northwind/status/1'],
           contents: ['hello world'],
-          quote_post_url: 'https://x.com/openai/status/2',
+          quote_post_url: 'https://x.com/northwind/status/2',
           media: [
             {
               source: 'inline',
@@ -641,9 +1033,7 @@ describe('user UsageView', () => {
 
     const wrapper = mount(UsageView, {
       global: {
-        stubs: {
-          AppLayout: AppLayoutStub,
-        },
+        stubs: viewStubs,
       },
     })
 
@@ -664,7 +1054,7 @@ describe('user UsageView', () => {
     expect(bodyText).toContain('Account')
     expect(bodyText).toContain('x-main')
     expect(bodyText).toContain('Status')
-    expect(bodyText).toContain('Succeeded')
+    expect(bodyText).toContain('Success')
     expect(bodyText).toContain('Charge status')
     expect(bodyText).toContain('Charged')
     expect(bodyText).toContain('Charge source')
@@ -675,26 +1065,45 @@ describe('user UsageView', () => {
     expect(bodyText).toContain('post succeeded')
     expect(bodyText).toContain('Quantity')
     expect(bodyText).toContain('1')
+    expect(document.body.querySelector('[data-testid="usage-detail-proxy"]')).not.toBeNull()
+    expect(bodyText).toContain('Execution Proxy')
     expect(bodyText).toContain('Proxy name')
     expect(bodyText).toContain('proxy-a')
     expect(bodyText).toContain('Proxy endpoint')
     expect(bodyText).toContain('http://proxy.local:8080')
     expect(bodyText).toContain('Proxy status')
     expect(bodyText).toContain('Online')
+    expect(document.body.querySelector('[data-testid="usage-detail-technical"]')).not.toBeNull()
+    expect(bodyText).toContain('Technical Info')
     expect(bodyText).toContain('Billing request')
     expect(bodyText).toContain('sub:task-1')
     expect(bodyText).toContain('Idempotency key')
     expect(bodyText).toContain('usage-detail-1')
+    const overviewText = document.body.querySelector('[data-testid="usage-detail-overview"]')?.textContent ?? ''
+    const resultText = document.body.querySelector('[data-testid="usage-detail-result"]')?.textContent ?? ''
+    const payloadText = document.body.querySelector('[data-testid="usage-detail-payload"]')?.textContent ?? ''
+    expect(overviewText).toContain('Cost')
+    expect(overviewText).toContain('$1.50')
+    expect(resultText).toContain('post succeeded')
+    expect(overviewText).not.toContain('Target')
+    expect(overviewText).not.toContain('Content')
+    expect(overviewText).not.toContain('Quote link')
+    expect(payloadText).toContain('Target')
+    expect(payloadText).toContain('https://x.com/northwind/status/1')
+    expect(payloadText).toContain('Content')
+    expect(payloadText).toContain('hello world')
+    expect(payloadText).toContain('Quote link')
+    expect(payloadText).toContain('https://x.com/northwind/status/2')
     expect(bodyText).toContain('Target')
-    expect(bodyText).toContain('https://x.com/openai/status/1')
+    expect(bodyText).toContain('https://x.com/northwind/status/1')
     expect(bodyText).toContain('Content')
     expect(bodyText).toContain('hello world')
     expect(bodyText).toContain('Quote link')
-    expect(bodyText).toContain('https://x.com/openai/status/2')
+    expect(bodyText).toContain('https://x.com/northwind/status/2')
     expect(bodyText).toContain('Template name')
     expect(bodyText).toContain('Rich post')
     expect(bodyText).toContain('Display name')
-    expect(bodyText).toContain('OpenAI News')
+    expect(bodyText).toContain('Northwind Updates')
     expect(bodyText).toContain('Avatar')
     expect(bodyText).toContain('post-image-1.png')
     expect(bodyText).toContain('avatar.png')
@@ -705,7 +1114,7 @@ describe('user UsageView', () => {
     expect(bodyText).not.toContain('storage_key')
   })
 
-  it('renders legacy plain proxy snapshots as a safe proxy endpoint row', async () => {
+  it('renders plain endpoint proxy snapshots as a safe proxy endpoint row', async () => {
     getById.mockResolvedValue({
       id: 1,
       user_id: 7,
@@ -725,9 +1134,7 @@ describe('user UsageView', () => {
 
     const wrapper = mount(UsageView, {
       global: {
-        stubs: {
-          AppLayout: AppLayoutStub,
-        },
+        stubs: viewStubs,
       },
     })
 
@@ -802,9 +1209,7 @@ describe('user UsageView', () => {
 
     const wrapper = mount(UsageView, {
       global: {
-        stubs: {
-          AppLayout: AppLayoutStub,
-        },
+        stubs: viewStubs,
       },
     })
 

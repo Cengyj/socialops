@@ -23,29 +23,29 @@ type UsageLog struct {
 	ID int64 `json:"id,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID int64 `json:"user_id,omitempty"`
-	// APIKeyID holds the value of the "api_key_id" field.
+	// Historical api_keys foreign key; SocialOps social task rows leave this empty
 	APIKeyID *int64 `json:"api_key_id,omitempty"`
-	// AccountID holds the value of the "account_id" field.
+	// Historical account identifier column retained for table shape compatibility
 	AccountID *int64 `json:"account_id,omitempty"`
 	// RequestID holds the value of the "request_id" field.
 	RequestID *string `json:"request_id,omitempty"`
-	// Model holds the value of the "model" field.
+	// Historical model column; SocialOps stores a generic social-action marker
 	Model string `json:"model,omitempty"`
 	// GroupID holds the value of the "group_id" field.
 	GroupID *int64 `json:"group_id,omitempty"`
 	// SubscriptionID holds the value of the "subscription_id" field.
 	SubscriptionID *int64 `json:"subscription_id,omitempty"`
-	// InputTokens holds the value of the "input_tokens" field.
+	// Historical AI token column; SocialOps social task rows keep this at zero
 	InputTokens int `json:"input_tokens,omitempty"`
-	// OutputTokens holds the value of the "output_tokens" field.
+	// Historical AI token column; SocialOps social task rows keep this at zero
 	OutputTokens int `json:"output_tokens,omitempty"`
-	// CacheCreationTokens holds the value of the "cache_creation_tokens" field.
+	// Historical AI token column; SocialOps social task rows keep this at zero
 	CacheCreationTokens int `json:"cache_creation_tokens,omitempty"`
-	// CacheReadTokens holds the value of the "cache_read_tokens" field.
+	// Historical AI token column; SocialOps social task rows keep this at zero
 	CacheReadTokens int `json:"cache_read_tokens,omitempty"`
-	// CacheCreation5mTokens holds the value of the "cache_creation_5m_tokens" field.
+	// Historical AI token column; SocialOps social task rows keep this at zero
 	CacheCreation5mTokens int `json:"cache_creation_5m_tokens,omitempty"`
-	// CacheCreation1hTokens holds the value of the "cache_creation_1h_tokens" field.
+	// Historical AI token column; SocialOps social task rows keep this at zero
 	CacheCreation1hTokens int `json:"cache_creation_1h_tokens,omitempty"`
 	// InputCost holds the value of the "input_cost" field.
 	InputCost float64 `json:"input_cost,omitempty"`
@@ -63,11 +63,11 @@ type UsageLog struct {
 	RateMultiplier float64 `json:"rate_multiplier,omitempty"`
 	// BillingType holds the value of the "billing_type" field.
 	BillingType int8 `json:"billing_type,omitempty"`
-	// Stream holds the value of the "stream" field.
+	// Historical AI request column; SocialOps social task rows keep this false
 	Stream bool `json:"stream,omitempty"`
-	// DurationMs holds the value of the "duration_ms" field.
+	// Historical request timing column retained for table shape compatibility
 	DurationMs *int `json:"duration_ms,omitempty"`
-	// FirstTokenMs holds the value of the "first_token_ms" field.
+	// Historical AI first-token timing column retained for table shape compatibility
 	FirstTokenMs *int `json:"first_token_ms,omitempty"`
 	// UserAgent holds the value of the "user_agent" field.
 	UserAgent *string `json:"user_agent,omitempty"`

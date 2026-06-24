@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"sort"
 	"strings"
 	"time"
 
@@ -20,44 +19,35 @@ const (
 )
 
 type adminServiceImpl struct {
-	userRepo             UserRepository
-	groupRepo            GroupRepository
-	apiKeyRepo           APIKeyRepository
-	redeemCodeRepo       RedeemCodeRepository
-	userGroupRateRepo    UserGroupRateRepository
-	billingCacheService  *BillingCacheService
-	authCacheInvalidator APIKeyAuthCacheInvalidator
-	entClient            *dbent.Client
-	settingService       *SettingService
-	defaultSubAssigner   DefaultSubscriptionAssigner
-	userSubRepo          UserSubscriptionRepository
+	userRepo            UserRepository
+	groupRepo           GroupRepository
+	redeemCodeRepo      RedeemCodeRepository
+	userGroupRateRepo   UserGroupRateRepository
+	billingCacheService *BillingCacheService
+	entClient           *dbent.Client
+	settingService      *SettingService
+	defaultSubAssigner  DefaultSubscriptionAssigner
 }
 
 func NewAdminService(
 	userRepo UserRepository,
 	groupRepo GroupRepository,
-	apiKeyRepo APIKeyRepository,
 	redeemCodeRepo RedeemCodeRepository,
 	userGroupRateRepo UserGroupRateRepository,
 	billingCacheService *BillingCacheService,
-	authCacheInvalidator APIKeyAuthCacheInvalidator,
 	entClient *dbent.Client,
 	settingService *SettingService,
 	defaultSubAssigner DefaultSubscriptionAssigner,
-	userSubRepo UserSubscriptionRepository,
 ) AdminService {
 	return &adminServiceImpl{
-		userRepo:             userRepo,
-		groupRepo:            groupRepo,
-		apiKeyRepo:           apiKeyRepo,
-		redeemCodeRepo:       redeemCodeRepo,
-		userGroupRateRepo:    userGroupRateRepo,
-		billingCacheService:  billingCacheService,
-		authCacheInvalidator: authCacheInvalidator,
-		entClient:            entClient,
-		settingService:       settingService,
-		defaultSubAssigner:   defaultSubAssigner,
-		userSubRepo:          userSubRepo,
+		userRepo:            userRepo,
+		groupRepo:           groupRepo,
+		redeemCodeRepo:      redeemCodeRepo,
+		userGroupRateRepo:   userGroupRateRepo,
+		billingCacheService: billingCacheService,
+		entClient:           entClient,
+		settingService:      settingService,
+		defaultSubAssigner:  defaultSubAssigner,
 	}
 }
 
@@ -134,8 +124,6 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 		return nil, err
 	}
 	oldConcurrency := user.Concurrency
-	oldStatus := user.Status
-	oldRPMLimit := user.RPMLimit
 
 	if user.Role == RoleAdmin && input.Status == StatusDisabled {
 		return nil, infraerrors.BadRequest("ADMIN_DISABLE_FORBIDDEN", "cannot disable admin user")
@@ -189,15 +177,6 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 			return nil, err
 		}
 	}
-	authCacheNeedsInvalidation := oldConcurrency != user.Concurrency ||
-		oldStatus != user.Status ||
-		oldRPMLimit != user.RPMLimit ||
-		input.Password != "" ||
-		input.AllowedGroups != nil ||
-		(input.GroupRates != nil && s.userGroupRateRepo != nil)
-	if s.authCacheInvalidator != nil && authCacheNeedsInvalidation {
-		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, user.ID)
-	}
 	if oldConcurrency != user.Concurrency && s.redeemCodeRepo != nil {
 		_ = s.createAdjustmentRecord(ctx, user.ID, adminConcurrencyAdjustmentType, float64(user.Concurrency-oldConcurrency), "")
 	}
@@ -214,9 +193,6 @@ func (s *adminServiceImpl) DeleteUser(ctx context.Context, id int64) error {
 	}
 	if err := s.userRepo.Delete(ctx, id); err != nil {
 		return err
-	}
-	if s.authCacheInvalidator != nil {
-		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, id)
 	}
 	return nil
 }
@@ -245,9 +221,6 @@ func (s *adminServiceImpl) UpdateUserBalance(ctx context.Context, userID int64, 
 	}
 	diff := user.Balance - oldBalance
 	if diff != 0 {
-		if s.authCacheInvalidator != nil {
-			s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
-		}
 		if s.billingCacheService != nil {
 			_ = s.billingCacheService.InvalidateUserBalance(ctx, userID)
 		}
@@ -277,29 +250,15 @@ func (s *adminServiceImpl) BatchUpdateConcurrency(ctx context.Context, userIDs [
 	if err != nil {
 		return 0, err
 	}
-	if s.authCacheInvalidator != nil {
-		for _, userID := range cleaned {
-			s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
-		}
-	}
 	s.createBatchConcurrencyAdjustmentRecords(ctx, beforeByUserID, value, mode)
 	return affected, nil
 }
 
-func (s *adminServiceImpl) GetUserAPIKeys(ctx context.Context, userID int64, page, pageSize int, sortBy, sortOrder string) ([]APIKey, int64, error) {
-	params := pagination.PaginationParams{Page: page, PageSize: pageSize, SortBy: sortBy, SortOrder: sortOrder}
-	keys, result, err := s.apiKeyRepo.ListByUserID(ctx, userID, params, APIKeyListFilters{})
-	if err != nil {
-		return nil, 0, err
-	}
-	return keys, result.Total, nil
-}
-
-func (s *adminServiceImpl) GetUserUsageStats(ctx context.Context, userID int64, period string) (any, error) {
+func (s *adminServiceImpl) GetUserUsageStats(ctx context.Context, userID int64) (*AdminUserUsageStats, error) {
 	if s.entClient == nil {
-		return map[string]any{"period": period, "total_requests": 0, "total_cost": 0.0}, nil
+		return &AdminUserUsageStats{}, nil
 	}
-	var totalRequests int64
+	var totalOperations int64
 	var chargedAmount float64
 	rows, err := s.entClient.QueryContext(ctx, `
 SELECT COUNT(*), COALESCE(SUM(CASE WHEN status = 'success' AND charge_status = 'charged' THEN charged_amount ELSE 0 END), 0)::double precision
@@ -310,58 +269,17 @@ WHERE user_id = $1`, userID)
 	}
 	defer func() { _ = rows.Close() }()
 	if rows.Next() {
-		if err := rows.Scan(&totalRequests, &chargedAmount); err != nil {
+		if err := rows.Scan(&totalOperations, &chargedAmount); err != nil {
 			return nil, err
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return map[string]any{
-		"period":         period,
-		"total_requests": totalRequests,
-		"total_cost":     chargedAmount,
+	return &AdminUserUsageStats{
+		TotalOperations: totalOperations,
+		TotalCharged:    chargedAmount,
 	}, nil
-}
-
-func (s *adminServiceImpl) GetUserRPMStatus(ctx context.Context, userID int64) (*UserRPMStatus, error) {
-	user, err := s.userRepo.GetByID(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	keys, _, err := s.GetUserAPIKeys(ctx, userID, 1, 1000, "id", "asc")
-	if err != nil {
-		return nil, err
-	}
-	groupIDs := make(map[int64]struct{})
-	for i := range keys {
-		if keys[i].GroupID != nil && *keys[i].GroupID > 0 {
-			groupIDs[*keys[i].GroupID] = struct{}{}
-		}
-	}
-	ids := make([]int64, 0, len(groupIDs))
-	for id := range groupIDs {
-		ids = append(ids, id)
-	}
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-	perGroup := make([]UserGroupRPMStatus, 0, len(ids))
-	for _, groupID := range ids {
-		entry := UserGroupRPMStatus{GroupID: groupID, Source: "group"}
-		if s.groupRepo != nil {
-			if group, err := s.groupRepo.GetByIDLite(ctx, groupID); err == nil && group != nil {
-				entry.GroupName = group.Name
-				entry.Limit = group.RPMLimit
-			}
-		}
-		if s.userGroupRateRepo != nil {
-			if override, err := s.userGroupRateRepo.GetRPMOverrideByUserAndGroup(ctx, userID, groupID); err == nil && override != nil {
-				entry.Limit = *override
-				entry.Source = "override"
-			}
-		}
-		perGroup = append(perGroup, entry)
-	}
-	return &UserRPMStatus{UserRPMLimit: user.RPMLimit, PerGroup: perGroup}, nil
 }
 
 func (s *adminServiceImpl) GetUserBalanceHistory(ctx context.Context, userID int64, page, pageSize int, codeType string) ([]RedeemCode, int64, float64, error) {
@@ -466,50 +384,7 @@ func (s *adminServiceImpl) BindUserAuthIdentity(ctx context.Context, userID int6
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	if s.authCacheInvalidator != nil {
-		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
-	}
 	return adminBoundAuthIdentityFromEnt(identity, channel), nil
-}
-
-func (s *adminServiceImpl) ReplaceUserGroup(ctx context.Context, userID, oldGroupID, newGroupID int64) (*ReplaceUserGroupResult, error) {
-	if oldGroupID == newGroupID {
-		return nil, infraerrors.BadRequest("SAME_GROUP", "old and new group must be different")
-	}
-	newGroup, err := s.groupRepo.GetByID(ctx, newGroupID)
-	if err != nil {
-		return nil, err
-	}
-	if !newGroup.IsActive() || !newGroup.IsExclusive || newGroup.IsSubscriptionType() {
-		return nil, infraerrors.BadRequest("INVALID_TARGET_GROUP", "target group must be an active exclusive standard group")
-	}
-	if s.entClient == nil {
-		return nil, infraerrors.InternalServer("GROUP_REPLACE_UNAVAILABLE", "group replacement requires transaction support")
-	}
-	tx, err := s.entClient.Tx(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	opCtx := dbent.NewTxContext(ctx, tx)
-
-	if err := s.userRepo.AddGroupToAllowedGroups(opCtx, userID, newGroupID); err != nil {
-		return nil, err
-	}
-	migrated, err := s.apiKeyRepo.UpdateGroupIDByUserAndGroup(opCtx, userID, oldGroupID, newGroupID)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.userRepo.RemoveGroupFromUserAllowedGroups(opCtx, userID, oldGroupID); err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	if s.authCacheInvalidator != nil {
-		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
-	}
-	return &ReplaceUserGroupResult{MigratedKeys: migrated}, nil
 }
 
 func (s *adminServiceImpl) ListRedeemCodes(ctx context.Context, page, pageSize int, codeType, status, search string, sortBy, sortOrder string) ([]RedeemCode, int64, error) {
@@ -699,156 +574,6 @@ func (s *adminServiceImpl) ExpireRedeemCode(ctx context.Context, id int64) (*Red
 		return nil, err
 	}
 	return code, nil
-}
-
-func (s *adminServiceImpl) AdminUpdateAPIKeyGroupID(ctx context.Context, keyID int64, groupID *int64) (*AdminUpdateAPIKeyGroupIDResult, error) {
-	apiKey, err := s.apiKeyRepo.GetByID(ctx, keyID)
-	if err != nil {
-		return nil, err
-	}
-	result := &AdminUpdateAPIKeyGroupIDResult{APIKey: apiKey}
-	if groupID == nil {
-		return result, nil
-	}
-	if *groupID < 0 {
-		return nil, infraerrors.BadRequest("INVALID_GROUP_ID", "group_id must be non-negative")
-	}
-	if *groupID == 0 {
-		apiKey.GroupID = nil
-		apiKey.Group = nil
-	} else {
-		group, err := s.groupRepo.GetByID(ctx, *groupID)
-		if err != nil {
-			return nil, err
-		}
-		if !group.IsActive() {
-			return nil, infraerrors.BadRequest("GROUP_NOT_ACTIVE", "target group is not active")
-		}
-		if group.IsSubscriptionType() {
-			if s.userSubRepo == nil {
-				return nil, infraerrors.InternalServer("SUBSCRIPTION_REPOSITORY_UNAVAILABLE", "subscription repository is unavailable")
-			}
-			if _, err := s.userSubRepo.GetActiveByUserIDAndGroupID(ctx, apiKey.UserID, *groupID); err != nil {
-				if errors.Is(err, ErrSubscriptionNotFound) {
-					return nil, infraerrors.BadRequest("SUBSCRIPTION_REQUIRED", "user does not have an active subscription for this group")
-				}
-				return nil, err
-			}
-		}
-		gid := *groupID
-		apiKey.GroupID = &gid
-		apiKey.Group = group
-		if group.IsExclusive && !group.IsSubscriptionType() {
-			if err := s.userRepo.AddGroupToAllowedGroups(ctx, apiKey.UserID, gid); err != nil {
-				return nil, err
-			}
-			result.AutoGrantedGroupAccess = true
-			result.GrantedGroupID = &gid
-			result.GrantedGroupName = group.Name
-		}
-	}
-	if err := s.apiKeyRepo.Update(ctx, apiKey); err != nil {
-		return nil, err
-	}
-	if s.authCacheInvalidator != nil {
-		s.authCacheInvalidator.InvalidateAuthCacheByKey(ctx, apiKey.Key)
-	}
-	result.APIKey = apiKey
-	return result, nil
-}
-
-func (s *adminServiceImpl) AdminResetAPIKeyRateLimitUsage(ctx context.Context, keyID int64) (*APIKey, error) {
-	apiKey, err := s.apiKeyRepo.GetByID(ctx, keyID)
-	if err != nil {
-		return nil, err
-	}
-	apiKey.Usage5h = 0
-	apiKey.Usage1d = 0
-	apiKey.Usage7d = 0
-	apiKey.Window5hStart = nil
-	apiKey.Window1dStart = nil
-	apiKey.Window7dStart = nil
-	if err := s.apiKeyRepo.Update(ctx, apiKey); err != nil {
-		return nil, err
-	}
-	if s.authCacheInvalidator != nil {
-		s.authCacheInvalidator.InvalidateAuthCacheByKey(ctx, apiKey.Key)
-	}
-	if s.billingCacheService != nil {
-		_ = s.billingCacheService.InvalidateAPIKeyRateLimit(ctx, apiKey.ID)
-	}
-	return apiKey, nil
-}
-
-func (s *adminServiceImpl) AdminUpdateAPIKeyGroupAndRateLimitUsage(ctx context.Context, keyID int64, groupID *int64, resetRateLimitUsage bool) (*AdminUpdateAPIKeyGroupIDResult, error) {
-	apiKey, err := s.apiKeyRepo.GetByID(ctx, keyID)
-	if err != nil {
-		return nil, err
-	}
-	result := &AdminUpdateAPIKeyGroupIDResult{APIKey: apiKey}
-
-	if groupID != nil {
-		if *groupID < 0 {
-			return nil, infraerrors.BadRequest("INVALID_GROUP_ID", "group_id must be non-negative")
-		}
-		if *groupID == 0 {
-			apiKey.GroupID = nil
-			apiKey.Group = nil
-		} else {
-			group, err := s.groupRepo.GetByID(ctx, *groupID)
-			if err != nil {
-				return nil, err
-			}
-			if !group.IsActive() {
-				return nil, infraerrors.BadRequest("GROUP_NOT_ACTIVE", "target group is not active")
-			}
-			if group.IsSubscriptionType() {
-				if s.userSubRepo == nil {
-					return nil, infraerrors.InternalServer("SUBSCRIPTION_REPOSITORY_UNAVAILABLE", "subscription repository is unavailable")
-				}
-				if _, err := s.userSubRepo.GetActiveByUserIDAndGroupID(ctx, apiKey.UserID, *groupID); err != nil {
-					if errors.Is(err, ErrSubscriptionNotFound) {
-						return nil, infraerrors.BadRequest("SUBSCRIPTION_REQUIRED", "user does not have an active subscription for this group")
-					}
-					return nil, err
-				}
-			}
-			gid := *groupID
-			apiKey.GroupID = &gid
-			apiKey.Group = group
-			if group.IsExclusive && !group.IsSubscriptionType() {
-				if err := s.userRepo.AddGroupToAllowedGroups(ctx, apiKey.UserID, gid); err != nil {
-					return nil, err
-				}
-				result.AutoGrantedGroupAccess = true
-				result.GrantedGroupID = &gid
-				result.GrantedGroupName = group.Name
-			}
-		}
-	}
-
-	if resetRateLimitUsage {
-		apiKey.Usage5h = 0
-		apiKey.Usage1d = 0
-		apiKey.Usage7d = 0
-		apiKey.Window5hStart = nil
-		apiKey.Window1dStart = nil
-		apiKey.Window7dStart = nil
-	}
-	if groupID == nil && !resetRateLimitUsage {
-		return result, nil
-	}
-	if err := s.apiKeyRepo.Update(ctx, apiKey); err != nil {
-		return nil, err
-	}
-	if s.authCacheInvalidator != nil {
-		s.authCacheInvalidator.InvalidateAuthCacheByKey(ctx, apiKey.Key)
-	}
-	if resetRateLimitUsage && s.billingCacheService != nil {
-		_ = s.billingCacheService.InvalidateAPIKeyRateLimit(ctx, apiKey.ID)
-	}
-	result.APIKey = apiKey
-	return result, nil
 }
 
 func (s *adminServiceImpl) assignDefaultSubscriptions(ctx context.Context, userID int64) {

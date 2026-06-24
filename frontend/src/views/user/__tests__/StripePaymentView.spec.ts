@@ -73,7 +73,7 @@ function orderFactory(overrides: Partial<PaymentOrder> = {}): PaymentOrder {
     currency: 'CNY',
     fee_rate: 0.03,
     payment_type: 'stripe',
-    out_trade_no: 'sub2_stripe_42',
+    out_trade_no: 'socialops_stripe_42',
     status: 'PENDING',
     order_type: 'balance',
     created_at: '2026-04-20T12:00:00Z',

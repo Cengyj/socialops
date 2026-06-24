@@ -69,6 +69,18 @@ func (f AuthIdentityChannelFunc) Mutate(ctx context.Context, m ent.Mutation) (en
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuthIdentityChannelMutation", m)
 }
 
+// The GlobalProxyFunc type is an adapter to allow the use of ordinary
+// function as GlobalProxy mutator.
+type GlobalProxyFunc func(context.Context, *ent.GlobalProxyMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f GlobalProxyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.GlobalProxyMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GlobalProxyMutation", m)
+}
+
 // The GroupFunc type is an adapter to allow the use of ordinary
 // function as Group mutator.
 type GroupFunc func(context.Context, *ent.GroupMutation) (ent.Value, error)

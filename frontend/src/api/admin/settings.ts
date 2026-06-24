@@ -291,7 +291,7 @@ export function resolveWeChatConnectModeCapabilities(
   openEnabled: unknown,
   mpEnabled: unknown,
   mobileEnabled: unknown,
-  legacyMode: unknown,
+  storedMode: unknown,
 ): { openEnabled: boolean; mpEnabled: boolean; mobileEnabled: boolean } {
   if (
     typeof openEnabled === "boolean" ||
@@ -305,7 +305,7 @@ export function resolveWeChatConnectModeCapabilities(
     };
   }
 
-  switch (normalizeWeChatConnectMode(legacyMode)) {
+  switch (normalizeWeChatConnectMode(storedMode)) {
     case "mp":
       return { openEnabled: false, mpEnabled: true, mobileEnabled: false };
     case "mobile":
@@ -319,12 +319,12 @@ export function deriveWeChatConnectStoredMode(
   openEnabled: boolean,
   mpEnabled: boolean,
   mobileEnabled: boolean,
-  legacyMode: unknown,
+  storedMode: unknown,
 ): WeChatConnectMode {
   if (mpEnabled) return "mp";
   if (mobileEnabled) return "mobile";
   if (openEnabled) return "open";
-  return normalizeWeChatConnectMode(legacyMode);
+  return normalizeWeChatConnectMode(storedMode);
 }
 
 /**
@@ -417,7 +417,6 @@ export interface SystemSettings {
   turnstile_enabled: boolean;
   turnstile_site_key: string;
   turnstile_secret_key_configured: boolean;
-  api_key_acl_trust_forwarded_ip: boolean;
 
   // LinuxDo Connect OAuth settings
   linuxdo_connect_enabled: boolean;
@@ -497,7 +496,6 @@ export interface SystemSettings {
 
   // Payment configuration
   payment_enabled: boolean;
-  risk_control_enabled: boolean;
   payment_min_amount: number;
   payment_max_amount: number;
   payment_daily_limit: number;
@@ -616,7 +614,6 @@ export interface UpdateSettingsRequest {
   turnstile_enabled?: boolean;
   turnstile_site_key?: string;
   turnstile_secret_key?: string;
-  api_key_acl_trust_forwarded_ip?: boolean;
   linuxdo_connect_enabled?: boolean;
   linuxdo_connect_client_id?: string;
   linuxdo_connect_client_secret?: string;
@@ -687,7 +684,6 @@ export interface UpdateSettingsRequest {
   google_oauth_frontend_redirect_url?: string;
   // Payment configuration
   payment_enabled?: boolean;
-  risk_control_enabled?: boolean;
   payment_min_amount?: number;
   payment_max_amount?: number;
   payment_daily_limit?: number;

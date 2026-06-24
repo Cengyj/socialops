@@ -97,8 +97,7 @@ func TestGroupRepository_DeleteCascade_PreservesApiKeyGroupID(t *testing.T) {
 	require.NoError(t, err)
 
 	userRepo := newUserRepositoryWithSQL(entClient, tx)
-	groupRepo := newGroupRepositoryWithSQL(entClient, tx)
-	apiKeyRepo := newAPIKeyRepositoryWithSQL(entClient, tx)
+	groupRepo := &groupRepository{client: entClient, sql: tx}
 
 	u := &service.User{
 		Email:         uniqueTestValue(t, "cascade-user") + "@example.com",
@@ -110,14 +109,12 @@ func TestGroupRepository_DeleteCascade_PreservesApiKeyGroupID(t *testing.T) {
 	}
 	require.NoError(t, userRepo.Create(ctx, u))
 
-	key := &service.APIKey{
+	key := mustCreateHistoricalAPIKey(t, entClient, historicalAPIKeyRow{
 		UserID:  u.ID,
 		Key:     uniqueTestValue(t, "sk-test-delete-cascade"),
 		Name:    "test key",
 		GroupID: &targetGroup.ID,
-		Status:  service.StatusActive,
-	}
-	require.NoError(t, apiKeyRepo.Create(ctx, key))
+	})
 
 	_, err = groupRepo.DeleteCascade(ctx, targetGroup.ID)
 	require.NoError(t, err)
@@ -138,10 +135,9 @@ func TestGroupRepository_DeleteCascade_PreservesApiKeyGroupID(t *testing.T) {
 	require.NotContains(t, uAfter.AllowedGroups, targetGroup.ID)
 	require.Contains(t, uAfter.AllowedGroups, otherGroup.ID)
 
-	// API keys keep their group_id so auth can reject keys bound to a deleted group.
-	keyAfter, err := apiKeyRepo.GetByID(ctx, key.ID)
+	// Historical api_keys rows keep their group_id for migration/accounting consistency.
+	keyAfter, err := entClient.APIKey.Get(ctx, key.ID)
 	require.NoError(t, err)
 	require.NotNil(t, keyAfter.GroupID)
 	require.Equal(t, targetGroup.ID, *keyAfter.GroupID)
-	require.Nil(t, keyAfter.Group)
 }

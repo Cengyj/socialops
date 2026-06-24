@@ -190,7 +190,7 @@ func TestDatabaseConnection(cfg *DatabaseConfig) error {
 			return
 		}
 		if err := db.Close(); err != nil {
-			logger.LegacyPrintf("setup", "failed to close postgres connection: %v", err)
+			logger.ComponentPrintf("setup", "failed to close postgres connection: %v", err)
 		}
 	}()
 
@@ -217,12 +217,12 @@ func TestDatabaseConnection(cfg *DatabaseConfig) error {
 		if err != nil {
 			return fmt.Errorf("failed to create database '%s': %w", cfg.DBName, err)
 		}
-		logger.LegacyPrintf("setup", "Database '%s' created successfully", cfg.DBName)
+		logger.ComponentPrintf("setup", "Database '%s' created successfully", cfg.DBName)
 	}
 
 	// Now connect to the target database to verify
 	if err := db.Close(); err != nil {
-		logger.LegacyPrintf("setup", "failed to close postgres connection: %v", err)
+		logger.ComponentPrintf("setup", "failed to close postgres connection: %v", err)
 	}
 	db = nil
 
@@ -233,7 +233,7 @@ func TestDatabaseConnection(cfg *DatabaseConfig) error {
 
 	defer func() {
 		if err := targetDB.Close(); err != nil {
-			logger.LegacyPrintf("setup", "failed to close postgres connection: %v", err)
+			logger.ComponentPrintf("setup", "failed to close postgres connection: %v", err)
 		}
 	}()
 
@@ -273,7 +273,7 @@ func TestRedisConnection(cfg *RedisConfig) error {
 	rdb := redis.NewClient(opts)
 	defer func() {
 		if err := rdb.Close(); err != nil {
-			logger.LegacyPrintf("setup", "failed to close redis client: %v", err)
+			logger.ComponentPrintf("setup", "failed to close redis client: %v", err)
 		}
 	}()
 
@@ -301,7 +301,7 @@ func Install(cfg *SetupConfig) error {
 			return fmt.Errorf("failed to generate jwt secret: %w", err)
 		}
 		cfg.JWT.Secret = secret
-		logger.LegacyPrintf("setup", "%s", "Warning: JWT secret auto-generated. Consider setting a fixed secret for production.")
+		logger.ComponentPrintf("setup", "%s", "Warning: JWT secret auto-generated. Consider setting a fixed secret for production.")
 	}
 
 	// Test connections
@@ -355,7 +355,7 @@ func initializeDatabase(cfg *SetupConfig) error {
 
 	defer func() {
 		if err := db.Close(); err != nil {
-			logger.LegacyPrintf("setup", "failed to close postgres connection: %v", err)
+			logger.ComponentPrintf("setup", "failed to close postgres connection: %v", err)
 		}
 	}()
 
@@ -374,7 +374,7 @@ func createAdminUser(cfg *SetupConfig) (bool, string, error) {
 
 	defer func() {
 		if err := db.Close(); err != nil {
-			logger.LegacyPrintf("setup", "failed to close postgres connection: %v", err)
+			logger.ComponentPrintf("setup", "failed to close postgres connection: %v", err)
 		}
 	}()
 
@@ -461,7 +461,6 @@ func writeConfigFile(cfg *SetupConfig) error {
 		Default struct {
 			UserConcurrency int     `yaml:"user_concurrency"`
 			UserBalance     float64 `yaml:"user_balance"`
-			APIKeyPrefix    string  `yaml:"api_key_prefix"`
 			RateMultiplier  float64 `yaml:"rate_multiplier"`
 		} `yaml:"default"`
 		RateLimit struct {
@@ -483,12 +482,10 @@ func writeConfigFile(cfg *SetupConfig) error {
 		Default: struct {
 			UserConcurrency int     `yaml:"user_concurrency"`
 			UserBalance     float64 `yaml:"user_balance"`
-			APIKeyPrefix    string  `yaml:"api_key_prefix"`
 			RateMultiplier  float64 `yaml:"rate_multiplier"`
 		}{
 			UserConcurrency: defaultUserConcurrency,
 			UserBalance:     0,
-			APIKeyPrefix:    "sk-",
 			RateMultiplier:  1.0,
 		},
 		RateLimit: struct {
@@ -548,8 +545,8 @@ func getEnvIntOrDefault(key string, defaultValue int) int {
 // AutoSetupFromEnv performs automatic setup using environment variables
 // This is designed for Docker deployment where all config is passed via env vars
 func AutoSetupFromEnv() error {
-	logger.LegacyPrintf("setup", "%s", "Auto setup enabled, configuring from environment variables...")
-	logger.LegacyPrintf("setup", "Data directory: %s", GetDataDir())
+	logger.ComponentPrintf("setup", "%s", "Auto setup enabled, configuring from environment variables...")
+	logger.ComponentPrintf("setup", "Data directory: %s", GetDataDir())
 
 	// Get timezone from TZ or TIMEZONE env var (TZ is standard for Docker)
 	tz := getEnvOrDefault("TZ", "")
@@ -597,62 +594,62 @@ func AutoSetupFromEnv() error {
 			return fmt.Errorf("failed to generate jwt secret: %w", err)
 		}
 		cfg.JWT.Secret = secret
-		logger.LegacyPrintf("setup", "%s", "Warning: JWT secret auto-generated. Consider setting a fixed secret for production.")
+		logger.ComponentPrintf("setup", "%s", "Warning: JWT secret auto-generated. Consider setting a fixed secret for production.")
 	}
 
 	// Test database connection
-	logger.LegacyPrintf("setup", "%s", "Testing database connection...")
+	logger.ComponentPrintf("setup", "%s", "Testing database connection...")
 	if err := TestDatabaseConnection(&cfg.Database); err != nil {
 		return fmt.Errorf("database connection failed: %w", err)
 	}
-	logger.LegacyPrintf("setup", "%s", "Database connection successful")
+	logger.ComponentPrintf("setup", "%s", "Database connection successful")
 
 	// Test Redis connection
-	logger.LegacyPrintf("setup", "%s", "Testing Redis connection...")
+	logger.ComponentPrintf("setup", "%s", "Testing Redis connection...")
 	if err := TestRedisConnection(&cfg.Redis); err != nil {
 		return fmt.Errorf("redis connection failed: %w", err)
 	}
-	logger.LegacyPrintf("setup", "%s", "Redis connection successful")
+	logger.ComponentPrintf("setup", "%s", "Redis connection successful")
 
 	// Initialize database
-	logger.LegacyPrintf("setup", "%s", "Initializing database...")
+	logger.ComponentPrintf("setup", "%s", "Initializing database...")
 	if err := initializeDatabase(cfg); err != nil {
 		return fmt.Errorf("database initialization failed: %w", err)
 	}
-	logger.LegacyPrintf("setup", "%s", "Database initialized successfully")
+	logger.ComponentPrintf("setup", "%s", "Database initialized successfully")
 
 	// Create admin user
-	logger.LegacyPrintf("setup", "%s", "Creating admin user...")
+	logger.ComponentPrintf("setup", "%s", "Creating admin user...")
 	created, reason, err := createAdminUser(cfg)
 	if err != nil {
 		return fmt.Errorf("admin user creation failed: %w", err)
 	}
 	if created {
-		logger.LegacyPrintf("setup", "Admin user created: %s", cfg.Admin.Email)
+		logger.ComponentPrintf("setup", "Admin user created: %s", cfg.Admin.Email)
 	} else {
 		switch reason {
 		case adminBootstrapReasonAdminExists:
-			logger.LegacyPrintf("setup", "%s", "Admin user already exists, skipping admin bootstrap")
+			logger.ComponentPrintf("setup", "%s", "Admin user already exists, skipping admin bootstrap")
 		case adminBootstrapReasonUsersExistWithoutAdmin:
-			logger.LegacyPrintf("setup", "%s", "Database already has user data; skipping auto admin bootstrap to avoid password overwrite")
+			logger.ComponentPrintf("setup", "%s", "Database already has user data; skipping auto admin bootstrap to avoid password overwrite")
 		default:
-			logger.LegacyPrintf("setup", "%s", "Admin bootstrap skipped")
+			logger.ComponentPrintf("setup", "%s", "Admin bootstrap skipped")
 		}
 	}
 
 	// Write config file
-	logger.LegacyPrintf("setup", "%s", "Writing configuration file...")
+	logger.ComponentPrintf("setup", "%s", "Writing configuration file...")
 	if err := writeConfigFile(cfg); err != nil {
 		return fmt.Errorf("config file creation failed: %w", err)
 	}
-	logger.LegacyPrintf("setup", "%s", "Configuration file created")
+	logger.ComponentPrintf("setup", "%s", "Configuration file created")
 
 	// Create installation lock file
 	if err := createInstallLock(); err != nil {
 		return fmt.Errorf("failed to create install lock: %w", err)
 	}
-	logger.LegacyPrintf("setup", "%s", "Installation lock created")
+	logger.ComponentPrintf("setup", "%s", "Installation lock created")
 
-	logger.LegacyPrintf("setup", "%s", "Auto setup completed successfully!")
+	logger.ComponentPrintf("setup", "%s", "Auto setup completed successfully!")
 	return nil
 }

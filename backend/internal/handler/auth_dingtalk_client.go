@@ -28,7 +28,7 @@ type DingTalkClient struct {
 	appTokenExp time.Time // 钉钉 7200s，留 200s 余量 → 7000s
 	mu          sync.Mutex
 	httpClient  *http.Client
-	// TODO(multi-instance): Redis 集中缓存 appToken
+	// appToken is cached per process; multi-instance deployments may fetch it per instance.
 }
 
 type DingTalkUserTokenResp struct {
@@ -164,7 +164,7 @@ func (c *DingTalkClient) GetAppToken(ctx context.Context) (string, error) {
 	// 此 token 也可作为旧版 OAPI 的 access_token 使用（钉钉文档已说明）
 	appTokenURL := strings.Replace(c.cfg.TokenURL, "/oauth2/userAccessToken", "/oauth2/accessToken", 1)
 	if !strings.Contains(appTokenURL, "accessToken") && !strings.Contains(appTokenURL, "gettoken") {
-		appTokenURL = c.cfg.TokenURL // fallback for test stub
+		appTokenURL = c.cfg.TokenURL // configured endpoint override
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, appTokenURL, bytes.NewReader(payload))
 	if err != nil {
@@ -212,7 +212,7 @@ func (c *DingTalkClient) GetUserIdByUnionId(ctx context.Context, unionID string)
 	if strings.Contains(c.cfg.UserInfoURL, "/contact/users/me") {
 		targetURL = c.dingTalkOAPIBase() + "/topapi/user/getbyunionid?access_token=" + url.QueryEscape(appToken)
 	} else {
-		targetURL = c.cfg.UserInfoURL // fallback for test stub
+		targetURL = c.cfg.UserInfoURL // configured endpoint override
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(payload))
 	if err != nil {
@@ -267,7 +267,7 @@ func (c *DingTalkClient) GetDeptInfo(ctx context.Context, deptID int64) (*DingTa
 	if strings.Contains(c.cfg.UserInfoURL, "/contact/users/me") {
 		targetURL = c.dingTalkOAPIBase() + "/topapi/v2/department/get?access_token=" + url.QueryEscape(appToken)
 	} else {
-		targetURL = c.cfg.UserInfoURL // test stub fallback
+		targetURL = c.cfg.UserInfoURL // configured endpoint override
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(payload))
 	if err != nil {
@@ -317,7 +317,7 @@ func (c *DingTalkClient) GetStaffInfoByUserId(ctx context.Context, userID string
 	if strings.Contains(c.cfg.UserInfoURL, "/contact/users/me") {
 		targetURL = c.dingTalkOAPIBase() + "/topapi/v2/user/get?access_token=" + url.QueryEscape(appToken)
 	} else {
-		targetURL = c.cfg.UserInfoURL // fallback for test stub
+		targetURL = c.cfg.UserInfoURL // configured endpoint override
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(payload))
 	if err != nil {

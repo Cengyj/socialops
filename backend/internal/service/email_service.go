@@ -367,7 +367,7 @@ func (s *EmailService) SendVerifyCode(ctx context.Context, email, siteName strin
 		if !shouldFallbackNotificationEmail(err) {
 			return err
 		}
-		slog.Warn("failed to send templated verification email, falling back to legacy template", "recipient_hash", notificationEmailHash(email), "error", err)
+		slog.Warn("failed to send templated verification email, falling back to built-in body", "recipient_hash", notificationEmailHash(email), "error", err)
 	}
 
 	// 构建邮件内容
@@ -562,7 +562,7 @@ func (s *EmailService) SendPasswordResetEmail(ctx context.Context, email, siteNa
 		if !shouldFallbackNotificationEmail(err) {
 			return err
 		}
-		slog.Warn("failed to send templated password reset email, falling back to legacy template", "recipient_hash", notificationEmailHash(email), "error", err)
+		slog.Warn("failed to send templated password reset email, falling back to built-in body", "recipient_hash", notificationEmailHash(email), "error", err)
 	}
 
 	// Build email content

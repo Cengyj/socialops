@@ -26,7 +26,10 @@ import (
 
 	dbent "github.com/Wei-Shaw/socialops/ent"
 	"github.com/Wei-Shaw/socialops/ent/enttest"
+	"github.com/Wei-Shaw/socialops/ent/schema/mixins"
 	"github.com/Wei-Shaw/socialops/ent/socialaccount"
+	"github.com/Wei-Shaw/socialops/ent/socialip"
+	"github.com/Wei-Shaw/socialops/ent/socialtasklog"
 	"github.com/Wei-Shaw/socialops/ent/usagelog"
 	infraerrors "github.com/Wei-Shaw/socialops/internal/pkg/errors"
 	"github.com/Wei-Shaw/socialops/internal/pkg/pagination"
@@ -36,6 +39,28 @@ import (
 	entsql "entgo.io/ent/dialect/sql"
 	_ "modernc.org/sqlite"
 )
+
+func encryptedTwitterExecutionAuthForTest(t *testing.T) string {
+	t.Helper()
+	stored, err := normalizeTwitterExecutionAuthForEncryptedStorage(
+		`{"access_token":"access-token","token_secret":"token-secret","screen_name":"northwind_ops"}`,
+		"northwind_ops",
+		executionAuthEncryptorStub{},
+	)
+	require.NoError(t, err)
+	return stored
+}
+
+func encryptedTwitterExecutionAuthPayloadForTest(t *testing.T, payload, screenName string) string {
+	t.Helper()
+	stored, err := normalizeTwitterExecutionAuthForEncryptedStorage(payload, screenName, executionAuthEncryptorStub{})
+	require.NoError(t, err)
+	return stored
+}
+
+func newEncryptedTwitterExecutorForTest() *TwitterExecutor {
+	return NewTwitterExecutor().WithCredentialEncryptor(executionAuthEncryptorStub{})
+}
 
 func TestAdminServiceSkeletonFailsClosed(t *testing.T) {
 	svc := NewAdminServiceSkeleton()
@@ -47,10 +72,6 @@ func TestAdminServiceSkeletonFailsClosed(t *testing.T) {
 
 	code, err := svc.GenerateRedeemCodes(context.Background(), &GenerateRedeemCodesInput{Count: 1})
 	require.Nil(t, code)
-	require.ErrorIs(t, err, ErrAdminServiceNotConfigured)
-
-	updated, err := svc.AdminUpdateAPIKeyGroupID(context.Background(), 1, nil)
-	require.Nil(t, updated)
 	require.ErrorIs(t, err, ErrAdminServiceNotConfigured)
 }
 
@@ -114,7 +135,6 @@ func TestSocialTaskExecutorDoesNotMarkUnimplementedActionsSuccessful(t *testing.
 	for _, action := range []string{
 		SocialTaskActionLoginCheck,
 		SocialTaskActionFollow,
-		SocialTaskActionMessage,
 		SocialTaskActionPost,
 		SocialTaskActionLike,
 		SocialTaskActionRetweet,
@@ -125,6 +145,9 @@ func TestSocialTaskExecutorDoesNotMarkUnimplementedActionsSuccessful(t *testing.
 			require.Empty(t, result)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "not configured")
+			kind, ok := socialExecutionFailureKind(err)
+			require.True(t, ok)
+			require.Equal(t, SocialExecutionFailurePlatform, kind)
 		})
 	}
 
@@ -132,6 +155,79 @@ func TestSocialTaskExecutorDoesNotMarkUnimplementedActionsSuccessful(t *testing.
 	result, err := executor.executeAction(context.Background(), task)
 	require.Empty(t, result)
 	require.ErrorContains(t, err, "unsupported action")
+	kind, ok := socialExecutionFailureKind(err)
+	require.True(t, ok)
+	require.Equal(t, SocialExecutionFailureUnsupported, kind)
+}
+
+func TestSocialTaskExecutorMissingActionInputFailsClosedWithSafeMessage(t *testing.T) {
+	executor := &SocialTaskExecutor{}
+
+	tests := []struct {
+		name        string
+		task        *dbent.SocialTaskLog
+		wantMessage string
+	}{
+		{
+			name:        "follow target",
+			task:        &dbent.SocialTaskLog{Action: SocialTaskActionFollow},
+			wantMessage: "follow target is required",
+		},
+		{
+			name:        "post content or media",
+			task:        &dbent.SocialTaskLog{Action: SocialTaskActionPost},
+			wantMessage: "post content or media is required",
+		},
+		{
+			name:        "profile payload",
+			task:        &dbent.SocialTaskLog{Action: SocialTaskActionUpdateProfile},
+			wantMessage: "profile payload is required",
+		},
+		{
+			name:        "avatar media",
+			task:        &dbent.SocialTaskLog{Action: SocialTaskActionUpdateAvatar},
+			wantMessage: "avatar media is required",
+		},
+		{
+			name:        "banner media",
+			task:        &dbent.SocialTaskLog{Action: SocialTaskActionUpdateBanner},
+			wantMessage: "banner media is required",
+		},
+		{
+			name:        "like target",
+			task:        &dbent.SocialTaskLog{Action: SocialTaskActionLike},
+			wantMessage: "like target (post URL/ID) is required",
+		},
+		{
+			name:        "retweet target",
+			task:        &dbent.SocialTaskLog{Action: SocialTaskActionRetweet},
+			wantMessage: "retweet target (post URL/ID) is required",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := executor.executeAction(context.Background(), tc.task)
+
+			require.Empty(t, result)
+			require.Error(t, err)
+			require.Equal(t, tc.wantMessage, err.Error())
+			kind, ok := socialExecutionFailureKind(err)
+			require.True(t, ok)
+			require.Equal(t, SocialExecutionFailureActionInput, kind)
+			require.Equal(t, "任务参数不完整，本次未扣费", safeSocialTaskFailureMessage(err))
+		})
+	}
+}
+
+func TestSocialTaskExecutorRejectsMissingTaskLogWithoutPanicRecovery(t *testing.T) {
+	executor := &SocialTaskExecutor{}
+
+	result, err := executor.executeActionSafely(context.Background(), nil)
+
+	require.Empty(t, result)
+	require.ErrorContains(t, err, "social task log is unavailable")
+	require.NotContains(t, err.Error(), "unexpectedly")
 }
 
 func TestSocialTaskExecutorProcessesPendingTaskFailClosedWithoutCharge(t *testing.T) {
@@ -160,7 +256,7 @@ func TestSocialTaskExecutorProcessesPendingTaskFailClosedWithoutCharge(t *testin
 		SetChargeStatus(SocialTaskChargeStatusNotCharged).
 		SetBillingRequestID(billingRequestID).
 		SaveX(ctx)
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 
 	executor.processTask(log.ID)
 
@@ -172,7 +268,7 @@ func TestSocialTaskExecutorProcessesPendingTaskFailClosedWithoutCharge(t *testin
 	require.Nil(t, stored.ChargeSource)
 	require.Nil(t, stored.BillingRequestID)
 	require.NotNil(t, stored.ResultMessage)
-	require.Equal(t, "该平台动作暂不可用，本次未扣费", *stored.ResultMessage)
+	require.Equal(t, "follow is not configured: social platform executor is not available", *stored.ResultMessage)
 
 	storedUser, err := client.User.Get(ctx, user.ID)
 	require.NoError(t, err)
@@ -192,6 +288,15 @@ func TestSocialTaskExecutorProcessPendingTasksFailsClosedWhenQueueFull(t *testin
 		SetAccountStatus(SocialAccountStatusAvailable).
 		SetTaskStatus(SocialTaskStatusStored).
 		SaveX(ctx)
+	secondAccount := client.SocialAccount.Create().
+		SetName("executor_queue_full_second").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("executor_queue_full_second").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
 	target := "@target"
 	billingRequestID := "queued-charge-request"
 	first := client.SocialTaskLog.Create().
@@ -206,7 +311,7 @@ func TestSocialTaskExecutorProcessPendingTasksFailsClosedWhenQueueFull(t *testin
 		SetCreatedAt(time.Now().Add(-time.Minute)).
 		SaveX(ctx)
 	second := client.SocialTaskLog.Create().
-		SetSocialAccountID(account.ID).
+		SetSocialAccountID(secondAccount.ID).
 		SetUserID(user.ID).
 		SetAction(SocialTaskActionLike).
 		SetTarget(target).
@@ -217,7 +322,7 @@ func TestSocialTaskExecutorProcessPendingTasksFailsClosedWhenQueueFull(t *testin
 		SetBillingRequestID(billingRequestID).
 		SetCreatedAt(time.Now()).
 		SaveX(ctx)
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 
 	enqueued, err := executor.ProcessPendingTasks(ctx, 2)
 
@@ -238,7 +343,90 @@ func TestSocialTaskExecutorProcessPendingTasksFailsClosedWhenQueueFull(t *testin
 	require.Nil(t, storedSecond.ChargeSource)
 	require.Nil(t, storedSecond.BillingRequestID)
 	require.NotNil(t, storedSecond.ResultMessage)
-	require.Contains(t, *storedSecond.ResultMessage, "queue is full")
+	require.Equal(t, "任务队列繁忙，本次未扣费", *storedSecond.ResultMessage)
+
+	storedAccount, err := client.SocialAccount.Get(ctx, secondAccount.ID)
+	require.NoError(t, err)
+	require.Equal(t, SocialAccountStatusAvailable, storedAccount.AccountStatus)
+	require.Equal(t, SocialTaskStatusStored, storedAccount.TaskStatus)
+	require.NotNil(t, storedAccount.TaskMessage)
+	require.Equal(t, "任务队列繁忙，本次未扣费", *storedAccount.TaskMessage)
+}
+
+func TestSocialTaskExecutorProcessPendingTasksSkipsAlreadyChargedPendingLogs(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	user := client.User.Create().SetEmail("executor-skip-charged-pending@example.com").SetPasswordHash("hash").SetBalance(1).SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("executor_skip_charged_pending").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("executor_skip_charged_pending").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+	secondAccount := client.SocialAccount.Create().
+		SetName("executor_skip_charged_pending_second").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("executor_skip_charged_pending_second").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+	target := "@target"
+	chargedSource := SocialTaskChargeSourceWallet
+	chargedRequestID := "already-charged-request"
+	chargedPending := client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(SocialTaskActionFollow).
+		SetTarget(target).
+		SetStatus(SocialTaskLogStatusPending).
+		SetPrice(SocialTaskUnitPrice).
+		SetChargedAmount(SocialTaskUnitPrice).
+		SetChargeStatus(SocialTaskChargeStatusCharged).
+		SetChargeSource(chargedSource).
+		SetBillingRequestID(chargedRequestID).
+		SetCreatedAt(time.Now().Add(-time.Minute)).
+		SaveX(ctx)
+	notChargedPending := client.SocialTaskLog.Create().
+		SetSocialAccountID(secondAccount.ID).
+		SetUserID(user.ID).
+		SetAction(SocialTaskActionLike).
+		SetTarget(target).
+		SetStatus(SocialTaskLogStatusPending).
+		SetPrice(SocialTaskUnitPrice).
+		SetChargedAmount(0).
+		SetChargeStatus(SocialTaskChargeStatusNotCharged).
+		SetCreatedAt(time.Now()).
+		SaveX(ctx)
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
+
+	executor.processTask(chargedPending.ID)
+	enqueued, err := executor.ProcessPendingTasks(ctx, 2)
+
+	require.NoError(t, err)
+	require.Equal(t, 1, enqueued)
+
+	storedCharged, err := client.SocialTaskLog.Get(ctx, chargedPending.ID)
+	require.NoError(t, err)
+	require.Equal(t, SocialTaskLogStatusPending, storedCharged.Status)
+	require.Equal(t, SocialTaskChargeStatusCharged, storedCharged.ChargeStatus)
+	require.InEpsilon(t, SocialTaskUnitPrice, storedCharged.ChargedAmount, 0.000001)
+	require.NotNil(t, storedCharged.ChargeSource)
+	require.Equal(t, chargedSource, *storedCharged.ChargeSource)
+	require.NotNil(t, storedCharged.BillingRequestID)
+	require.Equal(t, chargedRequestID, *storedCharged.BillingRequestID)
+	require.Nil(t, storedCharged.ResultMessage)
+	require.Nil(t, storedCharged.ExecutedAt)
+
+	storedNotCharged, err := client.SocialTaskLog.Get(ctx, notChargedPending.ID)
+	require.NoError(t, err)
+	require.Equal(t, SocialTaskLogStatusPending, storedNotCharged.Status)
+	require.Equal(t, SocialTaskChargeStatusNotCharged, storedNotCharged.ChargeStatus)
+	require.Zero(t, storedNotCharged.ChargedAmount)
 }
 
 func TestSocialTaskExecutorEnqueueBatchReturnsExactFailedTaskIDs(t *testing.T) {
@@ -316,6 +504,440 @@ func TestAccountWorkbenchServiceRejectsUserTaskWithoutDefaultProxyBeforeLogOrBil
 	require.Zero(t, count)
 }
 
+func TestAccountWorkbenchServiceRejectsNonLoginTaskWithoutDefaultProxyEvenWhenGlobalFallbackExists(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	accountSvc := NewSocialAccountService(client)
+	globalSvc := NewGlobalProxyService(client)
+	user := client.User.Create().
+		SetEmail("user-task-global-not-for-follow@example.com").
+		SetPasswordHash("hash").
+		SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("user_task_global_not_for_follow").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("user_task_global_not_for_follow").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+	global := client.GlobalProxy.Create().
+		SetName("global only").
+		SetIPType(SocialIPTypeResidential).
+		SetEndpoint("http://8.8.8.8:8080").
+		SetStatus(SocialIPStatusOnline).
+		SaveX(ctx)
+	userRepo := &socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}
+	billing := NewSocialBillingService(userRepo, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil)
+	workbench := NewAccountWorkbenchServiceWithGlobalProxies(accountSvc, NewSocialIPService(client), globalSvc, billing, nil)
+	target := "@target"
+
+	result, err := workbench.SubmitTask(ctx, &AccountWorkbenchTaskInput{
+		Mode:       AccountWorkbenchTaskModeUser,
+		UserID:     user.ID,
+		AccountIDs: []int64{account.ID},
+		Action:     SocialTaskActionFollow,
+		Target:     &target,
+	})
+
+	require.Nil(t, result)
+	require.Error(t, err)
+	require.Equal(t, http.StatusBadRequest, infraerrors.Code(err))
+	require.Equal(t, "SOCIAL_IP_NOT_AVAILABLE", infraerrors.Reason(err))
+	storedGlobal := client.GlobalProxy.GetX(ctx, global.ID)
+	require.Nil(t, storedGlobal.LastUsedAt)
+	require.InEpsilon(t, 1.0, userRepo.user.Balance, 0.000001)
+	count, countErr := client.SocialTaskLog.Query().Count(ctx)
+	require.NoError(t, countErr)
+	require.Zero(t, count)
+}
+
+func TestAccountWorkbenchServiceLoginUsesGlobalFallbackWhenAccountHasNoDefaultProxy(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	accountSvc := NewSocialAccountService(client)
+	ipSvc := NewSocialIPService(client)
+	globalSvc := NewGlobalProxyService(client)
+	user := client.User.Create().
+		SetEmail("login-global-fallback@example.com").
+		SetPasswordHash("hash").
+		SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("login_global_fallback").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("login_global_fallback").
+		SetAssignedUserID(user.ID).
+		SetPassword("secret").
+		SetAccountStatus(SocialAccountStatusPendingCheck).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+	endpoint := "http://8.8.8.8:8080"
+	global := client.GlobalProxy.Create().
+		SetName("global fallback").
+		SetIPType(SocialIPTypeResidential).
+		SetEndpoint(endpoint).
+		SetStatus(SocialIPStatusOnline).
+		SaveX(ctx)
+	userRepo := &socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}
+	billing := NewSocialBillingService(userRepo, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil)
+	workbench := NewAccountWorkbenchServiceWithGlobalProxies(accountSvc, ipSvc, globalSvc, billing, nil)
+
+	result, err := workbench.SubmitTask(ctx, &AccountWorkbenchTaskInput{
+		Mode:       AccountWorkbenchTaskModeUser,
+		UserID:     user.ID,
+		AccountIDs: []int64{account.ID},
+		Action:     SocialTaskActionLogin,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, result.FailedClosed)
+	require.Len(t, result.Logs, 1)
+	log := result.Logs[0]
+	require.Nil(t, log.ProxyID)
+	require.NotNil(t, log.ProxySnapshot)
+	require.Contains(t, *log.ProxySnapshot, `"scope":"global"`)
+	require.Contains(t, *log.ProxySnapshot, fmt.Sprintf(`"id":%d`, global.ID))
+	require.Contains(t, *log.ProxySnapshot, endpoint)
+	storedGlobal := client.GlobalProxy.GetX(ctx, global.ID)
+	require.NotNil(t, storedGlobal.LastUsedAt)
+}
+
+func TestAccountWorkbenchServiceLoginPrefersAccountDefaultProxyOverGlobalFallback(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	accountSvc := NewSocialAccountService(client)
+	ipSvc := NewSocialIPService(client)
+	globalSvc := NewGlobalProxyService(client)
+	user := client.User.Create().
+		SetEmail("login-default-proxy-preferred@example.com").
+		SetPasswordHash("hash").
+		SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("login_default_proxy_preferred").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("login_default_proxy_preferred").
+		SetAssignedUserID(user.ID).
+		SetPassword("secret").
+		SetAccountStatus(SocialAccountStatusPendingCheck).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+	userEndpoint := "http://8.8.4.4:8080"
+	userProxy, err := ipSvc.Create(ctx, &CreateSocialIPInput{
+		UserID:   user.ID,
+		Name:     "user login proxy",
+		IPType:   SocialIPTypeResidential,
+		Endpoint: &userEndpoint,
+	})
+	require.NoError(t, err)
+	client.SocialIP.UpdateOneID(userProxy.ID).SetStatus(SocialIPStatusOnline).SaveX(ctx)
+	userProxy, err = ipSvc.GetByID(ctx, userProxy.ID)
+	require.NoError(t, err)
+	_, err = accountSvc.SetDefaultProxyForUser(ctx, account.ID, user.ID, userProxy)
+	require.NoError(t, err)
+	globalEndpoint := "http://1.1.1.1:8080"
+	global := client.GlobalProxy.Create().
+		SetName("unused global fallback").
+		SetIPType(SocialIPTypeResidential).
+		SetEndpoint(globalEndpoint).
+		SetStatus(SocialIPStatusOnline).
+		SaveX(ctx)
+	userRepo := &socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}
+	billing := NewSocialBillingService(userRepo, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil)
+	workbench := NewAccountWorkbenchServiceWithGlobalProxies(accountSvc, ipSvc, globalSvc, billing, nil)
+
+	result, err := workbench.SubmitTask(ctx, &AccountWorkbenchTaskInput{
+		Mode:       AccountWorkbenchTaskModeUser,
+		UserID:     user.ID,
+		AccountIDs: []int64{account.ID},
+		Action:     SocialTaskActionLogin,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Logs, 1)
+	log := result.Logs[0]
+	require.NotNil(t, log.ProxyID)
+	require.Equal(t, userProxy.ID, *log.ProxyID)
+	require.NotNil(t, log.ProxySnapshot)
+	require.Contains(t, *log.ProxySnapshot, userEndpoint)
+	require.NotContains(t, *log.ProxySnapshot, globalEndpoint)
+	storedGlobal := client.GlobalProxy.GetX(ctx, global.ID)
+	require.Nil(t, storedGlobal.LastUsedAt)
+}
+
+func TestAccountWorkbenchServiceLoginWithoutAnyUsableProxyFailsBeforeLogOrBilling(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	accountSvc := NewSocialAccountService(client)
+	user := client.User.Create().
+		SetEmail("login-no-global-proxy@example.com").
+		SetPasswordHash("hash").
+		SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("login_no_global_proxy").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("login_no_global_proxy").
+		SetAssignedUserID(user.ID).
+		SetPassword("secret").
+		SetAccountStatus(SocialAccountStatusPendingCheck).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+	userRepo := &socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}
+	billing := NewSocialBillingService(userRepo, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil)
+	workbench := NewAccountWorkbenchServiceWithGlobalProxies(accountSvc, NewSocialIPService(client), NewGlobalProxyService(client), billing, nil)
+
+	result, err := workbench.SubmitTask(ctx, &AccountWorkbenchTaskInput{
+		Mode:       AccountWorkbenchTaskModeUser,
+		UserID:     user.ID,
+		AccountIDs: []int64{account.ID},
+		Action:     SocialTaskActionLogin,
+	})
+
+	require.Nil(t, result)
+	require.Error(t, err)
+	require.Equal(t, http.StatusBadRequest, infraerrors.Code(err))
+	require.Equal(t, "GLOBAL_PROXY_NOT_AVAILABLE", infraerrors.Reason(err))
+	count, countErr := client.SocialTaskLog.Query().Count(ctx)
+	require.NoError(t, countErr)
+	require.Zero(t, count)
+	require.InEpsilon(t, 1.0, userRepo.user.Balance, 0.000001)
+}
+
+func TestGlobalProxyServiceNextAvailableRotatesOnlineProxies(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewGlobalProxyService(client)
+	first := client.GlobalProxy.Create().
+		SetName("global one").
+		SetIPType(SocialIPTypeResidential).
+		SetEndpoint("http://8.8.8.8:8080").
+		SetStatus(SocialIPStatusOnline).
+		SaveX(ctx)
+	second := client.GlobalProxy.Create().
+		SetName("global two").
+		SetIPType(SocialIPTypeResidential).
+		SetEndpoint("http://8.8.4.4:8080").
+		SetStatus(SocialIPStatusOnline).
+		SaveX(ctx)
+
+	selectedFirst, err := svc.NextAvailable(ctx)
+	require.NoError(t, err)
+	selectedSecond, err := svc.NextAvailable(ctx)
+	require.NoError(t, err)
+
+	require.Equal(t, first.ID, selectedFirst.ID)
+	require.Equal(t, second.ID, selectedSecond.ID)
+}
+
+func TestAccountWorkbenchServiceRejectsStaleDefaultProxySnapshotBeforeLogOrBilling(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(context.Context, *dbent.Client, *SocialIPService, int64) (string, []string)
+	}{
+		{
+			name: "cross owner proxy",
+			setup: func(ctx context.Context, client *dbent.Client, ipSvc *SocialIPService, ownerID int64) (string, []string) {
+				otherUser := client.User.Create().
+					SetEmail("user-task-cross-owner-proxy-other@example.com").
+					SetPasswordHash("hash").
+					SaveX(ctx)
+				otherEndpoint := "http://8.8.4.4:8080"
+				otherIP, err := ipSvc.Create(ctx, &CreateSocialIPInput{
+					UserID:   otherUser.ID,
+					Name:     "cross owner secret proxy",
+					IPType:   SocialIPTypeResidential,
+					Endpoint: &otherEndpoint,
+				})
+				require.NoError(t, err)
+				client.SocialIP.UpdateOneID(otherIP.ID).SetStatus(SocialIPStatusOnline).SaveX(ctx)
+				otherIP, err = ipSvc.GetByID(ctx, otherIP.ID)
+				require.NoError(t, err)
+				return SocialIPTaskSnapshot(otherIP), []string{otherEndpoint, otherIP.Name}
+			},
+		},
+		{
+			name: "deleted proxy",
+			setup: func(ctx context.Context, client *dbent.Client, ipSvc *SocialIPService, ownerID int64) (string, []string) {
+				endpoint := "http://8.8.8.8:8080"
+				deletedIP, err := ipSvc.Create(ctx, &CreateSocialIPInput{
+					UserID:   ownerID,
+					Name:     "deleted default proxy",
+					IPType:   SocialIPTypeResidential,
+					Endpoint: &endpoint,
+				})
+				require.NoError(t, err)
+				client.SocialIP.UpdateOneID(deletedIP.ID).SetStatus(SocialIPStatusOnline).SaveX(ctx)
+				deletedIP, err = ipSvc.GetByID(ctx, deletedIP.ID)
+				require.NoError(t, err)
+				snapshot := SocialIPTaskSnapshot(deletedIP)
+				require.NoError(t, ipSvc.Delete(ctx, deletedIP.ID))
+				return snapshot, []string{endpoint, deletedIP.Name}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			client := newSocialOpsServiceTestClient(t)
+			accountSvc := NewSocialAccountService(client)
+			ipSvc := NewSocialIPService(client)
+			owner := client.User.Create().
+				SetEmail("user-task-stale-proxy-" + strings.ReplaceAll(tc.name, " ", "-") + "@example.com").
+				SetPasswordHash("hash").
+				SaveX(ctx)
+			staleSnapshot, blockedText := tc.setup(ctx, client, ipSvc, owner.ID)
+			account := client.SocialAccount.Create().
+				SetName("user_task_stale_proxy_" + strings.ReplaceAll(tc.name, " ", "_")).
+				SetPlatform("x_twitter").
+				SetPlatformKey("x_twitter").
+				SetNameKey("user_task_stale_proxy_" + strings.ReplaceAll(tc.name, " ", "_")).
+				SetAssignedUserID(owner.ID).
+				SetAccountStatus(SocialAccountStatusAvailable).
+				SetTaskStatus(SocialTaskStatusStored).
+				SetDefaultProxySnapshot(staleSnapshot).
+				SaveX(ctx)
+			userRepo := &socialBillingUserRepoStub{user: &User{ID: owner.ID, Balance: 1}}
+			billing := NewSocialBillingService(userRepo, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil)
+			workbench := NewAccountWorkbenchService(accountSvc, ipSvc, billing, nil)
+			target := "@target"
+
+			result, err := workbench.SubmitTask(ctx, &AccountWorkbenchTaskInput{
+				Mode:       AccountWorkbenchTaskModeUser,
+				UserID:     owner.ID,
+				AccountIDs: []int64{account.ID},
+				Action:     SocialTaskActionFollow,
+				Target:     &target,
+			})
+
+			require.Nil(t, result)
+			require.Error(t, err)
+			require.Equal(t, http.StatusBadRequest, infraerrors.Code(err))
+			require.Equal(t, "SOCIAL_IP_NOT_AVAILABLE", infraerrors.Reason(err))
+			for _, blocked := range blockedText {
+				require.NotContains(t, err.Error(), blocked)
+			}
+			require.InEpsilon(t, 1.0, userRepo.user.Balance, 0.000001)
+			count, countErr := client.SocialTaskLog.Query().Count(ctx)
+			require.NoError(t, countErr)
+			require.Zero(t, count)
+		})
+	}
+}
+
+func TestAccountWorkbenchServiceSubmitTaskRejectsAccountWithActiveTask(t *testing.T) {
+	for _, activeStatus := range []string{SocialTaskLogStatusPending, SocialTaskLogStatusRunning} {
+		t.Run(activeStatus, func(t *testing.T) {
+			ctx := context.Background()
+			client := newSocialOpsServiceTestClient(t)
+			accountSvc := NewSocialAccountService(client)
+			user := client.User.Create().
+				SetEmail("busy-submit-" + activeStatus + "@example.com").
+				SetPasswordHash("hash").
+				SaveX(ctx)
+			account := client.SocialAccount.Create().
+				SetName("busy_submit_" + activeStatus).
+				SetPlatform("x_twitter").
+				SetPlatformKey("x_twitter").
+				SetNameKey("busy_submit_" + activeStatus).
+				SetAssignedUserID(user.ID).
+				SetAccountStatus(SocialAccountStatusAvailable).
+				SetTaskStatus(SocialTaskStatusStored).
+				SaveX(ctx)
+
+			activeLog, err := accountSvc.CreateTaskLog(ctx, &CreateSocialTaskLogInput{
+				AccountID: account.ID,
+				UserID:    user.ID,
+				Action:    SocialTaskActionLoginCheck,
+				Status:    activeStatus,
+			})
+			require.NoError(t, err)
+
+			userRepo := &socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}
+			billing := NewSocialBillingService(userRepo, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil)
+			workbench := NewAccountWorkbenchService(accountSvc, NewSocialIPService(client), billing, nil)
+			target := "@busy_target"
+
+			result, err := workbench.SubmitTask(ctx, &AccountWorkbenchTaskInput{
+				Mode:       AccountWorkbenchTaskModeAdmin,
+				AccountIDs: []int64{account.ID},
+				Action:     SocialTaskActionFollow,
+				Target:     &target,
+			})
+
+			require.Nil(t, result)
+			require.Error(t, err)
+			require.Equal(t, http.StatusConflict, infraerrors.Code(err))
+			require.Equal(t, "SOCIAL_TASK_ACCOUNT_BUSY", infraerrors.Reason(err))
+			require.InEpsilon(t, 1.0, userRepo.user.Balance, 0.000001)
+			count, countErr := client.SocialTaskLog.Query().Count(ctx)
+			require.NoError(t, countErr)
+			require.Equal(t, 1, count)
+			stored := client.SocialTaskLog.GetX(ctx, activeLog.ID)
+			require.Equal(t, activeStatus, stored.Status)
+		})
+	}
+}
+
+func TestAccountWorkbenchServiceSubmitTaskReplaysActiveIdempotentTask(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	accountSvc := NewSocialAccountService(client)
+	user := client.User.Create().
+		SetEmail("busy-submit-idempotent@example.com").
+		SetPasswordHash("hash").
+		SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("busy_submit_idempotent").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("busy_submit_idempotent").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+	idempotencyKey := "busy-submit-idempotent-123"
+	target := "@idempotent_busy_target"
+	activeLog, err := accountSvc.CreateTaskLog(ctx, &CreateSocialTaskLogInput{
+		AccountID:      account.ID,
+		UserID:         user.ID,
+		Action:         SocialTaskActionFollow,
+		Target:         &target,
+		Status:         SocialTaskLogStatusPending,
+		IdempotencyKey: &idempotencyKey,
+	})
+	require.NoError(t, err)
+
+	userRepo := &socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}
+	billing := NewSocialBillingService(userRepo, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil)
+	workbench := NewAccountWorkbenchService(accountSvc, NewSocialIPService(client), billing, nil)
+
+	result, err := workbench.SubmitTask(ctx, &AccountWorkbenchTaskInput{
+		Mode:           AccountWorkbenchTaskModeAdmin,
+		AccountIDs:     []int64{account.ID},
+		Action:         SocialTaskActionFollow,
+		Target:         &target,
+		IdempotencyKey: idempotencyKey,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, result.Submitted)
+	require.Zero(t, result.Enqueued)
+	require.Zero(t, result.FailedClosed)
+	require.Len(t, result.Logs, 1)
+	require.Equal(t, activeLog.ID, result.Logs[0].ID)
+	require.InEpsilon(t, 1.0, userRepo.user.Balance, 0.000001)
+	count, countErr := client.SocialTaskLog.Query().Count(ctx)
+	require.NoError(t, countErr)
+	require.Equal(t, 1, count)
+}
+
 func TestSocialTaskExecutorProcessPendingTasksFailsClosedWhenQueueMissing(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
@@ -357,8 +979,14 @@ func TestSocialTaskExecutorProcessPendingTasksFailsClosedWhenQueueMissing(t *tes
 	require.Nil(t, stored.ChargeSource)
 	require.Nil(t, stored.BillingRequestID)
 	require.NotNil(t, stored.ResultMessage)
-	require.Contains(t, *stored.ResultMessage, "not configured")
-	require.NotContains(t, *stored.ResultMessage, "queue is full")
+	require.Equal(t, "social platform executor queue is not configured; task was not charged", *stored.ResultMessage)
+
+	storedAccount, err := client.SocialAccount.Get(ctx, account.ID)
+	require.NoError(t, err)
+	require.Equal(t, SocialAccountStatusAvailable, storedAccount.AccountStatus)
+	require.Equal(t, SocialTaskStatusStored, storedAccount.TaskStatus)
+	require.NotNil(t, storedAccount.TaskMessage)
+	require.Equal(t, "social platform executor queue is not configured; task was not charged", *storedAccount.TaskMessage)
 }
 
 func TestSocialTaskExecutorStartRecoversExistingPendingTasks(t *testing.T) {
@@ -386,7 +1014,7 @@ func TestSocialTaskExecutorStartRecoversExistingPendingTasks(t *testing.T) {
 		SetChargeStatus(SocialTaskChargeStatusNotCharged).
 		SaveX(ctx)
 
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1, MinIntervalMs: 1})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1, MinIntervalMs: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 	executor.RegisterPlatformExecutor("x_twitter", socialPlatformExecutorFunc(func(context.Context, *dbent.SocialTaskLog, *dbent.SocialAccount) (string, error) {
 		return "follow succeeded", nil
 	}))
@@ -433,7 +1061,7 @@ func TestSocialTaskExecutorStartFailsStaleRunningTasksWithoutCharge(t *testing.T
 		SetUpdatedAt(staleAt).
 		SaveX(ctx)
 
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1, MinIntervalMs: 1})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1, MinIntervalMs: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 	executor.Start()
 	t.Cleanup(executor.Stop)
 
@@ -449,7 +1077,14 @@ func TestSocialTaskExecutorStartFailsStaleRunningTasksWithoutCharge(t *testing.T
 	require.Nil(t, stored.BillingRequestID)
 	require.NotNil(t, stored.ExecutedAt)
 	require.NotNil(t, stored.ResultMessage)
-	require.Contains(t, *stored.ResultMessage, "未扣费")
+	require.Equal(t, "任务执行超时，本次未扣费", *stored.ResultMessage)
+
+	storedAccount, err := client.SocialAccount.Get(ctx, account.ID)
+	require.NoError(t, err)
+	require.Equal(t, SocialAccountStatusAvailable, storedAccount.AccountStatus)
+	require.Equal(t, SocialTaskStatusStored, storedAccount.TaskStatus)
+	require.NotNil(t, storedAccount.TaskMessage)
+	require.Equal(t, "任务执行超时，本次未扣费", *storedAccount.TaskMessage)
 
 	storedUser, err := client.User.Get(ctx, user.ID)
 	require.NoError(t, err)
@@ -537,7 +1172,7 @@ func TestSocialTaskExecutorDispatchesStructuredProfileActionsToPlatformExecutors
 				SaveX(ctx)
 
 			billing := NewSocialBillingService(&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil)
-			executor := NewSocialTaskExecutor(client, billing, SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1})
+			executor := NewSocialTaskExecutor(client, billing, SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 
 			var executedAction string
 			var executedPayload SocialTaskPayload
@@ -595,12 +1230,6 @@ func TestSocialTaskExecutorFailsClosedWhenAccountExecutionScopeChangesBeforeWork
 			},
 		},
 		{
-			name: "account removed from user workbench before execution",
-			mutate: func(client *dbent.Client, accountID int64, _ int64) {
-				client.SocialAccount.UpdateOneID(accountID).SetUserWorkbenchDeletedAt(time.Now()).SaveX(ctx)
-			},
-		},
-		{
 			name: "account marked unavailable before execution",
 			mutate: func(client *dbent.Client, accountID int64, _ int64) {
 				client.SocialAccount.UpdateOneID(accountID).SetAccountStatus(SocialAccountStatusLimited).SaveX(ctx)
@@ -631,7 +1260,7 @@ func TestSocialTaskExecutorFailsClosedWhenAccountExecutionScopeChangesBeforeWork
 				SetChargeStatus(SocialTaskChargeStatusNotCharged).
 				SaveX(ctx)
 			called := false
-			executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1})
+			executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 			executor.RegisterPlatformExecutor("x_twitter", socialPlatformExecutorFunc(func(context.Context, *dbent.SocialTaskLog, *dbent.SocialAccount) (string, error) {
 				called = true
 				return "follow succeeded", nil
@@ -648,8 +1277,7 @@ func TestSocialTaskExecutorFailsClosedWhenAccountExecutionScopeChangesBeforeWork
 			require.Zero(t, storedTask.ChargedAmount)
 			require.Nil(t, storedTask.ChargeSource)
 			require.NotNil(t, storedTask.ResultMessage)
-			require.Equal(t, "任务执行失败，本次未扣费", *storedTask.ResultMessage)
-			require.NotContains(t, *storedTask.ResultMessage, "social account is unavailable")
+			require.Equal(t, "social account is unavailable", *storedTask.ResultMessage)
 
 			storedUser, err := client.User.Get(ctx, user.ID)
 			require.NoError(t, err)
@@ -659,6 +1287,124 @@ func TestSocialTaskExecutorFailsClosedWhenAccountExecutionScopeChangesBeforeWork
 			require.Zero(t, ledgerCount)
 		})
 	}
+}
+
+func TestSocialTaskExecutorDoesNotWriteAccountFailureStateWhenFailedTaskResultCannotPersist(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	user := client.User.Create().SetEmail("executor-failure-result-race@example.com").SetPasswordHash("hash").SetBalance(1).SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("executor_failure_result_race").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("executor_failure_result_race").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+	target := "@target"
+	task := client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(SocialTaskActionFollow).
+		SetTarget(target).
+		SetStatus(SocialTaskLogStatusPending).
+		SetPrice(SocialTaskUnitPrice).
+		SetChargedAmount(0).
+		SetChargeStatus(SocialTaskChargeStatusNotCharged).
+		SaveX(ctx)
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
+	executor.RegisterPlatformExecutor("x_twitter", socialPlatformExecutorFunc(func(context.Context, *dbent.SocialTaskLog, *dbent.SocialAccount) (string, error) {
+		client.SocialTaskLog.UpdateOneID(task.ID).
+			SetStatus(SocialTaskLogStatusFailed).
+			SetResultMessage("already finalized").
+			SetChargedAmount(0).
+			SetChargeStatus(SocialTaskChargeStatusNotCharged).
+			SaveX(ctx)
+		return "", newSocialExecutionError(SocialExecutionFailureChallengeRequired, "additional verification required", nil)
+	}))
+
+	executor.processTask(task.ID)
+
+	storedTask, err := client.SocialTaskLog.Get(ctx, task.ID)
+	require.NoError(t, err)
+	require.Equal(t, SocialTaskLogStatusFailed, storedTask.Status)
+	require.Equal(t, SocialTaskChargeStatusNotCharged, storedTask.ChargeStatus)
+	require.Zero(t, storedTask.ChargedAmount)
+	require.NotNil(t, storedTask.ResultMessage)
+	require.Equal(t, "already finalized", *storedTask.ResultMessage)
+
+	storedAccount, err := client.SocialAccount.Get(ctx, account.ID)
+	require.NoError(t, err)
+	require.Equal(t, SocialAccountStatusAvailable, storedAccount.AccountStatus)
+	require.Equal(t, SocialTaskStatusStored, storedAccount.TaskStatus)
+	require.Nil(t, storedAccount.TaskMessage)
+
+	storedUser, err := client.User.Get(ctx, user.ID)
+	require.NoError(t, err)
+	require.InEpsilon(t, 1.0, storedUser.Balance, 0.000001)
+	ledgerCount, err := client.UsageLog.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Zero(t, ledgerCount)
+}
+
+func TestSocialTaskExecutorDoesNotOverwriteConcurrentlyFinalizedSuccessWhenBillingRaces(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	user := client.User.Create().SetEmail("executor-success-race@example.com").SetPasswordHash("hash").SetBalance(1).SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("executor_success_race").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("executor_success_race").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusPending).
+		SaveX(ctx)
+	target := "@target"
+	task := client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(SocialTaskActionFollow).
+		SetTarget(target).
+		SetStatus(SocialTaskLogStatusPending).
+		SetPrice(SocialTaskUnitPrice).
+		SetChargedAmount(0).
+		SetChargeStatus(SocialTaskChargeStatusNotCharged).
+		SaveX(ctx)
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
+	executor.RegisterPlatformExecutor("x_twitter", socialPlatformExecutorFunc(func(context.Context, *dbent.SocialTaskLog, *dbent.SocialAccount) (string, error) {
+		client.SocialTaskLog.UpdateOneID(task.ID).
+			SetStatus(SocialTaskLogStatusSuccess).
+			SetResultMessage("already finalized").
+			SetExecutedAt(time.Now()).
+			SetChargedAmount(SocialTaskUnitPrice).
+			SetChargeStatus(SocialTaskChargeStatusCharged).
+			SetChargeSource(SocialTaskChargeSourceWallet).
+			SetBillingRequestID("wallet:external-finalizer").
+			SaveX(ctx)
+		return "follow succeeded", nil
+	}))
+
+	executor.processTask(task.ID)
+
+	storedTask, err := client.SocialTaskLog.Get(ctx, task.ID)
+	require.NoError(t, err)
+	require.Equal(t, SocialTaskLogStatusSuccess, storedTask.Status)
+	require.Equal(t, SocialTaskChargeStatusCharged, storedTask.ChargeStatus)
+	require.InEpsilon(t, SocialTaskUnitPrice, storedTask.ChargedAmount, 0.000001)
+	require.NotNil(t, storedTask.ChargeSource)
+	require.Equal(t, SocialTaskChargeSourceWallet, *storedTask.ChargeSource)
+	require.NotNil(t, storedTask.BillingRequestID)
+	require.Equal(t, "wallet:external-finalizer", *storedTask.BillingRequestID)
+	require.NotNil(t, storedTask.ResultMessage)
+	require.Equal(t, "already finalized", *storedTask.ResultMessage)
+
+	storedAccount, err := client.SocialAccount.Get(ctx, account.ID)
+	require.NoError(t, err)
+	require.Equal(t, SocialAccountStatusAvailable, storedAccount.AccountStatus)
+	require.Equal(t, SocialTaskStatusPending, storedAccount.TaskStatus)
+	require.Nil(t, storedAccount.TaskMessage)
 }
 
 func TestSocialTaskExecutorFailsClosedWhenPlatformExecutorPanics(t *testing.T) {
@@ -685,7 +1431,7 @@ func TestSocialTaskExecutorFailsClosedWhenPlatformExecutorPanics(t *testing.T) {
 		SetChargedAmount(0).
 		SetChargeStatus(SocialTaskChargeStatusNotCharged).
 		SaveX(ctx)
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 	executor.RegisterPlatformExecutor("x_twitter", socialPlatformExecutorFunc(func(context.Context, *dbent.SocialTaskLog, *dbent.SocialAccount) (string, error) {
 		panic("panic-secret-token")
 	}))
@@ -701,8 +1447,7 @@ func TestSocialTaskExecutorFailsClosedWhenPlatformExecutorPanics(t *testing.T) {
 	require.Zero(t, storedTask.ChargedAmount)
 	require.Nil(t, storedTask.ChargeSource)
 	require.NotNil(t, storedTask.ResultMessage)
-	require.Equal(t, "该平台动作暂不可用，本次未扣费", *storedTask.ResultMessage)
-	require.NotContains(t, *storedTask.ResultMessage, "panic-secret-token")
+	require.Equal(t, "social platform executor failed unexpectedly", *storedTask.ResultMessage)
 
 	storedUser, err := client.User.Get(ctx, user.ID)
 	require.NoError(t, err)
@@ -736,7 +1481,7 @@ func TestSocialTaskExecutorStoresSafeFailureMessage(t *testing.T) {
 		SetChargedAmount(0).
 		SetChargeStatus(SocialTaskChargeStatusNotCharged).
 		SaveX(ctx)
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 	executor.RegisterPlatformExecutor("x_twitter", socialPlatformExecutorFunc(func(context.Context, *dbent.SocialTaskLog, *dbent.SocialAccount) (string, error) {
 		return "", newSocialExecutionError(
 			SocialExecutionFailureNetwork,
@@ -754,14 +1499,15 @@ func TestSocialTaskExecutorStoresSafeFailureMessage(t *testing.T) {
 	require.Zero(t, storedTask.ChargedAmount)
 	require.Nil(t, storedTask.ChargeSource)
 	require.NotNil(t, storedTask.ResultMessage)
-	require.Equal(t, "执行代理不可用，本次未扣费", *storedTask.ResultMessage)
+	require.Equal(t, "平台网络请求失败，本次未扣费", *storedTask.ResultMessage)
 	require.NotContains(t, *storedTask.ResultMessage, "user:pass")
 	require.NotContains(t, *storedTask.ResultMessage, "secret-token")
 
 	storedAccount, err := client.SocialAccount.Get(ctx, account.ID)
 	require.NoError(t, err)
+	require.Equal(t, SocialTaskStatusStored, storedAccount.TaskStatus)
 	require.NotNil(t, storedAccount.TaskMessage)
-	require.Equal(t, "执行代理不可用，本次未扣费", *storedAccount.TaskMessage)
+	require.Equal(t, "平台网络请求失败，本次未扣费", *storedAccount.TaskMessage)
 	require.NotContains(t, *storedAccount.TaskMessage, "user:pass")
 	require.NotContains(t, *storedAccount.TaskMessage, "secret-token")
 
@@ -776,7 +1522,7 @@ func TestSocialTaskExecutorStoresSafeFailureMessage(t *testing.T) {
 func TestSafeSocialTaskFailureMessageMapsUnsupportedMediaSourceToSafeResult(t *testing.T) {
 	err := newSocialExecutionError(
 		SocialExecutionFailureActionInput,
-		"post media #1 media source is not supported yet",
+		"post media #1 media source is not supported for SocialOps execution",
 		nil,
 	)
 
@@ -815,6 +1561,78 @@ func TestSafeSocialTaskFailureMessagePreservesSpecificTargetAndContentPlatformRe
 				nil,
 			),
 			want: "内容或目标状态不符合平台要求，本次未扣费",
+		},
+		{
+			name: "twitter account not found",
+			err: newSocialExecutionError(
+				SocialExecutionFailurePlatform,
+				"twitter error 399: Sorry, we could not find your account.",
+				nil,
+			),
+			want: "账号不存在，本次未扣费",
+		},
+		{
+			name: "twitter 399 wrong password prefers password classification",
+			err: newSocialExecutionError(
+				SocialExecutionFailurePlatform,
+				"twitter error 399: Wrong password!",
+				nil,
+			),
+			want: "密码错误，本次未扣费",
+		},
+		{
+			name: "twitter 399 without exact business message remains raw",
+			err: newSocialExecutionError(
+				SocialExecutionFailurePlatform,
+				"twitter error 399",
+				nil,
+			),
+			want: "twitter error 399",
+		},
+		{
+			name: "twitter 399 with unknown business message remains raw",
+			err: newSocialExecutionError(
+				SocialExecutionFailurePlatform,
+				"twitter error 399: Password checkpoint required.",
+				nil,
+			),
+			want: "twitter error 399: Password checkpoint required.",
+		},
+		{
+			name: "typed password failure wins over generic twitter 399 code",
+			err: newSocialExecutionError(
+				SocialExecutionFailurePasswordInvalid,
+				"twitter error 399",
+				nil,
+			),
+			want: "密码错误，本次未扣费",
+		},
+		{
+			name: "unknown twitter platform error",
+			err: newSocialExecutionError(
+				SocialExecutionFailurePlatform,
+				"twitter error 999: Something unexpected happened.",
+				nil,
+			),
+			want: "twitter error 999: Something unexpected happened.",
+		},
+		{
+			name: "twitter anti automation",
+			err: newSocialExecutionError(
+				SocialExecutionFailurePlatform,
+				"twitter error 226: This request looks like it might be automated.",
+				nil,
+			),
+			want: "账号状态或频率受限，本次未扣费",
+		},
+		{
+			name: "twitter login verification",
+			err: newSocialExecutionError(
+				SocialExecutionFailurePlatform,
+				"twitter error 231: User must verify login",
+				nil,
+			),
+			want: "账号需要额外验证，本次未扣费",
 		},
 	}
 
@@ -887,7 +1705,7 @@ func TestSafeSocialTaskFailureMessageMapsTwitterMediaUploadFailuresToSafeResult(
 
 func TestTwitterExecutorFailsClosedWhenVideoMediaProcessingFails(t *testing.T) {
 	ctx := context.Background()
-	executionAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	executionAuth := encryptedTwitterExecutionAuthForTest(t)
 	account := &dbent.SocialAccount{ID: 18, Name: "@video_processing_fail_account", Platform: "x_twitter", ExecutionAuth: &executionAuth}
 	proxySnapshot := `{"id":1,"endpoint":"http://8.8.8.8:8080","status":"online"}`
 	task := &dbent.SocialTaskLog{
@@ -907,7 +1725,7 @@ func TestTwitterExecutorFailsClosedWhenVideoMediaProcessingFails(t *testing.T) {
 			},
 		},
 	}
-	twitterExec := NewTwitterExecutor()
+	twitterExec := newEncryptedTwitterExecutorForTest()
 	twitterExec.clientForProxy = func(proxyURL string) (twitterHTTPClient, error) {
 		t.Fatal("video media should fail closed before building HTTP client")
 		return nil, nil
@@ -917,7 +1735,7 @@ func TestTwitterExecutorFailsClosedWhenVideoMediaProcessingFails(t *testing.T) {
 
 	require.Empty(t, result)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "video media is not implemented yet")
+	require.ErrorContains(t, err, "video media is not supported for SocialOps execution")
 	kind, ok := socialExecutionFailureKind(err)
 	require.True(t, ok)
 	require.Equal(t, SocialExecutionFailureActionInput, kind)
@@ -947,13 +1765,19 @@ func TestTwitterErrorMessageMapsAntiAutomationAndLoginVerificationCodes(t *testi
 			name:       "anti automation",
 			statusCode: http.StatusForbidden,
 			body:       `{"errors":[{"code":226,"message":"This request looks like it might be automated."}]}`,
-			want:       "request looks automated",
+			want:       "twitter error 226: This request looks like it might be automated.",
 		},
 		{
 			name:       "login verification",
 			statusCode: http.StatusForbidden,
 			body:       `{"errors":[{"code":231,"message":"User must verify login"}]}`,
-			want:       "login verification required",
+			want:       "twitter error 231: User must verify login",
+		},
+		{
+			name:       "account not found",
+			statusCode: http.StatusForbidden,
+			body:       `{"errors":[{"code":399,"message":"Sorry, we could not find your account."}]}`,
+			want:       "twitter error 399: Sorry, we could not find your account.",
 		},
 	}
 
@@ -985,6 +1809,46 @@ func TestTwitterFailureKindMapsAntiAutomationAndLoginVerificationSignals(t *test
 				Message:    "login verification required",
 			},
 			want: SocialExecutionFailureChallengeRequired,
+		},
+		{
+			name: "account not found",
+			result: twitterActionResult{
+				StatusCode: http.StatusForbidden,
+				Message:    "twitter error 399: Sorry, we could not find your account.",
+			},
+			want: SocialExecutionFailureAuthInvalid,
+		},
+		{
+			name: "wrong password",
+			result: twitterActionResult{
+				StatusCode: http.StatusForbidden,
+				Message:    "twitter error 399: Wrong password!",
+			},
+			want: SocialExecutionFailurePasswordInvalid,
+		},
+		{
+			name: "twitter code without exact message stays platform",
+			result: twitterActionResult{
+				StatusCode: http.StatusForbidden,
+				Message:    "twitter error 399",
+			},
+			want: SocialExecutionFailurePlatform,
+		},
+		{
+			name: "twitter code with unknown message stays platform",
+			result: twitterActionResult{
+				StatusCode: http.StatusForbidden,
+				Message:    "twitter error 399: Password checkpoint required.",
+			},
+			want: SocialExecutionFailurePlatform,
+		},
+		{
+			name: "auth token invalid",
+			result: twitterActionResult{
+				StatusCode: http.StatusUnauthorized,
+				Message:    "twitter error 89: Invalid or expired token.",
+			},
+			want: SocialExecutionFailureAuthInvalid,
 		},
 	}
 
@@ -1019,7 +1883,7 @@ func TestSocialTaskExecutorWritesBackChallengeRequiredFailureState(t *testing.T)
 		SetChargedAmount(0).
 		SetChargeStatus(SocialTaskChargeStatusNotCharged).
 		SaveX(ctx)
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 	executor.RegisterPlatformExecutor("x_twitter", socialPlatformExecutorFunc(func(context.Context, *dbent.SocialTaskLog, *dbent.SocialAccount) (string, error) {
 		return "", newSocialExecutionError(
 			SocialExecutionFailureChallengeRequired,
@@ -1087,7 +1951,7 @@ func TestSocialTaskExecutorStoresSafeMediaUploadFailureMessage(t *testing.T) {
 			},
 		}).
 		SaveX(ctx)
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 	executor.RegisterPlatformExecutor("x_twitter", socialPlatformExecutorFunc(func(context.Context, *dbent.SocialTaskLog, *dbent.SocialAccount) (string, error) {
 		return "", newSocialExecutionError(
 			SocialExecutionFailurePlatform,
@@ -1146,7 +2010,7 @@ func TestSocialTaskExecutorWritesBackAccountLimitedFailureState(t *testing.T) {
 		SetChargedAmount(0).
 		SetChargeStatus(SocialTaskChargeStatusNotCharged).
 		SaveX(ctx)
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 	executor.RegisterPlatformExecutor("x_twitter", socialPlatformExecutorFunc(func(context.Context, *dbent.SocialTaskLog, *dbent.SocialAccount) (string, error) {
 		return "", newSocialExecutionError(
 			SocialExecutionFailureAccountLimited,
@@ -1197,7 +2061,7 @@ func TestAccountWorkbenchServiceFailsClosedWhenExecutorStopped(t *testing.T) {
 		SaveX(ctx)
 	userRepo := &socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}
 	billing := NewSocialBillingService(userRepo, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil)
-	executor := NewSocialTaskExecutor(client, billing, SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1})
+	executor := NewSocialTaskExecutor(client, billing, SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 	executor.Stop()
 	workbench := NewAccountWorkbenchService(accountSvc, NewSocialIPService(client), billing, executor)
 	target := "@target"
@@ -1222,7 +2086,7 @@ func TestAccountWorkbenchServiceFailsClosedWhenExecutorStopped(t *testing.T) {
 	require.Zero(t, result.Logs[0].ChargedAmount)
 	require.Nil(t, result.Logs[0].BillingRequestID)
 	require.NotNil(t, result.Logs[0].ResultMessage)
-	require.Contains(t, *result.Logs[0].ResultMessage, "not configured")
+	require.Equal(t, "social platform executor queue is not configured; task was not charged", *result.Logs[0].ResultMessage)
 
 	stored, err := client.SocialTaskLog.Get(ctx, result.Logs[0].ID)
 	require.NoError(t, err)
@@ -1230,6 +2094,13 @@ func TestAccountWorkbenchServiceFailsClosedWhenExecutorStopped(t *testing.T) {
 	require.Equal(t, SocialTaskChargeStatusNotCharged, stored.ChargeStatus)
 	require.Zero(t, stored.ChargedAmount)
 	require.Nil(t, stored.BillingRequestID)
+
+	storedAccount, err := client.SocialAccount.Get(ctx, account.ID)
+	require.NoError(t, err)
+	require.Equal(t, SocialAccountStatusAvailable, storedAccount.AccountStatus)
+	require.Equal(t, SocialTaskStatusStored, storedAccount.TaskStatus)
+	require.NotNil(t, storedAccount.TaskMessage)
+	require.Equal(t, "social platform executor queue is not configured; task was not charged", *storedAccount.TaskMessage)
 }
 
 func TestAccountWorkbenchServiceReturnsErrorWhenFailClosedStatusCannotPersist(t *testing.T) {
@@ -1275,6 +2146,92 @@ func TestAccountWorkbenchServiceReturnsErrorWhenFailClosedStatusCannotPersist(t 
 	require.Zero(t, stored.ChargedAmount)
 }
 
+func TestSocialAccountServiceDoesNotFailClosedFinalizedTaskLog(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	accountSvc := NewSocialAccountService(client)
+	user := client.User.Create().SetEmail("finalized-log-owner@example.com").SetPasswordHash("hash").SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("finalized_log_account").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("finalized_log_account").
+		SetAssignedUserID(user.ID).
+		SaveX(ctx)
+	chargeSource := SocialTaskChargeSourceWallet
+	billingRequestID := "wallet:already-finalized"
+	task := client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(SocialTaskActionFollow).
+		SetStatus(SocialTaskLogStatusSuccess).
+		SetResultMessage("already succeeded").
+		SetPrice(SocialTaskUnitPrice).
+		SetChargedAmount(SocialTaskUnitPrice).
+		SetChargeStatus(SocialTaskChargeStatusCharged).
+		SetChargeSource(chargeSource).
+		SetBillingRequestID(billingRequestID).
+		SaveX(ctx)
+
+	updated, err := accountSvc.MarkTaskLogFailedNotCharged(ctx, task.ID, "queue is full")
+
+	require.Nil(t, updated)
+	require.Error(t, err)
+	require.Equal(t, http.StatusConflict, infraerrors.Code(err))
+	stored, err := client.SocialTaskLog.Get(ctx, task.ID)
+	require.NoError(t, err)
+	require.Equal(t, SocialTaskLogStatusSuccess, stored.Status)
+	require.Equal(t, "already succeeded", *stored.ResultMessage)
+	require.Equal(t, SocialTaskChargeStatusCharged, stored.ChargeStatus)
+	require.InEpsilon(t, SocialTaskUnitPrice, stored.ChargedAmount, 0.000001)
+	require.NotNil(t, stored.ChargeSource)
+	require.Equal(t, chargeSource, *stored.ChargeSource)
+	require.NotNil(t, stored.BillingRequestID)
+	require.Equal(t, billingRequestID, *stored.BillingRequestID)
+}
+
+func TestSocialAccountServiceFailClosedTaskLogUpdatesAccountVisibleState(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	accountSvc := NewSocialAccountService(client)
+	user := client.User.Create().SetEmail("fail-closed-account-state@example.com").SetPasswordHash("hash").SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("fail_closed_account_state").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("fail_closed_account_state").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusPending).
+		SetTaskMessage("previous pending message").
+		SaveX(ctx)
+	task := client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(SocialTaskActionFollow).
+		SetStatus(SocialTaskLogStatusPending).
+		SetPrice(SocialTaskUnitPrice).
+		SetChargedAmount(0).
+		SetChargeStatus(SocialTaskChargeStatusNotCharged).
+		SaveX(ctx)
+
+	updated, err := accountSvc.MarkTaskLogFailedNotCharged(ctx, task.ID, "任务队列繁忙，本次未扣费")
+
+	require.NoError(t, err)
+	require.Equal(t, SocialTaskLogStatusFailed, updated.Status)
+	require.Equal(t, SocialTaskChargeStatusNotCharged, updated.ChargeStatus)
+	require.Zero(t, updated.ChargedAmount)
+	require.NotNil(t, updated.ResultMessage)
+	require.Equal(t, "任务队列繁忙，本次未扣费", *updated.ResultMessage)
+
+	storedAccount, err := client.SocialAccount.Get(ctx, account.ID)
+	require.NoError(t, err)
+	require.Equal(t, SocialAccountStatusAvailable, storedAccount.AccountStatus)
+	require.Equal(t, SocialTaskStatusStored, storedAccount.TaskStatus)
+	require.NotNil(t, storedAccount.TaskMessage)
+	require.Equal(t, "任务队列繁忙，本次未扣费", *storedAccount.TaskMessage)
+}
+
 func TestTwitterExecutorFailsClosedWithoutExecutionAuth(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
@@ -1301,8 +2258,8 @@ func TestTwitterExecutorFailsClosedWithoutExecutionAuth(t *testing.T) {
 		SetChargedAmount(0).
 		SetChargeStatus(SocialTaskChargeStatusNotCharged).
 		SaveX(ctx)
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1})
-	executor.RegisterPlatformExecutor("x_twitter", NewTwitterExecutor())
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
+	executor.RegisterPlatformExecutor("x_twitter", newEncryptedTwitterExecutorForTest())
 
 	executor.processTask(task.ID)
 
@@ -1332,7 +2289,7 @@ func TestTwitterExecutorSuccessChargesOnlyAfterSuccessfulAction(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
 	user := client.User.Create().SetEmail("twitter-success@example.com").SetPasswordHash("hash").SetBalance(1).SaveX(ctx)
-	executionAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	executionAuth := encryptedTwitterExecutionAuthForTest(t)
 	account := client.SocialAccount.Create().
 		SetName("twitter_success").
 		SetPlatform("x_twitter").
@@ -1370,13 +2327,13 @@ func TestTwitterExecutorSuccessChargesOnlyAfterSuccessfulAction(t *testing.T) {
 			Request:    req,
 		}, nil
 	}}
-	twitterExec := NewTwitterExecutor()
+	twitterExec := newEncryptedTwitterExecutorForTest()
 	twitterExec.clientForProxy = func(proxyURL string) (twitterHTTPClient, error) {
 		require.Equal(t, "http://8.8.8.8:8080", proxyURL)
 		return &http.Client{Transport: fakeTransport}, nil
 	}
 	billing := NewSocialBillingService(&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil)
-	executor := NewSocialTaskExecutor(client, billing, SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1})
+	executor := NewSocialTaskExecutor(client, billing, SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 	executor.RegisterPlatformExecutor("x_twitter", twitterExec)
 
 	executor.processTask(task.ID)
@@ -1427,7 +2384,7 @@ func TestSocialTaskExecutorDoesNotMarkAccountSuccessfulWhenBillingFails(t *testi
 		SetChargedAmount(0).
 		SetChargeStatus(SocialTaskChargeStatusNotCharged).
 		SaveX(ctx)
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 	executor.RegisterPlatformExecutor("x_twitter", socialPlatformExecutorFunc(func(context.Context, *dbent.SocialTaskLog, *dbent.SocialAccount) (string, error) {
 		return "follow succeeded", nil
 	}))
@@ -1447,13 +2404,14 @@ func TestSocialTaskExecutorDoesNotMarkAccountSuccessfulWhenBillingFails(t *testi
 	storedAccount, err := client.SocialAccount.Get(ctx, account.ID)
 	require.NoError(t, err)
 	require.Equal(t, SocialAccountStatusAvailable, storedAccount.AccountStatus)
-	require.Equal(t, SocialTaskStatusPending, storedAccount.TaskStatus)
-	require.Nil(t, storedAccount.TaskMessage)
+	require.Equal(t, SocialTaskStatusStored, storedAccount.TaskStatus)
+	require.NotNil(t, storedAccount.TaskMessage)
+	require.Equal(t, "执行已完成，但扣费确认异常，请联系管理员处理", *storedAccount.TaskMessage)
 }
 
 func TestTwitterExecutorSendsRealLoginLikePostAndRetweetRequests(t *testing.T) {
 	ctx := context.Background()
-	executionAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	executionAuth := encryptedTwitterExecutionAuthForTest(t)
 	proxySnapshot := `{"id":1,"endpoint":"http://8.8.8.8:8080","status":"online"}`
 	account := &dbent.SocialAccount{
 		ID:            101,
@@ -1534,7 +2492,7 @@ func TestTwitterExecutorSendsRealLoginLikePostAndRetweetRequests(t *testing.T) {
 					Request:    req,
 				}, nil
 			}}
-			twitterExec := NewTwitterExecutor()
+			twitterExec := newEncryptedTwitterExecutorForTest()
 			twitterExec.endpoints = twitterEndpoints{
 				createFriendship: "https://twitter.test/1.1/friendships/create.json",
 				favoriteTweet:    "https://twitter.test/graphql/FavoriteTweet",
@@ -1567,7 +2525,7 @@ func TestTwitterExecutorOfflineProxyMarksAccountIPUnavailableOnly(t *testing.T) 
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
 	user := client.User.Create().SetEmail("twitter-offline-proxy@example.com").SetPasswordHash("hash").SetBalance(1).SaveX(ctx)
-	executionAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	executionAuth := encryptedTwitterExecutionAuthForTest(t)
 	account := client.SocialAccount.Create().
 		SetName("twitter_offline_proxy").
 		SetPlatform("x_twitter").
@@ -1591,8 +2549,8 @@ func TestTwitterExecutorOfflineProxyMarksAccountIPUnavailableOnly(t *testing.T) 
 		SetChargedAmount(0).
 		SetChargeStatus(SocialTaskChargeStatusNotCharged).
 		SaveX(ctx)
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1})
-	executor.RegisterPlatformExecutor("x_twitter", NewTwitterExecutor())
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
+	executor.RegisterPlatformExecutor("x_twitter", newEncryptedTwitterExecutorForTest())
 
 	executor.processTask(task.ID)
 
@@ -1614,7 +2572,7 @@ func TestTwitterExecutorOfflineProxyMarksAccountIPUnavailableOnly(t *testing.T) 
 
 func TestTwitterExecutorUsesStructuredPostPayloadForQuoteTweet(t *testing.T) {
 	ctx := context.Background()
-	executionAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	executionAuth := encryptedTwitterExecutionAuthForTest(t)
 	account := &dbent.SocialAccount{ID: 1, Name: "@quote_account", Platform: "x_twitter", ExecutionAuth: &executionAuth}
 	proxySnapshot := `{"id":1,"endpoint":"http://8.8.8.8:8080","status":"online"}`
 	task := &dbent.SocialTaskLog{
@@ -1625,7 +2583,7 @@ func TestTwitterExecutorUsesStructuredPostPayloadForQuoteTweet(t *testing.T) {
 		Payload: SocialTaskPayload{
 			Post: &SocialPostPayload{
 				Text:         "hello quote",
-				QuotePostURL: "https://x.com/openai/status/1",
+				QuotePostURL: "https://x.com/northwind/status/1",
 			},
 		},
 	}
@@ -1640,7 +2598,7 @@ func TestTwitterExecutorUsesStructuredPostPayloadForQuoteTweet(t *testing.T) {
 		var variables map[string]any
 		require.NoError(t, json.Unmarshal([]byte(payload["variables"]), &variables))
 		require.Equal(t, "hello quote", variables["tweet_text"])
-		require.Equal(t, "https://x.com/openai/status/1", variables["attachment_url"])
+		require.Equal(t, "https://x.com/northwind/status/1", variables["attachment_url"])
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Header:     make(http.Header),
@@ -1648,7 +2606,7 @@ func TestTwitterExecutorUsesStructuredPostPayloadForQuoteTweet(t *testing.T) {
 			Request:    req,
 		}, nil
 	}}
-	twitterExec := NewTwitterExecutor()
+	twitterExec := newEncryptedTwitterExecutorForTest()
 	twitterExec.endpoints = twitterEndpoints{
 		createTweet: "https://twitter.test/graphql/CreateTweet",
 	}
@@ -1702,7 +2660,7 @@ func TestSocialTaskExecutorProcessesMediaOnlyPostPayload(t *testing.T) {
 		SaveX(ctx)
 
 	executed := false
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 	executor.RegisterPlatformExecutor("x_twitter", socialPlatformExecutorFunc(func(_ context.Context, taskLog *dbent.SocialTaskLog, socialAccount *dbent.SocialAccount) (string, error) {
 		executed = true
 		require.Equal(t, task.ID, taskLog.ID)
@@ -1745,7 +2703,7 @@ func TestSocialTaskExecutorProcessesMediaOnlyPostPayload(t *testing.T) {
 
 func TestTwitterExecutorUsesStructuredInlineImageMediaForPost(t *testing.T) {
 	ctx := context.Background()
-	executionAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	executionAuth := encryptedTwitterExecutionAuthForTest(t)
 	account := &dbent.SocialAccount{ID: 11, Name: "@image_post_account", Platform: "x_twitter", ExecutionAuth: &executionAuth}
 	proxySnapshot := `{"id":1,"endpoint":"http://8.8.8.8:8080","status":"online"}`
 	task := &dbent.SocialTaskLog{
@@ -1816,7 +2774,7 @@ func TestTwitterExecutorUsesStructuredInlineImageMediaForPost(t *testing.T) {
 			return nil, nil
 		}
 	}}
-	twitterExec := NewTwitterExecutor()
+	twitterExec := newEncryptedTwitterExecutorForTest()
 	twitterExec.endpoints = twitterEndpoints{
 		mediaUpload: "https://twitter.test/1.1/media/upload.json",
 		createTweet: "https://twitter.test/graphql/CreateTweet",
@@ -1837,7 +2795,7 @@ func TestTwitterExecutorUsesTaskMediaAssetForPost(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
 	user := client.User.Create().SetEmail("twitter-task-media@example.com").SetPasswordHash("hash").SaveX(ctx)
-	executionAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	executionAuth := encryptedTwitterExecutionAuthForTest(t)
 	account := &dbent.SocialAccount{ID: 11, Name: "@image_post_account", Platform: "x_twitter", ExecutionAuth: &executionAuth}
 	mediaSvc := NewSocialTaskMediaService(client)
 	inlineRef := SocialTaskMediaRef{
@@ -1906,7 +2864,7 @@ func TestTwitterExecutorUsesTaskMediaAssetForPost(t *testing.T) {
 			return nil, nil
 		}
 	}}
-	twitterExec := NewTwitterExecutor().WithMediaResolver(mediaSvc)
+	twitterExec := newEncryptedTwitterExecutorForTest().WithMediaResolver(mediaSvc)
 	twitterExec.endpoints = twitterEndpoints{
 		mediaUpload: "https://twitter.test/1.1/media/upload.json",
 		createTweet: "https://twitter.test/graphql/CreateTweet",
@@ -1927,7 +2885,7 @@ func TestTwitterExecutorRejectsMissingTaskMediaAssetForPost(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
 	user := client.User.Create().SetEmail("twitter-missing-task-media@example.com").SetPasswordHash("hash").SaveX(ctx)
-	executionAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	executionAuth := encryptedTwitterExecutionAuthForTest(t)
 	account := &dbent.SocialAccount{ID: 12, Name: "@missing_media_post_account", Platform: "x_twitter", ExecutionAuth: &executionAuth}
 	proxySnapshot := `{"id":1,"endpoint":"http://8.8.8.8:8080","status":"online"}`
 	task := &dbent.SocialTaskLog{
@@ -1948,7 +2906,7 @@ func TestTwitterExecutorRejectsMissingTaskMediaAssetForPost(t *testing.T) {
 			},
 		},
 	}
-	twitterExec := NewTwitterExecutor().WithMediaResolver(NewSocialTaskMediaService(client))
+	twitterExec := newEncryptedTwitterExecutorForTest().WithMediaResolver(NewSocialTaskMediaService(client))
 	twitterExec.clientForProxy = func(proxyURL string) (twitterHTTPClient, error) {
 		t.Fatal("missing task media should fail before building HTTP client")
 		return nil, nil
@@ -1966,7 +2924,7 @@ func TestTwitterExecutorRejectsMissingTaskMediaAssetForPost(t *testing.T) {
 
 func TestTwitterExecutorFailsClosedForStructuredVideoMediaBeforeHTTP(t *testing.T) {
 	ctx := context.Background()
-	executionAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	executionAuth := encryptedTwitterExecutionAuthForTest(t)
 	account := &dbent.SocialAccount{ID: 12, Name: "@video_post_account", Platform: "x_twitter", ExecutionAuth: &executionAuth}
 	proxySnapshot := `{"id":1,"endpoint":"http://8.8.8.8:8080","status":"online"}`
 	task := &dbent.SocialTaskLog{
@@ -1986,7 +2944,7 @@ func TestTwitterExecutorFailsClosedForStructuredVideoMediaBeforeHTTP(t *testing.
 			},
 		},
 	}
-	twitterExec := NewTwitterExecutor()
+	twitterExec := newEncryptedTwitterExecutorForTest()
 	twitterExec.clientForProxy = func(proxyURL string) (twitterHTTPClient, error) {
 		t.Fatal("video media should fail closed before building HTTP client")
 		return nil, nil
@@ -1996,12 +2954,12 @@ func TestTwitterExecutorFailsClosedForStructuredVideoMediaBeforeHTTP(t *testing.
 
 	require.Empty(t, result)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "video media is not implemented yet")
+	require.ErrorContains(t, err, "video media is not supported for SocialOps execution")
 }
 
 func TestTwitterExecutorUsesStructuredProfilePayloadForUpdateProfile(t *testing.T) {
 	ctx := context.Background()
-	executionAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	executionAuth := encryptedTwitterExecutionAuthForTest(t)
 	account := &dbent.SocialAccount{ID: 2, Name: "@profile_account", Platform: "x_twitter", ExecutionAuth: &executionAuth}
 	proxySnapshot := `{"id":1,"endpoint":"http://8.8.8.8:8080","status":"online"}`
 	task := &dbent.SocialTaskLog{
@@ -2038,7 +2996,7 @@ func TestTwitterExecutorUsesStructuredProfilePayloadForUpdateProfile(t *testing.
 			Request:    req,
 		}, nil
 	}}
-	twitterExec := NewTwitterExecutor()
+	twitterExec := newEncryptedTwitterExecutorForTest()
 	twitterExec.endpoints = twitterEndpoints{
 		updateProfile: "https://twitter.test/1.1/account/update_profile.json",
 	}
@@ -2056,7 +3014,7 @@ func TestTwitterExecutorUsesStructuredProfilePayloadForUpdateProfile(t *testing.
 
 func TestTwitterExecutorRejectsUpdateAvatarWithoutMedia(t *testing.T) {
 	ctx := context.Background()
-	executionAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	executionAuth := encryptedTwitterExecutionAuthForTest(t)
 	account := &dbent.SocialAccount{ID: 3, Name: "@avatar_account", Platform: "x_twitter", ExecutionAuth: &executionAuth}
 	proxySnapshot := `{"id":1,"endpoint":"http://8.8.8.8:8080","status":"online"}`
 	task := &dbent.SocialTaskLog{
@@ -2065,7 +3023,7 @@ func TestTwitterExecutorRejectsUpdateAvatarWithoutMedia(t *testing.T) {
 		ProxySnapshot: &proxySnapshot,
 		Payload:       SocialTaskPayload{},
 	}
-	twitterExec := NewTwitterExecutor()
+	twitterExec := newEncryptedTwitterExecutorForTest()
 	twitterExec.clientForProxy = func(proxyURL string) (twitterHTTPClient, error) {
 		t.Fatal("avatar update without media should fail before building HTTP client")
 		return nil, nil
@@ -2083,7 +3041,7 @@ func TestTwitterExecutorRejectsUpdateAvatarWithoutMedia(t *testing.T) {
 
 func TestTwitterExecutorNormalizesAvatarImageBeforeUpload(t *testing.T) {
 	ctx := context.Background()
-	executionAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	executionAuth := encryptedTwitterExecutionAuthForTest(t)
 	account := &dbent.SocialAccount{ID: 13, Name: "@avatar_dimension_account", Platform: "x_twitter", ExecutionAuth: &executionAuth}
 	proxySnapshot := `{"id":1,"endpoint":"http://8.8.8.8:8080","status":"online"}`
 	task := &dbent.SocialTaskLog{
@@ -2115,7 +3073,7 @@ func TestTwitterExecutorNormalizesAvatarImageBeforeUpload(t *testing.T) {
 			Request:    req,
 		}, nil
 	}}
-	twitterExec := NewTwitterExecutor()
+	twitterExec := newEncryptedTwitterExecutorForTest()
 	twitterExec.endpoints = twitterEndpoints{
 		updateProfileImage: "https://twitter.test/1.1/account/update_profile_image.json",
 	}
@@ -2135,7 +3093,7 @@ func TestTwitterExecutorUsesTaskMediaAssetForUpdateAvatar(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
 	user := client.User.Create().SetEmail("twitter-avatar-task-media@example.com").SetPasswordHash("hash").SaveX(ctx)
-	executionAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	executionAuth := encryptedTwitterExecutionAuthForTest(t)
 	account := &dbent.SocialAccount{ID: 31, Name: "@avatar_asset_account", Platform: "x_twitter", ExecutionAuth: &executionAuth}
 	mediaSvc := NewSocialTaskMediaService(client)
 	payload, _, err := mediaSvc.MaterializeTaskLogMedia(ctx, user.ID, &SocialTaskPayload{
@@ -2170,7 +3128,7 @@ func TestTwitterExecutorUsesTaskMediaAssetForUpdateAvatar(t *testing.T) {
 			Request:    req,
 		}, nil
 	}}
-	twitterExec := NewTwitterExecutor().WithMediaResolver(mediaSvc)
+	twitterExec := newEncryptedTwitterExecutorForTest().WithMediaResolver(mediaSvc)
 	twitterExec.endpoints = twitterEndpoints{
 		updateProfileImage: "https://twitter.test/1.1/account/update_profile_image.json",
 	}
@@ -2188,7 +3146,7 @@ func TestTwitterExecutorUsesTaskMediaAssetForUpdateAvatar(t *testing.T) {
 
 func TestTwitterExecutorRejectsUpdateBannerWithoutMedia(t *testing.T) {
 	ctx := context.Background()
-	executionAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	executionAuth := encryptedTwitterExecutionAuthForTest(t)
 	account := &dbent.SocialAccount{ID: 4, Name: "@banner_account", Platform: "x_twitter", ExecutionAuth: &executionAuth}
 	proxySnapshot := `{"id":1,"endpoint":"http://8.8.8.8:8080","status":"online"}`
 	task := &dbent.SocialTaskLog{
@@ -2197,7 +3155,7 @@ func TestTwitterExecutorRejectsUpdateBannerWithoutMedia(t *testing.T) {
 		ProxySnapshot: &proxySnapshot,
 		Payload:       SocialTaskPayload{},
 	}
-	twitterExec := NewTwitterExecutor()
+	twitterExec := newEncryptedTwitterExecutorForTest()
 	twitterExec.clientForProxy = func(proxyURL string) (twitterHTTPClient, error) {
 		t.Fatal("banner update without media should fail before building HTTP client")
 		return nil, nil
@@ -2215,7 +3173,7 @@ func TestTwitterExecutorRejectsUpdateBannerWithoutMedia(t *testing.T) {
 
 func TestTwitterExecutorUsesStructuredBannerPayloadForUpdateBanner(t *testing.T) {
 	ctx := context.Background()
-	executionAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	executionAuth := encryptedTwitterExecutionAuthForTest(t)
 	account := &dbent.SocialAccount{ID: 4, Name: "@banner_account", Platform: "x_twitter", ExecutionAuth: &executionAuth}
 	proxySnapshot := `{"id":1,"endpoint":"http://8.8.8.8:8080","status":"online"}`
 	task := &dbent.SocialTaskLog{
@@ -2244,7 +3202,7 @@ func TestTwitterExecutorUsesStructuredBannerPayloadForUpdateBanner(t *testing.T)
 			Request:    req,
 		}, nil
 	}}
-	twitterExec := NewTwitterExecutor()
+	twitterExec := newEncryptedTwitterExecutorForTest()
 	twitterExec.endpoints = twitterEndpoints{
 		updateProfileBanner: "https://twitter.test/1.1/account/update_profile_banner.json",
 	}
@@ -2264,7 +3222,7 @@ func TestTwitterExecutorUsesTaskMediaAssetForUpdateBanner(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
 	user := client.User.Create().SetEmail("twitter-banner-task-media@example.com").SetPasswordHash("hash").SaveX(ctx)
-	executionAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	executionAuth := encryptedTwitterExecutionAuthForTest(t)
 	account := &dbent.SocialAccount{ID: 41, Name: "@banner_asset_account", Platform: "x_twitter", ExecutionAuth: &executionAuth}
 	mediaSvc := NewSocialTaskMediaService(client)
 	payload, _, err := mediaSvc.MaterializeTaskLogMedia(ctx, user.ID, &SocialTaskPayload{
@@ -2299,7 +3257,7 @@ func TestTwitterExecutorUsesTaskMediaAssetForUpdateBanner(t *testing.T) {
 			Request:    req,
 		}, nil
 	}}
-	twitterExec := NewTwitterExecutor().WithMediaResolver(mediaSvc)
+	twitterExec := newEncryptedTwitterExecutorForTest().WithMediaResolver(mediaSvc)
 	twitterExec.endpoints = twitterEndpoints{
 		updateProfileBanner: "https://twitter.test/1.1/account/update_profile_banner.json",
 	}
@@ -2317,7 +3275,7 @@ func TestTwitterExecutorUsesTaskMediaAssetForUpdateBanner(t *testing.T) {
 
 func TestTwitterExecutorNormalizesBannerImageBeforeUpload(t *testing.T) {
 	ctx := context.Background()
-	executionAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	executionAuth := encryptedTwitterExecutionAuthForTest(t)
 	account := &dbent.SocialAccount{ID: 14, Name: "@banner_dimension_account", Platform: "x_twitter", ExecutionAuth: &executionAuth}
 	proxySnapshot := `{"id":1,"endpoint":"http://8.8.8.8:8080","status":"online"}`
 	task := &dbent.SocialTaskLog{
@@ -2349,7 +3307,7 @@ func TestTwitterExecutorNormalizesBannerImageBeforeUpload(t *testing.T) {
 			Request:    req,
 		}, nil
 	}}
-	twitterExec := NewTwitterExecutor()
+	twitterExec := newEncryptedTwitterExecutorForTest()
 	twitterExec.endpoints = twitterEndpoints{
 		updateProfileBanner: "https://twitter.test/1.1/account/update_profile_banner.json",
 	}
@@ -2367,7 +3325,7 @@ func TestTwitterExecutorNormalizesBannerImageBeforeUpload(t *testing.T) {
 
 func TestSocialTaskExecutorFailsClosedWithSpecificAvatarAndBannerInvalidMediaMessages(t *testing.T) {
 	ctx := context.Background()
-	executionAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	executionAuth := encryptedTwitterExecutionAuthForTest(t)
 	proxySnapshot := `{"id":1,"endpoint":"http://8.8.8.8:8080","status":"online"}`
 
 	testCases := []struct {
@@ -2431,8 +3389,8 @@ func TestSocialTaskExecutorFailsClosedWithSpecificAvatarAndBannerInvalidMediaMes
 				SaveX(ctx)
 
 			billing := NewSocialBillingService(&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil)
-			executor := NewSocialTaskExecutor(client, billing, SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1})
-			executor.RegisterPlatformExecutor("x_twitter", NewTwitterExecutor())
+			executor := NewSocialTaskExecutor(client, billing, SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
+			executor.RegisterPlatformExecutor("x_twitter", newEncryptedTwitterExecutorForTest())
 
 			executor.processTask(task.ID)
 
@@ -2460,7 +3418,7 @@ func TestSocialTaskExecutorFailsClosedWithSpecificAvatarAndBannerInvalidMediaMes
 
 func TestSocialTaskExecutorFailsClosedWithSpecificPostMediaMessages(t *testing.T) {
 	ctx := context.Background()
-	executionAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	executionAuth := encryptedTwitterExecutionAuthForTest(t)
 	proxySnapshot := `{"id":1,"endpoint":"http://8.8.8.8:8080","status":"online"}`
 
 	testCases := []struct {
@@ -2528,8 +3486,8 @@ func TestSocialTaskExecutorFailsClosedWithSpecificPostMediaMessages(t *testing.T
 				SaveX(ctx)
 
 			billing := NewSocialBillingService(&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil)
-			executor := NewSocialTaskExecutor(client, billing, SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1})
-			executor.RegisterPlatformExecutor("x_twitter", NewTwitterExecutor())
+			executor := NewSocialTaskExecutor(client, billing, SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).WithCredentialEncryptor(executionAuthEncryptorStub{})
+			executor.RegisterPlatformExecutor("x_twitter", newEncryptedTwitterExecutorForTest())
 
 			executor.processTask(task.ID)
 
@@ -2579,11 +3537,114 @@ func TestValidateProxyEndpointBlocksLocalAndPrivateTargets(t *testing.T) {
 	require.ErrorContains(t, validateProxyEndpoint(parsed), "port is required")
 }
 
+func TestDynamicProxyEndpointFromPayloadSupportsProviderFormats(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "data without credentials",
+			body: `{"code":0,"success":true,"msg":"Successfully obtained","data":[{"ip":"51.79.203.53","port":16719}],"request_ip":"120.231.215.225"}`,
+			want: "http://51.79.203.53:16719",
+		},
+		{
+			name: "final with credentials",
+			body: `{"final":[{"ip":"8.8.8.8","port":18080,"username":"bunnyqFPlqTKw-random-any-session-994682978-sessTime-2","password":"57668898"}]}`,
+			want: "http://bunnyqFPlqTKw-random-any-session-994682978-sessTime-2:57668898@8.8.8.8:18080",
+		},
+		{
+			name: "data with credentials",
+			body: `{"success":true,"data":[{"username":"3486581-yishou123","password":"Aa123456-global-131608830","ip":"1.1.1.1","port":1000}],"msg":"操作成功","code":0}`,
+			want: "http://3486581-yishou123:Aa123456-global-131608830@1.1.1.1:1000",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := dynamicProxyEndpointFromPayload([]byte(tc.body))
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestSocialIPServiceAcceptsDynamicProxySourceEndpoint(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	user := client.User.Create().
+		SetEmail("dynamic-proxy-owner@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	svc := NewSocialIPService(client)
+
+	endpoint := "https://8.8.8.8/proxy-api?count=1"
+	ip, err := svc.Create(ctx, &CreateSocialIPInput{
+		UserID:   user.ID,
+		Name:     "dynamic source",
+		IPType:   "residential",
+		Endpoint: &endpoint,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ip.Endpoint)
+	require.Equal(t, endpoint, *ip.Endpoint)
+	require.Equal(t, SocialIPStatusUnknown, ip.Status)
+}
+
+func TestSocialIPServiceAcceptsIPWODynamicProxySourceEndpoint(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	user := client.User.Create().
+		SetEmail("ipwo-dynamic-proxy-owner@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	svc := NewSocialIPService(client)
+
+	endpoint := "https://www.ipwo.net/api/proxy/get_proxy_ip?num=1&regions=GLOBAL&protocol=http&return_type=json&lb=1"
+	ip, err := svc.Create(ctx, &CreateSocialIPInput{
+		UserID:   user.ID,
+		Name:     "ipwo source",
+		IPType:   "residential",
+		Endpoint: &endpoint,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ip.Endpoint)
+	require.Equal(t, endpoint, *ip.Endpoint)
+}
+
+func TestTwitterProxyEndpointFromTaskResolvesDynamicProxySource(t *testing.T) {
+	previousClient := dynamicProxySourceHTTPClient
+	dynamicProxySourceHTTPClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		require.Equal(t, "https://8.8.8.8/proxy-api?count=1", req.URL.String())
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"success":true,"data":[{"ip":"51.79.203.53","port":16719}],"code":0}`)),
+			Header:     make(http.Header),
+			Request:    req,
+		}, nil
+	})}
+	defer func() { dynamicProxySourceHTTPClient = previousClient }()
+
+	source := "https://8.8.8.8/proxy-api?count=1"
+	snapshot := fmt.Sprintf(`{"id":7,"name":"dynamic","endpoint":%q,"status":"online"}`, source)
+	endpoint, err := twitterProxyEndpointFromTask(context.Background(), &dbent.SocialTaskLog{
+		ProxySnapshot: &snapshot,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "http://51.79.203.53:16719", endpoint)
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
+}
+
 func TestSocialAccountJSONIncludesCredentials(t *testing.T) {
 	password := "secret"
 	emailPassword := "mail-secret"
 	authCookie := "ct0=cookie; auth_token=secret"
-	executionAuth := `{"access_token":"token","token_secret":"secret"}`
+	executionAuth := "encrypted-social-account-json-execution-auth-ciphertext"
 	account := SocialAccount{
 		ID:            1,
 		Name:          "x account",
@@ -2600,24 +3661,66 @@ func TestSocialAccountJSONIncludesCredentials(t *testing.T) {
 	require.Contains(t, body, `"password":"secret"`)
 	require.Contains(t, body, `"email_password":"mail-secret"`)
 	require.Contains(t, body, `"auth_cookie":"ct0=cookie; auth_token=secret"`)
-	require.Contains(t, body, `"execution_auth":"{\"access_token\":\"token\",\"token_secret\":\"secret\"}"`)
+	require.Contains(t, body, `"execution_auth":"encrypted-social-account-json-execution-auth-ciphertext"`)
+	require.NotContains(t, body, "access_token")
+	require.NotContains(t, body, "token_secret")
 }
 
-func TestSocialAccountServiceStoresCredentialsWithoutApplicationEncryption(t *testing.T) {
+func TestSocialAccountServiceDoesNotExposePlainExecutionAuthPayloads(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
 	svc := NewSocialAccountService(client)
+	password := "secret"
+	plainExecutionAuth := `{"access_token":"plain-access","token_secret":"plain-secret"}`
+	account := client.SocialAccount.Create().
+		SetName("@plain_execution_auth").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("plain_execution_auth").
+		SetPassword(password).
+		SetExecutionAuth(plainExecutionAuth).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+
+	got, err := svc.GetByID(ctx, account.ID)
+	require.NoError(t, err)
+	require.Nil(t, got.ExecutionAuth)
+
+	listed, _, err := svc.List(ctx, pagination.DefaultPagination(), SocialAccountListFilters{})
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	require.Nil(t, listed[0].ExecutionAuth)
+
+	stored := client.SocialAccount.GetX(ctx, account.ID)
+	require.NotNil(t, stored.ExecutionAuth)
+	require.Equal(t, plainExecutionAuth, *stored.ExecutionAuth)
+}
+
+func TestSocialAccountServiceStoresExecutionAuthEncryptedAndOtherCredentialsPlain(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountServiceWithCredentialEncryptor(client, executionAuthEncryptorStub{})
 
 	password := "x-account-secret"
 	emailPassword := "mailbox-secret"
-	authCookie := "ct0=create; auth_token=create"
+	twoFactor := "  create-2fa  "
+	backupCode := "  create-backup  "
+	emailClientID := "  create-client  "
+	emailToken := "  create-token  "
+	authCookie := "  ct0=create; auth_token=create  "
 	executionAuth := `{"access_token":"access","token_secret":"secret"}`
+	normalizedExecutionAuth := `{"access_token":"access","token_secret":"secret","screen_name":"northwind_ops"}`
 	directProxySnapshot := `{"id":99,"name":"stale-proxy"}`
 	account, err := svc.Create(ctx, &CreateSocialAccountInput{
 		Name:                 "northwind_ops",
 		Platform:             "x_twitter",
 		Password:             &password,
 		EmailPassword:        &emailPassword,
+		TwoFactor:            &twoFactor,
+		BackupCode:           &backupCode,
+		EmailClientID:        &emailClientID,
+		EmailToken:           &emailToken,
 		AuthCookie:           &authCookie,
 		ExecutionAuth:        &executionAuth,
 		DefaultProxySnapshot: &directProxySnapshot,
@@ -2625,42 +3728,86 @@ func TestSocialAccountServiceStoresCredentialsWithoutApplicationEncryption(t *te
 	require.NoError(t, err)
 	require.NotNil(t, account.Password)
 	require.NotNil(t, account.EmailPassword)
+	require.NotNil(t, account.TwoFactor)
+	require.NotNil(t, account.BackupCode)
+	require.NotNil(t, account.EmailClientID)
+	require.NotNil(t, account.EmailToken)
 	require.NotNil(t, account.AuthCookie)
 	require.NotNil(t, account.ExecutionAuth)
 	require.NotNil(t, account.DefaultProxySnapshot)
 	require.Equal(t, password, *account.Password)
 	require.Equal(t, emailPassword, *account.EmailPassword)
+	require.Equal(t, twoFactor, *account.TwoFactor)
+	require.Equal(t, backupCode, *account.BackupCode)
+	require.Equal(t, emailClientID, *account.EmailClientID)
+	require.Equal(t, emailToken, *account.EmailToken)
 	require.Equal(t, authCookie, *account.AuthCookie)
-	require.Equal(t, executionAuth, *account.ExecutionAuth)
+	require.NotContains(t, *account.ExecutionAuth, "access")
+	require.NotContains(t, *account.ExecutionAuth, "token_secret")
+	decryptedExecutionAuth, err := decryptTwitterExecutionAuthCiphertext(*account.ExecutionAuth, executionAuthEncryptorStub{})
+	require.NoError(t, err)
+	require.Equal(t, normalizedExecutionAuth, decryptedExecutionAuth)
 	require.Equal(t, directProxySnapshot, *account.DefaultProxySnapshot)
 
 	stored, err := client.SocialAccount.Get(ctx, account.ID)
 	require.NoError(t, err)
 	require.NotNil(t, stored.Password)
 	require.NotNil(t, stored.EmailPassword)
+	require.NotNil(t, stored.TwoFactor)
+	require.NotNil(t, stored.BackupCode)
+	require.NotNil(t, stored.EmailClientID)
+	require.NotNil(t, stored.EmailToken)
 	require.NotNil(t, stored.AuthCookie)
 	require.NotNil(t, stored.ExecutionAuth)
 	require.NotNil(t, stored.DefaultProxySnapshot)
 	require.Equal(t, password, *stored.Password)
 	require.Equal(t, emailPassword, *stored.EmailPassword)
+	require.Equal(t, twoFactor, *stored.TwoFactor)
+	require.Equal(t, backupCode, *stored.BackupCode)
+	require.Equal(t, emailClientID, *stored.EmailClientID)
+	require.Equal(t, emailToken, *stored.EmailToken)
 	require.Equal(t, authCookie, *stored.AuthCookie)
-	require.Equal(t, executionAuth, *stored.ExecutionAuth)
+	require.Equal(t, *account.ExecutionAuth, *stored.ExecutionAuth)
 	require.Equal(t, directProxySnapshot, *stored.DefaultProxySnapshot)
 
 	updatedPassword := "rotated-secret"
-	updatedAuthCookie := "ct0=rotated; auth_token=rotated"
+	updatedTwoFactor := "  rotated-2fa  "
+	updatedBackupCode := "  rotated-backup  "
+	updatedEmailClientID := "  rotated-client  "
+	updatedEmailToken := "  rotated-token  "
+	updatedAuthCookie := "  ct0=rotated; auth_token=rotated  "
 	updatedExecutionAuth := `{"access_token":"rotated","token_secret":"secret"}`
-	updated, err := svc.Update(ctx, account.ID, &UpdateSocialAccountInput{Password: &updatedPassword, AuthCookie: &updatedAuthCookie, ExecutionAuth: &updatedExecutionAuth})
+	normalizedUpdatedExecutionAuth := `{"access_token":"rotated","token_secret":"secret","screen_name":"northwind_ops"}`
+	updated, err := svc.Update(ctx, account.ID, &UpdateSocialAccountInput{
+		Password:      &updatedPassword,
+		TwoFactor:     &updatedTwoFactor,
+		BackupCode:    &updatedBackupCode,
+		EmailClientID: &updatedEmailClientID,
+		EmailToken:    &updatedEmailToken,
+		AuthCookie:    &updatedAuthCookie,
+		ExecutionAuth: &updatedExecutionAuth,
+	})
 	require.NoError(t, err)
 	require.Equal(t, updatedPassword, *updated.Password)
+	require.Equal(t, updatedTwoFactor, *updated.TwoFactor)
+	require.Equal(t, updatedBackupCode, *updated.BackupCode)
+	require.Equal(t, updatedEmailClientID, *updated.EmailClientID)
+	require.Equal(t, updatedEmailToken, *updated.EmailToken)
 	require.Equal(t, updatedAuthCookie, *updated.AuthCookie)
-	require.Equal(t, updatedExecutionAuth, *updated.ExecutionAuth)
+	require.NotContains(t, *updated.ExecutionAuth, "rotated")
+	decryptedUpdatedExecutionAuth, err := decryptTwitterExecutionAuthCiphertext(*updated.ExecutionAuth, executionAuthEncryptorStub{})
+	require.NoError(t, err)
+	require.Equal(t, normalizedUpdatedExecutionAuth, decryptedUpdatedExecutionAuth)
 
 	stored, err = client.SocialAccount.Get(ctx, account.ID)
 	require.NoError(t, err)
 	require.Equal(t, updatedPassword, *stored.Password)
+	require.Equal(t, updatedTwoFactor, *stored.TwoFactor)
+	require.Equal(t, updatedBackupCode, *stored.BackupCode)
+	require.Equal(t, updatedEmailClientID, *stored.EmailClientID)
+	require.Equal(t, updatedEmailToken, *stored.EmailToken)
 	require.Equal(t, updatedAuthCookie, *stored.AuthCookie)
-	require.Equal(t, updatedExecutionAuth, *stored.ExecutionAuth)
+	require.Equal(t, *updated.ExecutionAuth, *stored.ExecutionAuth)
 
 	_, err = svc.Update(ctx, account.ID, &UpdateSocialAccountInput{DefaultProxySnapshot: &directProxySnapshot})
 	require.ErrorIs(t, err, ErrSocialAccountDefaultProxyRoute)
@@ -2676,12 +3823,16 @@ func TestSocialAccountServiceBatchImportRowMatchesExistingPoolOnly(t *testing.T)
 		SetPasswordHash("hashed-password").
 		SaveX(ctx)
 	password := "pool-secret"
+	poolPhone := "+15550001000"
+	poolRemark := "pool delivery note"
 	poolAccount, err := client.SocialAccount.Create().
 		SetName("@NorthWind_Ops").
 		SetPlatform("x_twitter").
 		SetPlatformKey("x_twitter").
 		SetNameKey("northwind_ops").
 		SetPassword(password).
+		SetPhone(poolPhone).
+		SetRemark(poolRemark).
 		SetAccountStatus(SocialAccountStatusAvailable).
 		SetTaskStatus(SocialTaskStatusStored).
 		Save(ctx)
@@ -2691,12 +3842,17 @@ func TestSocialAccountServiceBatchImportRowMatchesExistingPoolOnly(t *testing.T)
 		Platform:  "x_twitter",
 		Name:      "northwind_ops",
 		Password:  socialStringPtr("typed-secret"),
+		Phone:     socialStringPtr("+15550009999"),
 		TwoFactor: socialStringPtr("JBSWY3DPEHPK3PXP"),
+		Remark:    socialStringPtr("typed import note"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(poolAccount.ID), imported.ID)
 	require.Equal(t, user.ID, *imported.AssignedUserID)
 	require.Equal(t, password, *imported.Password)
+	require.Equal(t, poolPhone, *imported.Phone)
+	require.Equal(t, poolRemark, *imported.Remark)
+	require.Nil(t, imported.DefaultProxySnapshot)
 
 	count, err := client.SocialAccount.Query().Count(ctx)
 	require.NoError(t, err)
@@ -2714,8 +3870,10 @@ func TestSocialAccountServiceBatchImportRowMatchesExistingPoolOnly(t *testing.T)
 		Platform:      "x_twitter",
 		Name:          "missing_user",
 		Password:      socialStringPtr("missing-secret"),
+		Phone:         socialStringPtr("+15550001111"),
 		Email:         socialStringPtr("mail@example.com"),
 		EmailPassword: socialStringPtr("mail-secret"),
+		Remark:        socialStringPtr("fresh delivery note"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, user.ID, *missingImported.AssignedUserID)
@@ -2723,8 +3881,10 @@ func TestSocialAccountServiceBatchImportRowMatchesExistingPoolOnly(t *testing.T)
 	require.Equal(t, SocialTaskStatusPending, missingImported.TaskStatus)
 	require.Equal(t, "missing_user", missingImported.Name)
 	require.Equal(t, "missing-secret", *missingImported.Password)
+	require.Equal(t, "+15550001111", *missingImported.Phone)
 	require.Equal(t, "mail@example.com", *missingImported.Email)
 	require.Equal(t, "mail-secret", *missingImported.EmailPassword)
+	require.Equal(t, "fresh delivery note", *missingImported.Remark)
 }
 
 func TestSocialAccountServiceBatchImportRowCreatesNotStoredWorkbenchAccountWhenPoolMissing(t *testing.T) {
@@ -2748,6 +3908,8 @@ func TestSocialAccountServiceBatchImportRowCreatesNotStoredWorkbenchAccountWhenP
 		EmailClientID:  socialStringPtr("client-id"),
 		EmailToken:     socialStringPtr("mail-token"),
 		RegistrationIP: socialStringPtr("127.0.0.1"),
+		Phone:          socialStringPtr("+15550002222"),
+		Remark:         socialStringPtr("missing pool delivery note"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, user.ID, *account.AssignedUserID)
@@ -2763,7 +3925,8 @@ func TestSocialAccountServiceBatchImportRowCreatesNotStoredWorkbenchAccountWhenP
 	require.Equal(t, "client-id", *account.EmailClientID)
 	require.Equal(t, "mail-token", *account.EmailToken)
 	require.Equal(t, "127.0.0.1", *account.RegistrationIP)
-	require.Nil(t, account.Remark)
+	require.Equal(t, "+15550002222", *account.Phone)
+	require.Equal(t, "missing pool delivery note", *account.Remark)
 
 	visible, page, err := svc.ListByUser(ctx, user.ID, pagination.PaginationParams{Page: 1, PageSize: 20})
 	require.NoError(t, err)
@@ -2806,6 +3969,311 @@ func TestSocialAccountServiceListTotalPoolHidesWorkbenchStagingImports(t *testin
 	require.Equal(t, poolAccount.ID, pool[0].ID)
 }
 
+func TestSocialAccountServiceListTotalPoolIncludesAssignedUserEmail(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
+
+	user := client.User.Create().
+		SetEmail("total-owner@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("@pool_assigned_owner").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("pool_assigned_owner").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+
+	pool, page, err := svc.ListTotalPool(ctx, pagination.PaginationParams{Page: 1, PageSize: 20}, SocialAccountListFilters{})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), page.Total)
+	require.Len(t, pool, 1)
+	require.Equal(t, account.ID, pool[0].ID)
+	require.NotNil(t, pool[0].AssignedUserID)
+	require.Equal(t, user.ID, *pool[0].AssignedUserID)
+	require.NotNil(t, pool[0].AssignedUserEmail)
+	require.Equal(t, "total-owner@example.com", *pool[0].AssignedUserEmail)
+}
+
+func TestSocialAccountServiceListTotalPoolSearchesDeliveryFieldsAndOwner(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
+
+	user := client.User.Create().
+		SetEmail("total-search-owner@example.com").
+		SetUsername("total-search-owner").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	match := client.SocialAccount.Create().
+		SetName("@pool_search_match").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("pool_search_match").
+		SetIdentityKind("username").
+		SetIdentityKey("pool_search_match").
+		SetAssignedUserID(user.ID).
+		SetPassword("pool-delivery-secret").
+		SetEmailPassword("pool-email-secret").
+		SetAuthCookie("ct0=pool-search-cookie; auth_token=pool-search-token").
+		SetRegistrationIP("198.51.100.77").
+		SetDefaultProxySnapshot(`{"id":301,"endpoint":"http://pool-search-proxy.example:8080"}`).
+		SetRemark("pool-search-remark").
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+	client.SocialAccount.Create().
+		SetName("@pool_search_other").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("pool_search_other").
+		SetIdentityKind("username").
+		SetIdentityKey("pool_search_other").
+		SetPassword("other-delivery-secret").
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+	_, err := svc.importUserWorkbenchAccount(ctx, user.ID, &UserImportSocialAccountInput{
+		Platform:  "x_twitter",
+		Name:      "@workbench_search_staging",
+		Password:  socialStringPtr("pool-delivery-secret"),
+		TwoFactor: socialStringPtr("H6X33U477GHC22AR"),
+	})
+	require.NoError(t, err)
+
+	for _, search := range []string{
+		"#" + strconv.FormatInt(match.ID, 10),
+		"total-search-owner@example.com",
+		"pool-delivery-secret",
+		"pool-email-secret",
+		"pool-search-cookie",
+		"198.51.100.77",
+		"pool-search-proxy",
+		"pool-search-remark",
+	} {
+		pool, page, err := svc.ListTotalPool(ctx, pagination.PaginationParams{Page: 1, PageSize: 20}, SocialAccountListFilters{Search: search})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), page.Total, "search %q", search)
+		require.Len(t, pool, 1, "search %q", search)
+		require.Equal(t, match.ID, pool[0].ID, "search %q", search)
+		require.NotNil(t, pool[0].AssignedUserEmail)
+		require.Equal(t, "total-search-owner@example.com", *pool[0].AssignedUserEmail)
+	}
+}
+
+func TestSocialAccountServiceListByUserSearchesDeliveryFieldsAndFilters(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
+
+	user := client.User.Create().
+		SetEmail("workbench-filter@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	other := client.User.Create().
+		SetEmail("workbench-filter-other@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	match := client.SocialAccount.Create().
+		SetName("@workbench_filter_match").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("workbench_filter_match").
+		SetIdentityKind("username").
+		SetIdentityKey("workbench_filter_match").
+		SetAssignedUserID(user.ID).
+		SetPassword("workbench-delivery-secret").
+		SetEmailPassword("workbench-email-secret").
+		SetAuthCookie("ct0=workbench-search-cookie; auth_token=workbench-search-token").
+		SetRegistrationIP("198.51.100.88").
+		SetDefaultProxySnapshot(`{"id":301,"endpoint":"http://workbench-search-proxy.example:8080"}`).
+		SetRemark("workbench-search-remark").
+		SetAccountStatus(SocialAccountStatusNotStored).
+		SetTaskStatus(SocialTaskStatusPending).
+		SaveX(ctx)
+	client.SocialAccount.Create().
+		SetName("@workbench_filter_other").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("workbench_filter_other").
+		SetAssignedUserID(user.ID).
+		SetPassword("other-delivery-secret").
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+	client.SocialAccount.Create().
+		SetName("@workbench_filter_cross_owner").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("workbench_filter_cross_owner").
+		SetAssignedUserID(other.ID).
+		SetPassword("workbench-delivery-secret").
+		SetAccountStatus(SocialAccountStatusNotStored).
+		SetTaskStatus(SocialTaskStatusPending).
+		SaveX(ctx)
+
+	for _, search := range []string{
+		"#" + strconv.FormatInt(match.ID, 10),
+		"workbench-delivery-secret",
+		"workbench-email-secret",
+		"workbench-search-cookie",
+		"198.51.100.88",
+		"workbench-search-proxy",
+		"workbench-search-remark",
+	} {
+		visible, page, err := svc.ListByUser(ctx, user.ID, pagination.PaginationParams{Page: 1, PageSize: 20}, SocialAccountListFilters{
+			Search:        search,
+			Platform:      "x_twitter",
+			AccountStatus: SocialAccountStatusInvalid,
+			TaskStatus:    SocialTaskStatusPending,
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), page.Total, "search %q", search)
+		require.Len(t, visible, 1, "search %q", search)
+		require.Equal(t, match.ID, visible[0].ID, "search %q", search)
+	}
+}
+
+func TestSocialAccountServiceListByUserDefaultsToIDAscending(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
+
+	user := client.User.Create().
+		SetEmail("workbench-id-order@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	first := client.SocialAccount.Create().
+		SetName("workbench_id_order_first").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("workbench_id_order_first").
+		SetAssignedUserID(user.ID).
+		SetCreatedAt(time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)).
+		SaveX(ctx)
+	second := client.SocialAccount.Create().
+		SetName("workbench_id_order_second").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("workbench_id_order_second").
+		SetAssignedUserID(user.ID).
+		SetCreatedAt(time.Date(2026, 6, 24, 0, 0, 0, 0, time.UTC)).
+		SaveX(ctx)
+
+	visible, page, err := svc.ListByUser(ctx, user.ID, pagination.PaginationParams{Page: 1, PageSize: 20})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(2), page.Total)
+	require.Len(t, visible, 2)
+	require.Equal(t, []int64{first.ID, second.ID}, []int64{visible[0].ID, visible[1].ID})
+}
+
+func TestSocialAccountServiceStoreWorkbenchAccountsMovesSelectedStagingIntoTotalPool(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
+
+	user := client.User.Create().
+		SetEmail("store-workbench@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	staging, err := svc.importUserWorkbenchAccount(ctx, user.ID, &UserImportSocialAccountInput{
+		Platform:  "x_twitter",
+		Name:      "@workbench_upload_selected",
+		Password:  socialStringPtr("account-secret"),
+		TwoFactor: socialStringPtr("H6X33U477GHC22AR"),
+	})
+	require.NoError(t, err)
+
+	beforePool, beforePage, err := svc.ListTotalPool(ctx, pagination.PaginationParams{Page: 1, PageSize: 20}, SocialAccountListFilters{})
+	require.NoError(t, err)
+	require.Empty(t, beforePool)
+	require.Equal(t, int64(0), beforePage.Total)
+
+	result, err := svc.StoreWorkbenchAccounts(ctx, []int64{staging.ID})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Equal(t, 1, result.Succeeded)
+	require.Zero(t, result.Failed)
+	require.Zero(t, result.Skipped)
+
+	updated, err := svc.GetByID(ctx, staging.ID)
+	require.NoError(t, err)
+	require.Equal(t, SocialAccountStatusPendingCheck, updated.AccountStatus)
+	require.Equal(t, SocialTaskStatusStored, updated.TaskStatus)
+	require.NotNil(t, updated.AssignedUserID)
+	require.Equal(t, user.ID, *updated.AssignedUserID)
+
+	afterPool, afterPage, err := svc.ListTotalPool(ctx, pagination.PaginationParams{Page: 1, PageSize: 20}, SocialAccountListFilters{})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), afterPage.Total)
+	require.Len(t, afterPool, 1)
+	require.Equal(t, staging.ID, afterPool[0].ID)
+}
+
+func TestSocialAccountServiceStoreWorkbenchAccountsSeparatesFailedFromSkipped(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
+
+	user := client.User.Create().
+		SetEmail("store-workbench-summary@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	validStaging, err := svc.importUserWorkbenchAccount(ctx, user.ID, &UserImportSocialAccountInput{
+		Platform:  "x_twitter",
+		Name:      "@workbench_upload_valid",
+		Password:  socialStringPtr("account-secret"),
+		TwoFactor: socialStringPtr("H6X33U477GHC22AR"),
+	})
+	require.NoError(t, err)
+	invalidStaging := client.SocialAccount.Create().
+		SetName("@workbench_upload_invalid").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("workbench_upload_invalid").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(SocialAccountStatusNotStored).
+		SetTaskStatus(SocialTaskStatusPending).
+		SaveX(ctx)
+	storedAccount := client.SocialAccount.Create().
+		SetName("@workbench_upload_stored").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("workbench_upload_stored").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+
+	result, err := svc.StoreWorkbenchAccounts(ctx, []int64{validStaging.ID, invalidStaging.ID, storedAccount.ID})
+	require.NoError(t, err)
+	require.Equal(t, 3, result.Total)
+	require.Equal(t, 1, result.Succeeded)
+	require.Equal(t, 1, result.Failed)
+	require.Equal(t, 1, result.Skipped)
+	require.Len(t, result.Items, 3)
+	require.Equal(t, "succeeded", result.Items[0].Status)
+	require.Equal(t, "failed", result.Items[1].Status)
+	require.Equal(t, "invalid_credentials", result.Items[1].Reason)
+	require.Equal(t, "skipped", result.Items[2].Status)
+	require.Equal(t, "already_stored", result.Items[2].Reason)
+
+	updatedValid := client.SocialAccount.GetX(ctx, validStaging.ID)
+	require.Equal(t, SocialAccountStatusPendingCheck, updatedValid.AccountStatus)
+	require.Equal(t, SocialTaskStatusStored, updatedValid.TaskStatus)
+	updatedInvalid := client.SocialAccount.GetX(ctx, invalidStaging.ID)
+	require.Equal(t, SocialAccountStatusNotStored, updatedInvalid.AccountStatus)
+	require.Equal(t, SocialTaskStatusPending, updatedInvalid.TaskStatus)
+	updatedStored := client.SocialAccount.GetX(ctx, storedAccount.ID)
+	require.Equal(t, SocialAccountStatusAvailable, updatedStored.AccountStatus)
+	require.Equal(t, SocialTaskStatusStored, updatedStored.TaskStatus)
+}
+
 func TestSocialAccountServiceBatchImportRowRejectsIncompleteCredentials(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
@@ -2839,48 +4307,137 @@ func TestSocialAccountServiceBatchImportRowRejectsIncompleteCredentials(t *testi
 	require.Equal(t, "ct0=import; auth_token=import", requireSocialStringPtr(t, imported.AuthCookie))
 }
 
-func TestSocialAccountServiceRemoveFromUserWorkbenchDoesNotMutateTotalPoolOwnership(t *testing.T) {
+func TestSocialAccountServiceDeleteForUserHardDeletesOnlyCurrentUserAccount(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
 	svc := NewSocialAccountService(client)
 
 	user := client.User.Create().
-		SetEmail("remove-workbench-user@example.com").
+		SetEmail("delete-workbench-user@example.com").
 		SetPasswordHash("hashed-password").
 		SaveX(ctx)
 	otherUser := client.User.Create().
-		SetEmail("remove-workbench-other@example.com").
+		SetEmail("delete-workbench-other@example.com").
 		SetPasswordHash("hashed-password").
 		SaveX(ctx)
 	account := client.SocialAccount.Create().
-		SetName("@remove_me").
+		SetName("@delete_me").
 		SetPlatform("x_twitter").
 		SetPlatformKey("x_twitter").
-		SetNameKey("remove_me").
+		SetNameKey("delete_me").
 		SetAssignedUserID(user.ID).
 		SetAccountStatus(SocialAccountStatusAvailable).
 		SetTaskStatus(SocialTaskStatusStored).
 		SaveX(ctx)
+	log := client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(SocialTaskActionLoginCheck).
+		SetStatus(SocialTaskLogStatusSuccess).
+		SetChargeStatus(SocialTaskChargeStatusNotCharged).
+		SaveX(ctx)
+	group := client.Group.Create().
+		SetName("delete ledger quota").
+		SetPlatform("x_twitter").
+		SetStatus(StatusActive).
+		SetSubscriptionType(SubscriptionTypeSubscription).
+		SetDailyLimitUsd(1).
+		SaveX(ctx)
+	sub := client.UserSubscription.Create().
+		SetUserID(user.ID).
+		SetGroupID(group.ID).
+		SetPlanPlatform("x_twitter").
+		SetStartsAt(time.Now().Add(-time.Hour)).
+		SetExpiresAt(time.Now().Add(time.Hour)).
+		SetStatus(SubscriptionStatusActive).
+		SaveX(ctx)
+	subscriptionLedgerRequestID := socialTaskUsageLedgerRequestID(log.ID, SocialTaskChargeSourceSubscription, sub.ID)
+	subscriptionLedger := client.UsageLog.Create().
+		SetUserID(user.ID).
+		SetRequestID(subscriptionLedgerRequestID).
+		SetModel(socialUsageLedgerModel).
+		SetGroupID(group.ID).
+		SetSubscriptionID(sub.ID).
+		SetActualCost(0.05).
+		SetTotalCost(0.05).
+		SetBillingType(socialUsageBillingTypeSubscription).
+		SaveX(ctx)
+	walletLedgerRequestID := socialTaskUsageLedgerRequestID(log.ID, SocialTaskChargeSourceWallet, 0)
+	walletLedger := client.UsageLog.Create().
+		SetUserID(user.ID).
+		SetRequestID(walletLedgerRequestID).
+		SetModel(socialUsageLedgerModel).
+		SetActualCost(0.05).
+		SetTotalCost(0.05).
+		SetBillingType(socialUsageBillingTypeWallet).
+		SaveX(ctx)
+	unrelatedLedgerRequestID := socialTaskUsageLedgerRequestID(log.ID+999, SocialTaskChargeSourceWallet, 0)
+	unrelatedLedger := client.UsageLog.Create().
+		SetUserID(user.ID).
+		SetRequestID(unrelatedLedgerRequestID).
+		SetModel(socialUsageLedgerModel).
+		SetActualCost(0.1).
+		SetTotalCost(0.1).
+		SetBillingType(socialUsageBillingTypeWallet).
+		SaveX(ctx)
+	proxy := client.SocialIP.Create().
+		SetUserID(user.ID).
+		SetName("delete-bound-proxy").
+		SetBoundSocialAccountID(account.ID).
+		SaveX(ctx)
+	otherAccount := client.SocialAccount.Create().
+		SetName("@delete_workbench_other").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("delete_workbench_other").
+		SetAssignedUserID(otherUser.ID).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
 
-	err := svc.RemoveFromUserWorkbench(ctx, user.ID, account.ID)
+	err := svc.DeleteForUser(ctx, user.ID, otherAccount.ID)
+	require.ErrorIs(t, err, ErrSocialAccountNotAssigned)
+	require.Equal(t, otherAccount.ID, client.SocialAccount.GetX(ctx, otherAccount.ID).ID)
+
+	err = svc.DeleteForUser(ctx, user.ID, account.ID)
 	require.NoError(t, err)
 
-	stored, err := client.SocialAccount.Get(ctx, account.ID)
-	require.NoError(t, err, "ordinary user removal must not soft-delete the total-pool record")
-	require.Nil(t, stored.DeletedAt)
-	require.NotNil(t, stored.AssignedUserID)
-	require.Equal(t, user.ID, int64(*stored.AssignedUserID), "ordinary user removal must not reclaim ownership")
+	_, err = client.SocialAccount.Get(ctx, account.ID)
+	require.True(t, dbent.IsNotFound(err))
+	_, err = client.SocialAccount.Get(mixins.SkipSoftDelete(ctx), account.ID)
+	require.True(t, dbent.IsNotFound(err), "deleted account must be physically removed")
+	logExists, err := client.SocialTaskLog.Query().
+		Where(socialtasklog.IDEQ(log.ID), socialtasklog.SocialAccountIDEQ(account.ID)).
+		Exist(ctx)
+	require.NoError(t, err)
+	require.False(t, logExists)
+	subscriptionLedgerExists, err := client.UsageLog.Query().
+		Where(usagelog.IDEQ(subscriptionLedger.ID), usagelog.RequestIDEQ(subscriptionLedgerRequestID)).
+		Exist(ctx)
+	require.NoError(t, err)
+	require.False(t, subscriptionLedgerExists)
+	walletLedgerExists, err := client.UsageLog.Query().
+		Where(usagelog.IDEQ(walletLedger.ID), usagelog.RequestIDEQ(walletLedgerRequestID)).
+		Exist(ctx)
+	require.NoError(t, err)
+	require.False(t, walletLedgerExists)
+	unrelatedLedgerExists, err := client.UsageLog.Query().
+		Where(usagelog.IDEQ(unrelatedLedger.ID), usagelog.RequestIDEQ(unrelatedLedgerRequestID)).
+		Exist(ctx)
+	require.NoError(t, err)
+	require.True(t, unrelatedLedgerExists)
+	storedProxy := client.SocialIP.Query().
+		Where(socialip.IDEQ(proxy.ID)).
+		OnlyX(ctx)
+	require.Nil(t, storedProxy.BoundSocialAccountID)
 
 	visible, page, err := svc.ListByUser(ctx, user.ID, pagination.PaginationParams{Page: 1, PageSize: 20})
 	require.NoError(t, err)
 	require.Empty(t, visible)
 	require.Zero(t, page.Total)
-
-	err = svc.RemoveFromUserWorkbench(ctx, otherUser.ID, account.ID)
-	require.ErrorIs(t, err, ErrSocialAccountNotAssigned)
 }
 
-func TestSocialAccountServiceBatchImportRowRestoresRemovedWorkbenchAccount(t *testing.T) {
+func TestSocialAccountServiceBatchImportCreatesFreshAccountAfterHardDelete(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
 	svc := NewSocialAccountService(client)
@@ -2899,7 +4456,9 @@ func TestSocialAccountServiceBatchImportRowRestoresRemovedWorkbenchAccount(t *te
 		SetTaskStatus(SocialTaskStatusStored).
 		SaveX(ctx)
 
-	require.NoError(t, svc.RemoveFromUserWorkbench(ctx, user.ID, account.ID))
+	require.NoError(t, svc.DeleteForUser(ctx, user.ID, account.ID))
+	_, err := client.SocialAccount.Get(mixins.SkipSoftDelete(ctx), account.ID)
+	require.True(t, dbent.IsNotFound(err))
 
 	imported, err := svc.importUserWorkbenchAccount(ctx, user.ID, &UserImportSocialAccountInput{
 		Platform:  "x_twitter",
@@ -2908,17 +4467,17 @@ func TestSocialAccountServiceBatchImportRowRestoresRemovedWorkbenchAccount(t *te
 		TwoFactor: socialStringPtr("JBSWY3DPEHPK3PXP"),
 	})
 	require.NoError(t, err)
-	require.Equal(t, account.ID, imported.ID)
+	require.NotEqual(t, account.ID, imported.ID)
 	require.Equal(t, user.ID, *imported.AssignedUserID)
 
 	visible, page, err := svc.ListByUser(ctx, user.ID, pagination.PaginationParams{Page: 1, PageSize: 20})
 	require.NoError(t, err)
 	require.Len(t, visible, 1)
 	require.Equal(t, int64(1), page.Total)
-	require.Equal(t, account.ID, visible[0].ID)
+	require.Equal(t, imported.ID, visible[0].ID)
 }
 
-func TestSocialAccountServiceBatchImportRowRestoresPlatformlessRemovedWorkbenchAccount(t *testing.T) {
+func TestSocialAccountServiceBatchImportDoesNotRestoreHardDeletedPlatformlessAccount(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
 	svc := NewSocialAccountService(client)
@@ -2932,18 +4491,17 @@ func TestSocialAccountServiceBatchImportRowRestoresPlatformlessRemovedWorkbenchA
 		SetPasswordHash("hashed-password").
 		SaveX(ctx)
 	password := "restore-delivery-secret"
-	hiddenAt := time.Now().Add(-time.Hour)
-	hidden := client.SocialAccount.Create().
+	removed := client.SocialAccount.Create().
 		SetName("@restore_cross").
 		SetPlatform("x_twitter").
 		SetPlatformKey("x_twitter").
 		SetNameKey("restore_cross").
 		SetAssignedUserID(user.ID).
-		SetUserWorkbenchDeletedAt(hiddenAt).
 		SetPassword(password).
 		SetAccountStatus(SocialAccountStatusAvailable).
 		SetTaskStatus(SocialTaskStatusStored).
 		SaveX(ctx)
+	require.NoError(t, svc.DeleteForUser(ctx, user.ID, removed.ID))
 	other := client.SocialAccount.Create().
 		SetName("restore_cross").
 		SetPlatform("instagram").
@@ -2952,25 +4510,19 @@ func TestSocialAccountServiceBatchImportRowRestoresPlatformlessRemovedWorkbenchA
 		SetAssignedUserID(otherUser.ID).
 		SaveX(ctx)
 
-	imported, err := svc.importUserWorkbenchAccount(ctx, user.ID, &UserImportSocialAccountInput{
+	_, err := svc.importUserWorkbenchAccount(ctx, user.ID, &UserImportSocialAccountInput{
 		Name:      "@restore_cross",
 		Password:  socialStringPtr("typed-secret"),
 		TwoFactor: socialStringPtr("JBSWY3DPEHPK3PXP"),
 	})
-	require.NoError(t, err)
-	require.Equal(t, hidden.ID, imported.ID)
-	require.Equal(t, user.ID, *imported.AssignedUserID)
-	require.Nil(t, imported.UserWorkbenchDeletedAt)
-	require.Equal(t, password, *imported.Password)
+	require.ErrorIs(t, err, ErrSocialAccountAlreadyAssigned)
 
-	storedHidden := client.SocialAccount.GetX(ctx, hidden.ID)
-	require.Nil(t, storedHidden.UserWorkbenchDeletedAt)
-	require.Equal(t, user.ID, int64(*storedHidden.AssignedUserID))
-	require.Equal(t, password, *storedHidden.Password)
+	_, err = client.SocialAccount.Get(mixins.SkipSoftDelete(ctx), removed.ID)
+	require.True(t, dbent.IsNotFound(err))
 
 	storedOther := client.SocialAccount.GetX(ctx, other.ID)
 	require.Equal(t, otherUser.ID, int64(*storedOther.AssignedUserID))
-	require.Nil(t, storedOther.UserWorkbenchDeletedAt)
+	require.Equal(t, "instagram", storedOther.PlatformKey)
 }
 
 func TestSocialAccountServiceBatchImportForUserDedupesNormalizedPlatformName(t *testing.T) {
@@ -3002,6 +4554,139 @@ func TestSocialAccountServiceBatchImportForUserDedupesNormalizedPlatformName(t *
 	require.Equal(t, 2, count)
 }
 
+func TestSocialAccountServiceBatchImportForUserReportsPreciseRowReasons(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
+
+	user := client.User.Create().
+		SetEmail("batch-import-reasons@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	other := client.User.Create().
+		SetEmail("batch-import-reasons-other@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+
+	poolMatch := client.SocialAccount.Create().
+		SetName("@reason_pool_match").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("reason_pool_match").
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+	client.SocialAccount.Create().
+		SetName("@reason_existing_local").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("reason_existing_local").
+		SetAssignedUserID(user.ID).
+		SaveX(ctx)
+	client.SocialAccount.Create().
+		SetName("@reason_existing_other").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("reason_existing_other").
+		SetAssignedUserID(other.ID).
+		SaveX(ctx)
+	client.SocialAccount.Create().
+		SetName("@reason_ambiguous").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("reason_ambiguous").
+		SaveX(ctx)
+	client.SocialAccount.Create().
+		SetName("@reason_ambiguous").
+		SetPlatform("instagram").
+		SetPlatformKey("instagram").
+		SetNameKey("reason_ambiguous").
+		SaveX(ctx)
+
+	result, err := svc.BatchImportForUser(ctx, user.ID, []*UserImportSocialAccountInput{
+		{Platform: "x_twitter", Name: "@reason_pool_match", Password: socialStringPtr("typed-secret"), TwoFactor: socialStringPtr("JBSWY3DPEHPK3PXP")},
+		{Platform: "x_twitter", Name: "@reason_staging", Password: socialStringPtr("typed-secret"), AuthCookie: socialStringPtr("ct0=staging; auth_token=staging")},
+		{Platform: "x_twitter", Name: "@reason_batch_dup", Password: socialStringPtr("typed-secret"), TwoFactor: socialStringPtr("JBSWY3DPEHPK3PXP")},
+		{Platform: "twitter", Name: "reason_batch_dup", Password: socialStringPtr("typed-secret"), AuthCookie: socialStringPtr("ct0=dup; auth_token=dup")},
+		{Platform: "x_twitter", Name: "@reason_existing_local", Password: socialStringPtr("typed-secret"), TwoFactor: socialStringPtr("JBSWY3DPEHPK3PXP")},
+		{Platform: "x_twitter", Name: "@reason_existing_other", Password: socialStringPtr("typed-secret"), TwoFactor: socialStringPtr("JBSWY3DPEHPK3PXP")},
+		{Platform: "", Name: "@reason_ambiguous", Password: socialStringPtr("typed-secret"), TwoFactor: socialStringPtr("JBSWY3DPEHPK3PXP")},
+		{Platform: "x_twitter", Name: "@reason_invalid", TwoFactor: socialStringPtr("JBSWY3DPEHPK3PXP")},
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, 8, result.Total)
+	require.Equal(t, 3, result.Succeeded)
+	require.Equal(t, 3, result.Imported)
+	require.Equal(t, 5, result.Skipped)
+	require.Equal(t, 2, result.Failed)
+	require.Equal(t, 3, result.Duplicates)
+	require.Len(t, result.Items, 8)
+	require.Equal(t, poolMatch.ID, result.Items[0].ID)
+	require.Equal(t, "succeeded", result.Items[0].Status)
+	require.Equal(t, userImportReasonMatchedTotalPool, result.Items[0].Reason)
+	require.Equal(t, "succeeded", result.Items[1].Status)
+	require.Equal(t, userImportReasonStagedNotStored, result.Items[1].Reason)
+	require.Equal(t, "succeeded", result.Items[2].Status)
+	require.Equal(t, userImportReasonStagedNotStored, result.Items[2].Reason)
+	require.Equal(t, "duplicate", result.Items[3].Status)
+	require.Equal(t, userImportReasonDuplicateInBatch, result.Items[3].Reason)
+	require.Equal(t, userAccountBatchImportReasonMessage(userImportReasonDuplicateInBatch), result.Items[3].Error)
+	require.Equal(t, "duplicate", result.Items[4].Status)
+	require.Equal(t, userImportReasonAlreadyInWorkbench, result.Items[4].Reason)
+	require.Equal(t, userAccountBatchImportReasonMessage(userImportReasonAlreadyInWorkbench), result.Items[4].Error)
+	require.Equal(t, "duplicate", result.Items[5].Status)
+	require.Equal(t, userImportReasonAlreadyAssigned, result.Items[5].Reason)
+	require.Equal(t, userAccountBatchImportReasonMessage(userImportReasonAlreadyAssigned), result.Items[5].Error)
+	require.Equal(t, "failed", result.Items[6].Status)
+	require.Equal(t, userImportReasonAmbiguousPoolMatch, result.Items[6].Reason)
+	require.Equal(t, userAccountBatchImportReasonMessage(userImportReasonAmbiguousPoolMatch), result.Items[6].Error)
+	require.Equal(t, "failed", result.Items[7].Status)
+	require.Equal(t, userImportReasonInvalidInput, result.Items[7].Reason)
+	require.Equal(t, userAccountBatchImportReasonMessage(userImportReasonInvalidInput), result.Items[7].Error)
+}
+
+func TestSocialAccountServiceBatchImportForUserRejectsIncompleteStructuredExecutionAuth(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
+
+	user := client.User.Create().
+		SetEmail("batch-import-invalid-execution-auth@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+
+	incompleteExecutionAuth := `{"access_token":"access"}`
+	result, err := svc.BatchImportForUser(ctx, user.ID, []*UserImportSocialAccountInput{
+		{
+			Platform:      "x_twitter",
+			Name:          "@invalid_execution_auth_import",
+			Password:      socialStringPtr("typed-secret"),
+			AuthCookie:    socialStringPtr("ct0=fresh; auth_token=fresh"),
+			ExecutionAuth: &incompleteExecutionAuth,
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Zero(t, result.Succeeded)
+	require.Zero(t, result.Imported)
+	require.Equal(t, 1, result.Skipped)
+	require.Equal(t, 1, result.Failed)
+	require.Zero(t, result.Duplicates)
+	require.Equal(t, []string{userAccountBatchImportReasonMessage(userImportReasonInvalidInput)}, result.Errors)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, "failed", result.Items[0].Status)
+	require.Equal(t, userImportReasonInvalidInput, result.Items[0].Reason)
+	require.Equal(t, userAccountBatchImportReasonMessage(userImportReasonInvalidInput), result.Items[0].Error)
+
+	exists, err := client.SocialAccount.Query().
+		Where(socialaccount.NameKeyEQ("invalid_execution_auth_import")).
+		Exist(ctx)
+	require.NoError(t, err)
+	require.False(t, exists)
+}
+
 func TestSocialAccountServiceUserImportIgnoresDefaultProxySnapshot(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
@@ -3026,7 +4711,106 @@ func TestSocialAccountServiceUserImportIgnoresDefaultProxySnapshot(t *testing.T)
 	require.Nil(t, stored.DefaultProxySnapshot)
 }
 
-func TestSocialAccountServiceBatchImportAndRemoveStayInUserScope(t *testing.T) {
+func TestSocialAccountServiceUserImportPreservesDeliveryFieldWhitespace(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
+	user := client.User.Create().
+		SetEmail("user-import-delivery-whitespace@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+
+	password := "  account-secret  "
+	email := "  mail@example.com  "
+	emailPassword := "  mail-secret  "
+	twoFactor := "  totp-secret  "
+	backupCode := "  backup-code  "
+	emailClientID := "  mail-client  "
+	emailToken := "  mail-token  "
+	authCookie := "  ct0=import; auth_token=import  "
+	executionAuth := "  encrypted-user-import-execution-auth-ciphertext  "
+	storedExecutionAuth := "encrypted-user-import-execution-auth-ciphertext"
+	remark := "  operator note  "
+	imported, err := svc.importUserWorkbenchAccount(ctx, user.ID, &UserImportSocialAccountInput{
+		Platform:       "x_twitter",
+		Name:           "@user_import_delivery_whitespace",
+		Password:       &password,
+		Email:          &email,
+		EmailPassword:  &emailPassword,
+		TwoFactor:      &twoFactor,
+		BackupCode:     &backupCode,
+		EmailClientID:  &emailClientID,
+		EmailToken:     &emailToken,
+		AuthCookie:     &authCookie,
+		ExecutionAuth:  &executionAuth,
+		RegistrationIP: socialStringPtr("  203.0.113.20  "),
+		Remark:         &remark,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, password, requireSocialStringPtr(t, imported.Password))
+	require.Equal(t, "mail@example.com", requireSocialStringPtr(t, imported.Email))
+	require.Equal(t, emailPassword, requireSocialStringPtr(t, imported.EmailPassword))
+	require.Equal(t, twoFactor, requireSocialStringPtr(t, imported.TwoFactor))
+	require.Equal(t, backupCode, requireSocialStringPtr(t, imported.BackupCode))
+	require.Equal(t, emailClientID, requireSocialStringPtr(t, imported.EmailClientID))
+	require.Equal(t, emailToken, requireSocialStringPtr(t, imported.EmailToken))
+	require.Equal(t, authCookie, requireSocialStringPtr(t, imported.AuthCookie))
+	require.Equal(t, storedExecutionAuth, requireSocialStringPtr(t, imported.ExecutionAuth))
+	require.Equal(t, "203.0.113.20", requireSocialStringPtr(t, imported.RegistrationIP))
+	require.Equal(t, remark, requireSocialStringPtr(t, imported.Remark))
+
+	stored := client.SocialAccount.GetX(ctx, imported.ID)
+	require.Equal(t, password, requireSocialStringPtr(t, stored.Password))
+	require.Equal(t, "mail@example.com", requireSocialStringPtr(t, stored.Email))
+	require.Equal(t, emailPassword, requireSocialStringPtr(t, stored.EmailPassword))
+	require.Equal(t, twoFactor, requireSocialStringPtr(t, stored.TwoFactor))
+	require.Equal(t, backupCode, requireSocialStringPtr(t, stored.BackupCode))
+	require.Equal(t, emailClientID, requireSocialStringPtr(t, stored.EmailClientID))
+	require.Equal(t, emailToken, requireSocialStringPtr(t, stored.EmailToken))
+	require.Equal(t, authCookie, requireSocialStringPtr(t, stored.AuthCookie))
+	require.Equal(t, storedExecutionAuth, requireSocialStringPtr(t, stored.ExecutionAuth))
+	require.Equal(t, "203.0.113.20", requireSocialStringPtr(t, stored.RegistrationIP))
+	require.Equal(t, remark, requireSocialStringPtr(t, stored.Remark))
+}
+
+func TestSocialAccountServiceBatchImportClearsPoolDefaultProxySnapshotOnAssign(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
+
+	user := client.User.Create().
+		SetEmail("pool-proxy-import@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	poolSnapshot := `{"id":999,"name":"pool-proxy","endpoint":"http://pool-proxy.example:8080","status":"online"}`
+	poolAccount := client.SocialAccount.Create().
+		SetName("@pool_proxy_ops").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("pool_proxy_ops").
+		SetDefaultProxySnapshot(poolSnapshot).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+
+	imported, err := svc.importUserWorkbenchAccount(ctx, user.ID, &UserImportSocialAccountInput{
+		Platform:  "x_twitter",
+		Name:      "@pool_proxy_ops",
+		Password:  socialStringPtr("typed-secret"),
+		TwoFactor: socialStringPtr("JBSWY3DPEHPK3PXP"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, poolAccount.ID, imported.ID)
+	require.Equal(t, user.ID, *imported.AssignedUserID)
+	require.Nil(t, imported.DefaultProxySnapshot)
+
+	stored := client.SocialAccount.GetX(ctx, poolAccount.ID)
+	require.Equal(t, user.ID, *stored.AssignedUserID)
+	require.Nil(t, stored.DefaultProxySnapshot)
+}
+
+func TestSocialAccountServiceBatchImportAndDeleteStayInUserScope(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
 	svc := NewSocialAccountService(client)
@@ -3039,14 +4823,14 @@ func TestSocialAccountServiceBatchImportAndRemoveStayInUserScope(t *testing.T) {
 		SetEmail("batch-workbench-other@example.com").
 		SetPasswordHash("hashed-password").
 		SaveX(ctx)
-	ownHidden := client.SocialAccount.Create().
-		SetName("@batch_hidden").
+	ownRemoved := client.SocialAccount.Create().
+		SetName("@batch_removed").
 		SetPlatform("x_twitter").
 		SetPlatformKey("x_twitter").
-		SetNameKey("batch_hidden").
+		SetNameKey("batch_removed").
 		SetAssignedUserID(user.ID).
-		SetUserWorkbenchDeletedAt(time.Now()).
 		SaveX(ctx)
+	require.NoError(t, svc.DeleteForUser(ctx, user.ID, ownRemoved.ID))
 	fresh := client.SocialAccount.Create().
 		SetName("@batch_fresh").
 		SetPlatform("x_twitter").
@@ -3062,8 +4846,8 @@ func TestSocialAccountServiceBatchImportAndRemoveStayInUserScope(t *testing.T) {
 		SaveX(ctx)
 
 	importResult, err := svc.BatchImportForUser(ctx, user.ID, []*UserImportSocialAccountInput{
-		{Platform: "x_twitter", Name: "@batch_hidden", Password: socialStringPtr("typed-secret"), TwoFactor: socialStringPtr("JBSWY3DPEHPK3PXP")},
-		{Platform: "x_twitter", Name: "@batch_fresh", Password: socialStringPtr("typed-secret"), AuthCookie: socialStringPtr("ct0=fresh; auth_token=fresh"), ExecutionAuth: socialStringPtr("cookie-secret")},
+		{Platform: "x_twitter", Name: "@batch_removed", Password: socialStringPtr("typed-secret"), TwoFactor: socialStringPtr("JBSWY3DPEHPK3PXP")},
+		{Platform: "x_twitter", Name: "@batch_fresh", Password: socialStringPtr("typed-secret"), AuthCookie: socialStringPtr("ct0=fresh; auth_token=fresh"), ExecutionAuth: socialStringPtr("encrypted-batch-fresh-execution-auth-ciphertext")},
 		{Platform: "x_twitter", Name: "@batch_missing", Password: socialStringPtr("missing-secret"), Email: socialStringPtr("mail@example.com"), EmailPassword: socialStringPtr("mail-secret")},
 	})
 	require.NoError(t, err)
@@ -3076,27 +4860,100 @@ func TestSocialAccountServiceBatchImportAndRemoveStayInUserScope(t *testing.T) {
 	visible, page, err := svc.ListByUser(ctx, user.ID, pagination.PaginationParams{Page: 1, PageSize: 20})
 	require.NoError(t, err)
 	require.Equal(t, int64(3), page.Total)
-	require.ElementsMatch(t, []int64{ownHidden.ID, fresh.ID, importResult.Accounts[2].ID}, []int64{visible[0].ID, visible[1].ID, visible[2].ID})
+	require.ElementsMatch(t, []int64{importResult.Accounts[0].ID, fresh.ID, importResult.Accounts[2].ID}, []int64{visible[0].ID, visible[1].ID, visible[2].ID})
 
-	removeResult, err := svc.BatchRemoveFromUserWorkbench(ctx, user.ID, []int64{ownHidden.ID, fresh.ID, importResult.Accounts[2].ID, otherAccount.ID, 0})
+	deleteResult, err := svc.BatchDeleteForUser(ctx, user.ID, []int64{importResult.Accounts[0].ID, fresh.ID, importResult.Accounts[2].ID, otherAccount.ID, 0})
 	require.NoError(t, err)
-	require.Equal(t, 5, removeResult.Total)
-	require.Equal(t, 3, removeResult.Removed)
-	require.Equal(t, 2, removeResult.Skipped)
-	require.Equal(t, []string{"account could not be deleted", "account could not be deleted"}, removeResult.Errors)
-	require.NotContains(t, strings.Join(removeResult.Errors, " "), "error: code=")
-	require.NotContains(t, strings.Join(removeResult.Errors, " "), "SOCIAL_ACCOUNT_NOT_ASSIGNED")
-	require.NotContains(t, strings.Join(removeResult.Errors, " "), strconv.FormatInt(otherAccount.ID, 10))
+	require.Equal(t, 5, deleteResult.Total)
+	require.Equal(t, 3, deleteResult.Removed)
+	require.Equal(t, 0, deleteResult.Skipped)
+	require.Equal(t, 2, deleteResult.Failed)
+	require.Equal(t, []string{"account could not be deleted", "account could not be deleted"}, deleteResult.Errors)
+	require.Len(t, deleteResult.Items, 5)
+	require.Equal(t, "failed", deleteResult.Items[3].Status)
+	require.Equal(t, "delete_failed", deleteResult.Items[3].Reason)
+	require.Equal(t, "failed", deleteResult.Items[4].Status)
+	require.Equal(t, "invalid_id", deleteResult.Items[4].Reason)
+	require.NotContains(t, strings.Join(deleteResult.Errors, " "), "error: code=")
+	require.NotContains(t, strings.Join(deleteResult.Errors, " "), "SOCIAL_ACCOUNT_NOT_ASSIGNED")
+	require.NotContains(t, strings.Join(deleteResult.Errors, " "), strconv.FormatInt(otherAccount.ID, 10))
 
 	visible, page, err = svc.ListByUser(ctx, user.ID, pagination.PaginationParams{Page: 1, PageSize: 20})
 	require.NoError(t, err)
 	require.Empty(t, visible)
 	require.Zero(t, page.Total)
+	for _, removedID := range []int64{importResult.Accounts[0].ID, fresh.ID, importResult.Accounts[2].ID} {
+		_, err := client.SocialAccount.Get(mixins.SkipSoftDelete(ctx), removedID)
+		require.True(t, dbent.IsNotFound(err))
+	}
 
 	storedOther := client.SocialAccount.GetX(ctx, otherAccount.ID)
 	require.NotNil(t, storedOther.AssignedUserID)
 	require.Equal(t, otherUser.ID, int64(*storedOther.AssignedUserID))
-	require.Nil(t, storedOther.UserWorkbenchDeletedAt)
+	require.Equal(t, otherAccount.ID, storedOther.ID)
+}
+
+func TestSocialAccountServiceBatchDeleteForUserReportsDuplicateIDsAsSkipped(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
+
+	user := client.User.Create().
+		SetEmail("batch-delete-duplicate-user@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("@batch_delete_duplicate").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("batch_delete_duplicate").
+		SetAssignedUserID(user.ID).
+		SaveX(ctx)
+
+	result, err := svc.BatchDeleteForUser(ctx, user.ID, []int64{account.ID, account.ID})
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
+	require.Equal(t, 1, result.Succeeded)
+	require.Equal(t, 1, result.Removed)
+	require.Equal(t, 1, result.Skipped)
+	require.Zero(t, result.Failed)
+	require.Empty(t, result.Errors)
+	require.Len(t, result.Items, 2)
+	require.Equal(t, account.ID, result.Items[0].ID)
+	require.Equal(t, "succeeded", result.Items[0].Status)
+	require.Equal(t, account.ID, result.Items[1].ID)
+	require.Equal(t, "skipped", result.Items[1].Status)
+	require.Equal(t, "duplicate_in_batch", result.Items[1].Reason)
+
+	_, err = client.SocialAccount.Get(mixins.SkipSoftDelete(ctx), account.ID)
+	require.True(t, dbent.IsNotFound(err))
+}
+
+func TestSocialAccountServiceBatchDeleteForUserReportsRepeatedInvalidIDsAsFailed(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
+
+	user := client.User.Create().
+		SetEmail("batch-delete-invalid-user@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+
+	result, err := svc.BatchDeleteForUser(ctx, user.ID, []int64{0, 0, -1})
+
+	require.NoError(t, err)
+	require.Equal(t, 3, result.Total)
+	require.Zero(t, result.Succeeded)
+	require.Zero(t, result.Removed)
+	require.Zero(t, result.Skipped)
+	require.Equal(t, 3, result.Failed)
+	require.Len(t, result.Errors, 3)
+	require.Len(t, result.Items, 3)
+	for _, item := range result.Items {
+		require.Equal(t, "failed", item.Status)
+		require.Equal(t, "invalid_id", item.Reason)
+		require.Equal(t, "account could not be deleted", item.Error)
+	}
 }
 
 func TestSocialAccountServiceUpdateForUserMutatesOnlyEditableFields(t *testing.T) {
@@ -3123,6 +4980,7 @@ func TestSocialAccountServiceUpdateForUserMutatesOnlyEditableFields(t *testing.T
 		SetPlatformUserID("real-rest-id").
 		SetPassword("old-password").
 		SetTwoFactor("old-2fa").
+		SetRegistrationIP("198.51.100.20").
 		SetAuthCookie("ct0=old; auth_token=old").
 		SetDefaultProxySnapshot(proxySnapshot).
 		SetAssignedUserID(user.ID).
@@ -3133,21 +4991,33 @@ func TestSocialAccountServiceUpdateForUserMutatesOnlyEditableFields(t *testing.T
 
 	newName := "@malicious_identity"
 	newRestID := "fake-rest-id"
-	newPassword := "new-password"
+	newPassword := "  new-password  "
 	newEmail := "  owner@example.com  "
+	newEmailPassword := "  mailbox-secret  "
+	newTwoFactor := "  totp-secret  "
+	newBackupCode := "  backup-code  "
+	newEmailClientID := "  mail-client  "
+	newEmailToken := "  mail-token  "
 	emptyTwoFactor := " "
-	newAuthCookie := "ct0=new; auth_token=new"
-	newExecutionAuth := `{"access_token":"new"}`
+	newRegistrationIP := "203.0.113.10"
+	newAuthCookie := "  ct0=new; auth_token=new  "
+	newExecutionAuth := "  encrypted-updated-execution-auth-ciphertext  "
+	storedNewExecutionAuth := "encrypted-updated-execution-auth-ciphertext"
 	newStatus := SocialAccountStatusInvalid
 	newTaskStatus := SocialTaskStatusManualReview
 	newProxySnapshot := `{"id":999,"endpoint":"http://attacker.proxy:8080"}`
-	newRemark := "operator note"
+	newRemark := "  operator note  "
 	updated, err := svc.UpdateForUser(ctx, account.ID, user.ID, &UpdateSocialAccountInput{
 		Name:                 &newName,
 		PlatformUserID:       &newRestID,
 		Password:             &newPassword,
 		Email:                &newEmail,
-		TwoFactor:            &emptyTwoFactor,
+		EmailPassword:        &newEmailPassword,
+		TwoFactor:            &newTwoFactor,
+		BackupCode:           &newBackupCode,
+		EmailClientID:        &newEmailClientID,
+		EmailToken:           &newEmailToken,
+		RegistrationIP:       &newRegistrationIP,
 		AuthCookie:           &newAuthCookie,
 		ExecutionAuth:        &newExecutionAuth,
 		AccountStatus:        &newStatus,
@@ -3163,14 +5033,25 @@ func TestSocialAccountServiceUpdateForUserMutatesOnlyEditableFields(t *testing.T
 	require.NotNil(t, updated.PlatformUserID)
 	require.Equal(t, "real-rest-id", *updated.PlatformUserID)
 	require.NotNil(t, updated.Password)
-	require.Equal(t, "new-password", *updated.Password)
+	require.Equal(t, newPassword, *updated.Password)
 	require.NotNil(t, updated.Email)
 	require.Equal(t, "owner@example.com", *updated.Email)
-	require.Nil(t, updated.TwoFactor)
+	require.NotNil(t, updated.EmailPassword)
+	require.Equal(t, newEmailPassword, *updated.EmailPassword)
+	require.NotNil(t, updated.TwoFactor)
+	require.Equal(t, newTwoFactor, *updated.TwoFactor)
+	require.NotNil(t, updated.BackupCode)
+	require.Equal(t, newBackupCode, *updated.BackupCode)
+	require.NotNil(t, updated.EmailClientID)
+	require.Equal(t, newEmailClientID, *updated.EmailClientID)
+	require.NotNil(t, updated.EmailToken)
+	require.Equal(t, newEmailToken, *updated.EmailToken)
+	require.NotNil(t, updated.RegistrationIP)
+	require.Equal(t, newRegistrationIP, *updated.RegistrationIP)
 	require.NotNil(t, updated.AuthCookie)
 	require.Equal(t, newAuthCookie, *updated.AuthCookie)
 	require.NotNil(t, updated.ExecutionAuth)
-	require.Equal(t, newExecutionAuth, *updated.ExecutionAuth)
+	require.Equal(t, storedNewExecutionAuth, *updated.ExecutionAuth)
 	require.Equal(t, SocialAccountStatusAvailable, updated.AccountStatus)
 	require.Equal(t, SocialTaskStatusStored, updated.TaskStatus)
 	require.NotNil(t, updated.DefaultProxySnapshot)
@@ -3185,20 +5066,105 @@ func TestSocialAccountServiceUpdateForUserMutatesOnlyEditableFields(t *testing.T
 	require.Equal(t, original.IdentityKey, stored.IdentityKey)
 	require.NotNil(t, stored.PlatformUserID)
 	require.Equal(t, "real-rest-id", *stored.PlatformUserID)
+	require.NotNil(t, stored.RegistrationIP)
+	require.Equal(t, newRegistrationIP, *stored.RegistrationIP)
+	require.NotNil(t, stored.Password)
+	require.Equal(t, newPassword, *stored.Password)
+	require.NotNil(t, stored.EmailPassword)
+	require.Equal(t, newEmailPassword, *stored.EmailPassword)
+	require.NotNil(t, stored.TwoFactor)
+	require.Equal(t, newTwoFactor, *stored.TwoFactor)
+	require.NotNil(t, stored.BackupCode)
+	require.Equal(t, newBackupCode, *stored.BackupCode)
+	require.NotNil(t, stored.EmailClientID)
+	require.Equal(t, newEmailClientID, *stored.EmailClientID)
+	require.NotNil(t, stored.EmailToken)
+	require.Equal(t, newEmailToken, *stored.EmailToken)
+	require.NotNil(t, stored.AuthCookie)
+	require.Equal(t, newAuthCookie, *stored.AuthCookie)
+	require.NotNil(t, stored.ExecutionAuth)
+	require.Equal(t, storedNewExecutionAuth, *stored.ExecutionAuth)
+	require.NotNil(t, stored.Remark)
+	require.Equal(t, newRemark, *stored.Remark)
 	require.Equal(t, SocialAccountStatusAvailable, stored.AccountStatus)
 	require.Equal(t, SocialTaskStatusStored, stored.TaskStatus)
 	require.NotNil(t, stored.DefaultProxySnapshot)
 	require.Equal(t, proxySnapshot, *stored.DefaultProxySnapshot)
 
+	_, err = svc.UpdateForUser(ctx, account.ID, user.ID, &UpdateSocialAccountInput{TwoFactor: &emptyTwoFactor})
+	require.NoError(t, err)
+	require.Nil(t, client.SocialAccount.GetX(ctx, account.ID).TwoFactor)
+
+	invalidExecutionAuth := `{"access_token":"access"}`
+	_, err = svc.UpdateForUser(ctx, account.ID, user.ID, &UpdateSocialAccountInput{
+		Password:      socialStringPtr("partially-written-password"),
+		ExecutionAuth: &invalidExecutionAuth,
+	})
+	require.ErrorIs(t, err, ErrSocialAccountExecutionAuthInvalid)
+	storedAfterInvalidExecutionAuth := client.SocialAccount.GetX(ctx, account.ID)
+	require.NotNil(t, storedAfterInvalidExecutionAuth.Password)
+	require.Equal(t, newPassword, *storedAfterInvalidExecutionAuth.Password)
+	require.NotNil(t, storedAfterInvalidExecutionAuth.ExecutionAuth)
+	require.Equal(t, storedNewExecutionAuth, *storedAfterInvalidExecutionAuth.ExecutionAuth)
+
 	_, err = svc.UpdateForUser(ctx, account.ID, otherUser.ID, &UpdateSocialAccountInput{Remark: socialStringPtr("cross-user")})
 	require.ErrorIs(t, err, ErrSocialAccountNotAssigned)
 
-	require.NoError(t, svc.RemoveFromUserWorkbench(ctx, user.ID, account.ID))
+	require.NoError(t, svc.DeleteForUser(ctx, user.ID, account.ID))
 	_, err = svc.UpdateForUser(ctx, account.ID, user.ID, &UpdateSocialAccountInput{Remark: socialStringPtr("hidden")})
-	require.ErrorIs(t, err, ErrSocialAccountNotAssigned)
+	require.Error(t, err)
+	require.Equal(t, "SOCIAL_ACCOUNT_NOT_FOUND", infraerrors.Reason(err))
 }
 
-func TestAccountWorkbenchServiceRejectsRemovedUserAccountForTask(t *testing.T) {
+func TestSocialAccountServiceUpdateForUserRequiresCurrentAssignmentAtWrite(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
+
+	user := client.User.Create().
+		SetEmail("mutable-race-owner@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	otherUser := client.User.Create().
+		SetEmail("mutable-race-other@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("@mutable_race").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("mutable_race").
+		SetPassword("account-secret").
+		SetTwoFactor("totp-secret").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+
+	assignmentChanged := false
+	client.SocialAccount.Use(func(next dbent.Mutator) dbent.Mutator {
+		return dbent.MutateFunc(func(ctx context.Context, m dbent.Mutation) (dbent.Value, error) {
+			if m.Op().Is(dbent.OpUpdate) && !assignmentChanged {
+				assignmentChanged = true
+				if err := client.SocialAccount.UpdateOneID(account.ID).SetAssignedUserID(otherUser.ID).Exec(ctx); err != nil {
+					return nil, err
+				}
+			}
+			return next.Mutate(ctx, m)
+		})
+	})
+
+	_, err := svc.UpdateForUser(ctx, account.ID, user.ID, &UpdateSocialAccountInput{Remark: socialStringPtr("should-not-save")})
+	require.ErrorIs(t, err, ErrSocialAccountAssignmentChanged)
+	require.True(t, assignmentChanged)
+
+	stored := client.SocialAccount.GetX(ctx, account.ID)
+	require.NotNil(t, stored.AssignedUserID)
+	require.Equal(t, otherUser.ID, *stored.AssignedUserID)
+	require.Nil(t, stored.Remark)
+}
+
+func TestAccountWorkbenchServiceRejectsDeletedUserAccountForTask(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
 	accountSvc := NewSocialAccountService(client)
@@ -3220,7 +5186,7 @@ func TestAccountWorkbenchServiceRejectsRemovedUserAccountForTask(t *testing.T) {
 		SetTaskStatus(SocialTaskStatusStored).
 		SaveX(ctx)
 
-	require.NoError(t, accountSvc.RemoveFromUserWorkbench(ctx, user.ID, account.ID))
+	require.NoError(t, accountSvc.DeleteForUser(ctx, user.ID, account.ID))
 
 	_, err := workbench.SubmitTask(ctx, &AccountWorkbenchTaskInput{
 		Mode:       AccountWorkbenchTaskModeUser,
@@ -3229,7 +5195,8 @@ func TestAccountWorkbenchServiceRejectsRemovedUserAccountForTask(t *testing.T) {
 		Action:     SocialTaskActionFollow,
 		Target:     socialStringPtr("target_user"),
 	})
-	require.ErrorIs(t, err, ErrSocialAccountNotAssigned)
+	require.Error(t, err)
+	require.Equal(t, "SOCIAL_ACCOUNT_NOT_FOUND", infraerrors.Reason(err))
 }
 
 func TestSocialAccountServiceImportRejectsAmbiguousUsername(t *testing.T) {
@@ -3268,7 +5235,15 @@ func TestNormalizeSocialTaskActionSupportsRetweet(t *testing.T) {
 	action, ok := NormalizeSocialTaskAction(" retweet ")
 	require.True(t, ok)
 	require.Equal(t, SocialTaskActionRetweet, action)
-	require.True(t, IsBillableSocialTaskAction(SocialTaskActionRetweet))
+	require.False(t, IsBillableSocialTaskAction(SocialTaskActionRetweet))
+	require.False(t, IsBillableSocialTaskAction(SocialTaskActionLoginCheck))
+	require.True(t, IsBillableSocialTaskAction(SocialTaskActionLogin))
+	require.InEpsilon(t, SocialTaskUnitPrice, SocialTaskPriceForAction(SocialTaskActionLogin), 0.000001)
+	require.Zero(t, SocialTaskPriceForAction(SocialTaskActionFollow))
+	_, ok = NormalizeSocialTaskAction("tweet")
+	require.False(t, ok)
+	require.False(t, IsBillableSocialTaskAction("tweet"))
+	require.Zero(t, SocialTaskPriceForAction("tweet"))
 }
 
 func TestSocialAccountServiceImportRejectsPlatformlessAmbiguousAssignedMatches(t *testing.T) {
@@ -3383,6 +5358,7 @@ func TestSocialAccountAssignAndReclaimRespectPoolOwnership(t *testing.T) {
 	assigned, err := svc.Assign(ctx, account.ID, user1.ID)
 	require.NoError(t, err)
 	require.Equal(t, user1.ID, *assigned.AssignedUserID)
+	require.Nil(t, assigned.DefaultProxySnapshot)
 
 	_, err = svc.Assign(ctx, account.ID, user2.ID)
 	require.ErrorIs(t, err, ErrSocialAccountAlreadyAssigned)
@@ -3393,42 +5369,231 @@ func TestSocialAccountAssignAndReclaimRespectPoolOwnership(t *testing.T) {
 	require.Nil(t, reclaimed.DefaultProxySnapshot)
 }
 
-func TestSocialAccountAssignAndReclaimClearWorkbenchRemovalState(t *testing.T) {
+func TestSocialAccountAssignRejectsMissingTargetUser(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
 	svc := NewSocialAccountService(client)
 
-	user1 := client.User.Create().SetEmail("hidden-owner@example.com").SetPasswordHash("hash").SaveX(ctx)
-	user2 := client.User.Create().SetEmail("new-owner@example.com").SetPasswordHash("hash").SaveX(ctx)
 	account := client.SocialAccount.Create().
-		SetName("reassign_hidden").
+		SetName("assign_missing_user").
 		SetPlatform("x_twitter").
 		SetPlatformKey("x_twitter").
-		SetNameKey("reassign_hidden").
-		SetAssignedUserID(user1.ID).
-		SetAccountStatus(SocialAccountStatusAvailable).
-		SetTaskStatus(SocialTaskStatusStored).
+		SetNameKey("assign_missing_user").
 		SaveX(ctx)
 
-	require.NoError(t, svc.RemoveFromUserWorkbench(ctx, user1.ID, account.ID))
-	hidden := client.SocialAccount.GetX(ctx, account.ID)
-	require.NotNil(t, hidden.UserWorkbenchDeletedAt)
+	_, err := svc.Assign(ctx, account.ID, 404404)
+	require.ErrorIs(t, err, ErrUserNotFound)
+	require.Nil(t, client.SocialAccount.GetX(ctx, account.ID).AssignedUserID)
+}
 
-	reclaimed, err := svc.Reclaim(ctx, account.ID)
-	require.NoError(t, err)
-	require.Nil(t, reclaimed.AssignedUserID)
-	require.Nil(t, reclaimed.UserWorkbenchDeletedAt)
+func TestSocialAccountBatchPoolOperationsReportDuplicateIDsAsSkipped(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
 
-	assigned, err := svc.Assign(ctx, account.ID, user2.ID)
-	require.NoError(t, err)
-	require.Equal(t, user2.ID, *assigned.AssignedUserID)
-	require.Nil(t, assigned.UserWorkbenchDeletedAt)
+	user := client.User.Create().SetEmail("pool-batch-duplicate-user@example.com").SetPasswordHash("hash").SaveX(ctx)
+	assignAccount := client.SocialAccount.Create().
+		SetName("pool_batch_duplicate_assign").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("pool_batch_duplicate_assign").
+		SaveX(ctx)
+	reclaimAccount := client.SocialAccount.Create().
+		SetName("pool_batch_duplicate_reclaim").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("pool_batch_duplicate_reclaim").
+		SetAssignedUserID(user.ID).
+		SaveX(ctx)
+	deleteAccount := client.SocialAccount.Create().
+		SetName("pool_batch_duplicate_delete").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("pool_batch_duplicate_delete").
+		SaveX(ctx)
 
-	visible, page, err := svc.ListByUser(ctx, user2.ID, pagination.PaginationParams{Page: 1, PageSize: 20})
+	assignResult, err := svc.BatchAssign(ctx, []int64{assignAccount.ID, assignAccount.ID}, user.ID)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), page.Total)
-	require.Len(t, visible, 1)
-	require.Equal(t, account.ID, visible[0].ID)
+	require.Equal(t, 2, assignResult.Total)
+	require.Equal(t, 1, assignResult.Succeeded)
+	require.Equal(t, 1, assignResult.Skipped)
+	require.Zero(t, assignResult.Failed)
+	require.Len(t, assignResult.Items, 2)
+	require.Equal(t, "succeeded", assignResult.Items[0].Status)
+	require.Equal(t, "skipped", assignResult.Items[1].Status)
+	require.Equal(t, "duplicate_in_batch", assignResult.Items[1].Reason)
+	require.Equal(t, user.ID, *client.SocialAccount.GetX(ctx, assignAccount.ID).AssignedUserID)
+
+	reclaimResult, err := svc.BatchReclaim(ctx, []int64{reclaimAccount.ID, reclaimAccount.ID})
+	require.NoError(t, err)
+	require.Equal(t, 2, reclaimResult.Total)
+	require.Equal(t, 1, reclaimResult.Succeeded)
+	require.Equal(t, 1, reclaimResult.Skipped)
+	require.Zero(t, reclaimResult.Failed)
+	require.Len(t, reclaimResult.Items, 2)
+	require.Equal(t, "succeeded", reclaimResult.Items[0].Status)
+	require.Equal(t, "skipped", reclaimResult.Items[1].Status)
+	require.Equal(t, "duplicate_in_batch", reclaimResult.Items[1].Reason)
+	require.Nil(t, client.SocialAccount.GetX(ctx, reclaimAccount.ID).AssignedUserID)
+
+	deleteResult, err := svc.BatchDelete(ctx, []int64{deleteAccount.ID, deleteAccount.ID})
+	require.NoError(t, err)
+	require.Equal(t, 2, deleteResult.Total)
+	require.Equal(t, 1, deleteResult.Succeeded)
+	require.Equal(t, 1, deleteResult.Skipped)
+	require.Zero(t, deleteResult.Failed)
+	require.Len(t, deleteResult.Items, 2)
+	require.Equal(t, "succeeded", deleteResult.Items[0].Status)
+	require.Equal(t, "skipped", deleteResult.Items[1].Status)
+	require.Equal(t, "duplicate_in_batch", deleteResult.Items[1].Reason)
+	_, err = client.SocialAccount.Get(mixins.SkipSoftDelete(ctx), deleteAccount.ID)
+	require.True(t, dbent.IsNotFound(err))
+}
+
+func TestSocialAccountBatchPoolOperationsReturnSafeFailureMessages(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
+
+	user := client.User.Create().SetEmail("pool-batch-safe-errors@example.com").SetPasswordHash("hash").SaveX(ctx)
+	missingID := int64(404404)
+
+	assignResult, err := svc.BatchAssign(ctx, []int64{missingID}, user.ID)
+	require.NoError(t, err)
+	require.Equal(t, 1, assignResult.Total)
+	require.Zero(t, assignResult.Succeeded)
+	require.Zero(t, assignResult.Skipped)
+	require.Equal(t, 1, assignResult.Failed)
+	require.Equal(t, []string{"account could not be assigned"}, assignResult.Errors)
+	require.Len(t, assignResult.Items, 1)
+	require.Equal(t, missingID, assignResult.Items[0].ID)
+	require.Equal(t, "failed", assignResult.Items[0].Status)
+	require.Equal(t, "assign_failed", assignResult.Items[0].Reason)
+	require.Equal(t, "account could not be assigned", assignResult.Items[0].Error)
+
+	reclaimResult, err := svc.BatchReclaim(ctx, []int64{missingID})
+	require.NoError(t, err)
+	require.Equal(t, 1, reclaimResult.Total)
+	require.Zero(t, reclaimResult.Succeeded)
+	require.Zero(t, reclaimResult.Skipped)
+	require.Equal(t, 1, reclaimResult.Failed)
+	require.Equal(t, []string{"account could not be reclaimed"}, reclaimResult.Errors)
+	require.Len(t, reclaimResult.Items, 1)
+	require.Equal(t, missingID, reclaimResult.Items[0].ID)
+	require.Equal(t, "failed", reclaimResult.Items[0].Status)
+	require.Equal(t, "reclaim_failed", reclaimResult.Items[0].Reason)
+	require.Equal(t, "account could not be reclaimed", reclaimResult.Items[0].Error)
+
+	deleteResult, err := svc.BatchDelete(ctx, []int64{missingID})
+	require.NoError(t, err)
+	require.Equal(t, 1, deleteResult.Total)
+	require.Zero(t, deleteResult.Succeeded)
+	require.Zero(t, deleteResult.Skipped)
+	require.Equal(t, 1, deleteResult.Failed)
+	require.Equal(t, []string{"account could not be deleted"}, deleteResult.Errors)
+	require.Len(t, deleteResult.Items, 1)
+	require.Equal(t, missingID, deleteResult.Items[0].ID)
+	require.Equal(t, "failed", deleteResult.Items[0].Status)
+	require.Equal(t, "delete_failed", deleteResult.Items[0].Reason)
+	require.Equal(t, "account could not be deleted", deleteResult.Items[0].Error)
+
+	allMessages := strings.Join(append(append(assignResult.Errors, reclaimResult.Errors...), deleteResult.Errors...), " ")
+	require.NotContains(t, allMessages, "error: code=")
+	require.NotContains(t, allMessages, "SOCIAL_ACCOUNT_NOT_FOUND")
+	require.NotContains(t, allMessages, strconv.FormatInt(missingID, 10))
+}
+
+func TestSocialAccountTotalPoolOperationsRejectWorkbenchStagingAccounts(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
+
+	owner := client.User.Create().SetEmail("staging-owner@example.com").SetPasswordHash("hash").SaveX(ctx)
+	target := client.User.Create().SetEmail("staging-target@example.com").SetPasswordHash("hash").SaveX(ctx)
+	staging := client.SocialAccount.Create().
+		SetName("total_pool_staging_guard").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("total_pool_staging_guard").
+		SetIdentityKind("username").
+		SetIdentityKey("total_pool_staging_guard").
+		SetAssignedUserID(owner.ID).
+		SetAccountStatus(SocialAccountStatusNotStored).
+		SetTaskStatus(SocialTaskStatusPending).
+		SaveX(ctx)
+
+	_, err := svc.AssignTotalPool(ctx, staging.ID, target.ID)
+	require.Error(t, err)
+	require.Equal(t, owner.ID, *client.SocialAccount.GetX(ctx, staging.ID).AssignedUserID)
+
+	_, err = svc.ReclaimTotalPool(ctx, staging.ID)
+	require.Error(t, err)
+	require.Equal(t, owner.ID, *client.SocialAccount.GetX(ctx, staging.ID).AssignedUserID)
+
+	err = svc.DeleteTotalPool(ctx, staging.ID)
+	require.Error(t, err)
+	_, err = client.SocialAccount.Get(ctx, staging.ID)
+	require.NoError(t, err)
+
+	assignResult, err := svc.BatchAssignTotalPool(ctx, []int64{staging.ID}, target.ID)
+	require.NoError(t, err)
+	require.Equal(t, 1, assignResult.Failed)
+	require.Equal(t, "assign_failed", assignResult.Items[0].Reason)
+
+	reclaimResult, err := svc.BatchReclaimTotalPool(ctx, []int64{staging.ID})
+	require.NoError(t, err)
+	require.Equal(t, 1, reclaimResult.Failed)
+	require.Equal(t, "reclaim_failed", reclaimResult.Items[0].Reason)
+
+	deleteResult, err := svc.BatchDeleteTotalPool(ctx, []int64{staging.ID})
+	require.NoError(t, err)
+	require.Equal(t, 1, deleteResult.Failed)
+	require.Equal(t, "delete_failed", deleteResult.Items[0].Reason)
+
+	preserved := client.SocialAccount.GetX(ctx, staging.ID)
+	require.Equal(t, owner.ID, *preserved.AssignedUserID)
+	require.Equal(t, SocialAccountStatusNotStored, preserved.AccountStatus)
+	require.Equal(t, SocialTaskStatusPending, preserved.TaskStatus)
+}
+
+func TestSocialAccountBatchReclaimSkipsAlreadyUnassignedAccounts(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
+
+	user := client.User.Create().SetEmail("batch-reclaim-user@example.com").SetPasswordHash("hash").SaveX(ctx)
+	assigned := client.SocialAccount.Create().
+		SetName("batch_reclaim_assigned").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("batch_reclaim_assigned").
+		SetAssignedUserID(user.ID).
+		SetDefaultProxySnapshot(`{"id":1}`).
+		SaveX(ctx)
+	unassigned := client.SocialAccount.Create().
+		SetName("batch_reclaim_unassigned").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("batch_reclaim_unassigned").
+		SaveX(ctx)
+
+	result, err := svc.BatchReclaim(ctx, []int64{assigned.ID, unassigned.ID, 0})
+	require.NoError(t, err)
+	require.Equal(t, 3, result.Total)
+	require.Equal(t, 1, result.Succeeded)
+	require.Equal(t, 2, result.Skipped)
+	require.Equal(t, 0, result.Failed)
+	require.Empty(t, result.Errors)
+
+	reasons := make([]string, 0, len(result.Items))
+	for _, item := range result.Items {
+		reasons = append(reasons, item.Reason)
+	}
+	require.Contains(t, reasons, "already_unassigned")
+	require.Contains(t, reasons, "invalid_id")
+	require.Nil(t, client.SocialAccount.GetX(ctx, assigned.ID).AssignedUserID)
+	require.Nil(t, client.SocialAccount.GetX(ctx, assigned.ID).DefaultProxySnapshot)
+	require.Nil(t, client.SocialAccount.GetX(ctx, unassigned.ID).AssignedUserID)
 }
 
 func TestSocialAccountAssignIsConditionalUnderConcurrency(t *testing.T) {
@@ -3538,6 +5703,38 @@ func TestSocialAccountDefaultProxyRequiresAccountAndProxyOwnership(t *testing.T)
 	require.Nil(t, cleared.DefaultProxySnapshot)
 }
 
+func TestSocialAccountDefaultProxyWriteRequiresCurrentUserAssignment(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	accountSvc := NewSocialAccountService(client)
+	ipSvc := NewSocialIPService(client)
+
+	user1 := client.User.Create().SetEmail("proxy-race-owner@example.com").SetPasswordHash("hash").SaveX(ctx)
+	user2 := client.User.Create().SetEmail("proxy-race-current-owner@example.com").SetPasswordHash("hash").SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("default_proxy_assignment_changed").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("default_proxy_assignment_changed").
+		SetAssignedUserID(user2.ID).
+		SaveX(ctx)
+	endpoint := "http://8.8.8.8:8080"
+	ip, err := ipSvc.Create(ctx, &CreateSocialIPInput{UserID: user1.ID, Name: "race proxy", IPType: "residential", Endpoint: &endpoint})
+	require.NoError(t, err)
+	client.SocialIP.UpdateOneID(ip.ID).SetStatus(SocialIPStatusOnline).SaveX(ctx)
+	ip, err = ipSvc.GetByID(ctx, ip.ID)
+	require.NoError(t, err)
+	snapshot := SocialIPTaskSnapshot(ip)
+
+	_, err = accountSvc.setDefaultProxySnapshotForUser(ctx, account.ID, user1.ID, &snapshot)
+	require.ErrorIs(t, err, ErrSocialAccountAssignmentChanged)
+
+	stored := client.SocialAccount.GetX(ctx, account.ID)
+	require.Nil(t, stored.DefaultProxySnapshot)
+	require.NotNil(t, stored.AssignedUserID)
+	require.Equal(t, user2.ID, *stored.AssignedUserID)
+}
+
 func TestSocialAccountBatchDefaultProxySeparatesFailedFromSkipped(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
@@ -3590,7 +5787,8 @@ func TestSocialAccountBatchDefaultProxySeparatesFailedFromSkipped(t *testing.T) 
 	require.Len(t, result.Items, 3)
 	require.Equal(t, "succeeded", result.Items[0].Status)
 	require.Equal(t, "failed", result.Items[1].Status)
-	require.Equal(t, "account_not_visible", result.Items[1].Reason)
+	require.Equal(t, "account_not_assigned", result.Items[1].Reason)
+	require.Empty(t, result.Items[1].Name)
 	require.Equal(t, "failed", result.Items[2].Status)
 	require.Equal(t, "invalid_id", result.Items[2].Reason)
 }
@@ -3638,6 +5836,60 @@ func TestSocialAccountBatchDefaultProxyReportsUnavailableSpecificProxyPerAccount
 	require.Equal(t, "account proxy could not be assigned", result.Items[0].Error)
 	stored := client.SocialAccount.GetX(ctx, account.ID)
 	require.Nil(t, stored.DefaultProxySnapshot)
+}
+
+func TestSocialAccountBatchDefaultProxyReportsDuplicateIDsAsSkipped(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	accountSvc := NewSocialAccountService(client)
+	ipSvc := NewSocialIPService(client)
+
+	user := client.User.Create().
+		SetEmail("batch-proxy-duplicate-owner@example.com").
+		SetPasswordHash("hash").
+		SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("batch_proxy_duplicate_account").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("batch_proxy_duplicate_account").
+		SetAssignedUserID(user.ID).
+		SaveX(ctx)
+	endpoint := "http://8.8.8.8:8080"
+	ip, err := ipSvc.Create(ctx, &CreateSocialIPInput{UserID: user.ID, Name: "duplicate batch proxy", IPType: "residential", Endpoint: &endpoint})
+	require.NoError(t, err)
+	client.SocialIP.UpdateOneID(ip.ID).SetStatus(SocialIPStatusOnline).SaveX(ctx)
+	ip, err = ipSvc.GetByID(ctx, ip.ID)
+	require.NoError(t, err)
+
+	result, err := accountSvc.BatchSetDefaultProxyForUser(
+		ctx,
+		user.ID,
+		[]int64{account.ID, account.ID, 0},
+		DefaultProxyAssignmentSpecific,
+		ip,
+		nil,
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, 3, result.Total)
+	require.Equal(t, 1, result.Succeeded)
+	require.Equal(t, 1, result.Skipped)
+	require.Equal(t, 1, result.Failed)
+	require.Len(t, result.Items, 3)
+	require.Equal(t, "succeeded", result.Items[0].Status)
+	require.Equal(t, account.ID, result.Items[0].ID)
+	require.Equal(t, "skipped", result.Items[1].Status)
+	require.Equal(t, account.ID, result.Items[1].ID)
+	require.Equal(t, "duplicate_in_batch", result.Items[1].Reason)
+	require.Equal(t, "failed", result.Items[2].Status)
+	require.Equal(t, int64(0), result.Items[2].ID)
+	require.Equal(t, "invalid_id", result.Items[2].Reason)
+	stored := client.SocialAccount.GetX(ctx, account.ID)
+	require.NotNil(t, stored.DefaultProxySnapshot)
+	proxyID, ok := SocialIPIDFromSnapshot(*stored.DefaultProxySnapshot)
+	require.True(t, ok)
+	require.Equal(t, ip.ID, proxyID)
 }
 
 func TestSocialAccountDefaultProxyAllowsOneProxyForMultipleSameUserAccounts(t *testing.T) {
@@ -3795,7 +6047,7 @@ func TestSocialTaskLogCapturesBillingAndProxySnapshot(t *testing.T) {
 	log, err := svc.CreateTaskLog(ctx, &CreateSocialTaskLogInput{
 		AccountID:      account.ID,
 		UserID:         user.ID,
-		Action:         SocialTaskActionMessage,
+		Action:         SocialTaskActionFollow,
 		Target:         &target,
 		Content:        &content,
 		Status:         SocialTaskLogStatusFailed,
@@ -3805,7 +6057,7 @@ func TestSocialTaskLogCapturesBillingAndProxySnapshot(t *testing.T) {
 		IdempotencyKey: &idempotencyKey,
 	})
 	require.NoError(t, err)
-	require.InEpsilon(t, SocialTaskUnitPrice, log.Price, 0.000001)
+	require.Zero(t, log.Price)
 	require.Zero(t, log.ChargedAmount)
 	require.Equal(t, SocialTaskChargeStatusNotCharged, log.ChargeStatus)
 	require.Nil(t, log.ChargeSource)
@@ -3815,9 +6067,59 @@ func TestSocialTaskLogCapturesBillingAndProxySnapshot(t *testing.T) {
 
 	stored, err := client.SocialTaskLog.Get(ctx, log.ID)
 	require.NoError(t, err)
-	require.InEpsilon(t, SocialTaskUnitPrice, stored.Price, 0.000001)
+	require.Zero(t, stored.Price)
 	require.Zero(t, stored.ChargedAmount)
 	require.Equal(t, SocialTaskChargeStatusNotCharged, stored.ChargeStatus)
+
+	loginLog, err := svc.CreateTaskLog(ctx, &CreateSocialTaskLogInput{
+		AccountID: account.ID,
+		UserID:    user.ID,
+		Action:    SocialTaskActionLogin,
+		Status:    SocialTaskLogStatusFailed,
+	})
+	require.NoError(t, err)
+	require.InEpsilon(t, SocialTaskUnitPrice, loginLog.Price, 0.000001)
+	require.Zero(t, loginLog.ChargedAmount)
+	require.Equal(t, SocialTaskChargeStatusNotCharged, loginLog.ChargeStatus)
+}
+
+func TestSocialIPSnapshotUsableRequiresExecutableSnapshot(t *testing.T) {
+	require.True(t, SocialIPSnapshotUsable(`{"id":42,"name":"proxy","ip_type":"residential","endpoint":"http://proxy.local:8080","status":"online"}`))
+	require.False(t, SocialIPSnapshotUsable(`http://proxy.local:8080`))
+	require.False(t, SocialIPSnapshotUsable(`{"id":42,"name":"proxy","ip_type":"residential","endpoint":"http://proxy.local:8080","status":"offline"}`))
+	require.False(t, SocialIPSnapshotUsable(`{"id":42,"name":"proxy","ip_type":"residential","endpoint":"","status":"online"}`))
+	require.False(t, SocialIPSnapshotUsable(`{"id":0,"name":"proxy","ip_type":"residential","endpoint":"http://proxy.local:8080","status":"online"}`))
+}
+
+func TestEnsureSocialIPUsableForExecutionRequiresOnlineProxyWithEndpoint(t *testing.T) {
+	onlineEndpoint := "http://proxy.local:8080"
+
+	require.NoError(t, EnsureSocialIPUsableForExecution(&SocialIP{
+		ID:       42,
+		Endpoint: &onlineEndpoint,
+		Status:   SocialIPStatusOnline,
+	}))
+
+	err := EnsureSocialIPUsableForExecution(nil)
+	require.Equal(t, "SOCIAL_IP_NOT_AVAILABLE", infraerrors.Reason(err))
+	require.Contains(t, err.Error(), "social IP is not available")
+
+	err = EnsureSocialIPUsableForExecution(&SocialIP{
+		ID:       42,
+		Endpoint: &onlineEndpoint,
+		Status:   SocialIPStatusOffline,
+	})
+	require.Equal(t, "SOCIAL_IP_NOT_AVAILABLE", infraerrors.Reason(err))
+	require.Contains(t, err.Error(), "social IP must pass a connectivity test before execution")
+
+	blankEndpoint := "  "
+	err = EnsureSocialIPUsableForExecution(&SocialIP{
+		ID:       42,
+		Endpoint: &blankEndpoint,
+		Status:   SocialIPStatusOnline,
+	})
+	require.Equal(t, "SOCIAL_IP_NOT_AVAILABLE", infraerrors.Reason(err))
+	require.Contains(t, err.Error(), "social IP endpoint is required for execution")
 }
 
 func TestSocialTaskLogCapturesStructuredPayloadAndTemplateSnapshot(t *testing.T) {
@@ -3835,11 +6137,11 @@ func TestSocialTaskLogCapturesStructuredPayloadAndTemplateSnapshot(t *testing.T)
 	payload := SocialTaskPayload{
 		Post: &SocialPostPayload{
 			Text:         "hello payload",
-			QuotePostURL: "https://x.com/openai/status/1",
+			QuotePostURL: "https://x.com/northwind/status/1",
 			Media: []SocialTaskMediaRef{
 				{
 					Source:      "library",
-					StorageKey:  "media/post-1.jpg",
+					StorageKey:  "social-task/media/post-1.jpg",
 					ContentType: "image/jpeg",
 				},
 			},
@@ -3851,11 +6153,11 @@ func TestSocialTaskLogCapturesStructuredPayloadAndTemplateSnapshot(t *testing.T)
 		TemplateType: SocialTaskActionPost,
 		Params: TaskTemplateParams{
 			Contents:     []string{"hello payload"},
-			QuotePostURL: "https://x.com/openai/status/1",
+			QuotePostURL: "https://x.com/northwind/status/1",
 			Media: []SocialTaskMediaRef{
 				{
 					Source:      "library",
-					StorageKey:  "media/post-1.jpg",
+					StorageKey:  "social-task/media/post-1.jpg",
 					ContentType: "image/jpeg",
 				},
 			},
@@ -3876,7 +6178,7 @@ func TestSocialTaskLogCapturesStructuredPayloadAndTemplateSnapshot(t *testing.T)
 	require.NotNil(t, log.Payload)
 	require.NotNil(t, log.Payload.Post)
 	require.Equal(t, "hello payload", log.Payload.Post.Text)
-	require.Equal(t, "https://x.com/openai/status/1", log.Payload.Post.QuotePostURL)
+	require.Equal(t, "https://x.com/northwind/status/1", log.Payload.Post.QuotePostURL)
 	require.Len(t, log.Payload.Post.Media, 1)
 	require.NotNil(t, log.TemplateSnapshot)
 	require.Equal(t, snapshot.TemplateID, log.TemplateSnapshot.TemplateID)
@@ -3888,7 +6190,7 @@ func TestSocialTaskLogCapturesStructuredPayloadAndTemplateSnapshot(t *testing.T)
 	require.NotNil(t, stored.Payload)
 	require.NotNil(t, stored.TemplateSnapshot)
 	require.Equal(t, "hello payload", stored.Payload.Post.Text)
-	require.Equal(t, "https://x.com/openai/status/1", stored.Payload.Post.QuotePostURL)
+	require.Equal(t, "https://x.com/northwind/status/1", stored.Payload.Post.QuotePostURL)
 	require.Equal(t, "tmpl_post_payload", stored.TemplateSnapshot.TemplateID)
 	require.Equal(t, "Payload post", stored.TemplateSnapshot.TemplateName)
 }
@@ -3997,12 +6299,6 @@ func TestSocialTaskLogMaterializesInlineProfileMediaIntoTaskMediaAssets(t *testi
 	svc := NewSocialAccountService(client)
 
 	user := client.User.Create().SetEmail("task-profile-media-asset@example.com").SetPasswordHash("hash").SaveX(ctx)
-	account := client.SocialAccount.Create().
-		SetName("task_profile_media_asset_account").
-		SetPlatform("x_twitter").
-		SetPlatformKey("x_twitter").
-		SetNameKey("task_profile_media_asset_account").
-		SaveX(ctx)
 
 	avatar := SocialTaskMediaRef{
 		Source:      "inline",
@@ -4075,6 +6371,13 @@ func TestSocialTaskLogMaterializesInlineProfileMediaIntoTaskMediaAssets(t *testi
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			accountKey := "task_profile_media_asset_account_" + tc.name
+			account := client.SocialAccount.Create().
+				SetName(accountKey).
+				SetPlatform("x_twitter").
+				SetPlatformKey("x_twitter").
+				SetNameKey(accountKey).
+				SaveX(ctx)
 			log, err := svc.CreateTaskLog(ctx, &CreateSocialTaskLogInput{
 				AccountID:        account.ID,
 				UserID:           user.ID,
@@ -4144,12 +6447,12 @@ func TestAccountWorkbenchServiceSubmitTaskCapturesTemplateSnapshotAndStructuredP
 	userRepo := &socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}
 	billing := NewSocialBillingService(userRepo, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil)
 	workbench := NewAccountWorkbenchService(accountSvc, ipSvc, billing, nil)
-	quoteURL := "https://x.com/openai/status/1"
+	quoteURL := "https://x.com/northwind/status/1"
 	content := "hello structured submit"
 	media := []SocialTaskMediaRef{
 		{
 			Source:      "library",
-			StorageKey:  "media/post-structured.jpg",
+			StorageKey:  "social-task/media/post-structured.jpg",
 			ContentType: "image/jpeg",
 		},
 	}
@@ -4238,7 +6541,7 @@ func TestAccountWorkbenchServiceSubmitTaskAcceptsMediaOnlyPostPayload(t *testing
 	workbench := NewAccountWorkbenchService(accountSvc, ipSvc, billing, nil)
 	media := []SocialTaskMediaRef{{
 		Source:      "library",
-		StorageKey:  "media/post-media-only.jpg",
+		StorageKey:  "social-task/media/post-media-only.jpg",
 		ContentType: "image/jpeg",
 	}}
 	templateSnapshot := &SocialTaskTemplateSnapshot{
@@ -4270,7 +6573,7 @@ func TestAccountWorkbenchServiceSubmitTaskAcceptsMediaOnlyPostPayload(t *testing
 	require.Equal(t, "", result.Logs[0].Payload.Post.Text)
 	require.Len(t, result.Logs[0].Payload.Post.Media, 1)
 	require.Equal(t, "library", result.Logs[0].Payload.Post.Media[0].Source)
-	require.Equal(t, "media/post-media-only.jpg", result.Logs[0].Payload.Post.Media[0].StorageKey)
+	require.Equal(t, "social-task/media/post-media-only.jpg", result.Logs[0].Payload.Post.Media[0].StorageKey)
 	require.NotNil(t, result.Logs[0].TemplateSnapshot)
 	require.Equal(t, templateSnapshot.TemplateID, result.Logs[0].TemplateSnapshot.TemplateID)
 
@@ -4279,7 +6582,160 @@ func TestAccountWorkbenchServiceSubmitTaskAcceptsMediaOnlyPostPayload(t *testing
 	require.NotNil(t, stored.Payload.Post)
 	require.Equal(t, "", stored.Payload.Post.Text)
 	require.Len(t, stored.Payload.Post.Media, 1)
-	require.Equal(t, "media/post-media-only.jpg", stored.Payload.Post.Media[0].StorageKey)
+	require.Equal(t, "social-task/media/post-media-only.jpg", stored.Payload.Post.Media[0].StorageKey)
+}
+
+func TestAccountWorkbenchServiceSubmitTaskUsesPlatformKeyForBillingPrecheck(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	accountSvc := NewSocialAccountService(client)
+	user := client.User.Create().
+		SetEmail("platform-key-billing-submit@example.com").
+		SetPasswordHash("hash").
+		SetBalance(0).
+		SaveX(ctx)
+	limit := 0.20
+	group := &Group{
+		ID:               9,
+		Name:             "X quota",
+		Platform:         "x_twitter",
+		Status:           StatusActive,
+		SubscriptionType: SubscriptionTypeSubscription,
+		DailyLimitUSD:    &limit,
+		Hydrated:         true,
+	}
+	subRepo := &subscriptionRepoState{
+		sub: &UserSubscription{
+			ID:               7,
+			UserID:           user.ID,
+			GroupID:          group.ID,
+			PlanPlatform:     "x_twitter",
+			StartsAt:         time.Now().AddDate(0, 0, -3),
+			ExpiresAt:        time.Now().AddDate(0, 0, 3),
+			Status:           SubscriptionStatusActive,
+			DailyWindowStart: socialPtrTime(time.Now().Add(-time.Hour)),
+			Group:            group,
+		},
+	}
+	account := client.SocialAccount.Create().
+		SetName("platform_key_submit_account").
+		SetPlatform("twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("platform_key_submit_account").
+		SetPassword("platform-key-secret").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+	storedAccount, err := client.SocialAccount.Get(ctx, account.ID)
+	require.NoError(t, err)
+	require.Equal(t, "x_twitter", storedAccount.PlatformKey)
+	accountView, err := accountSvc.GetByID(ctx, account.ID)
+	require.NoError(t, err)
+	require.Equal(t, "x_twitter", accountView.Platform)
+	endpoint := "http://8.8.8.8:8080"
+	ipSvc := NewSocialIPService(client)
+	ip, err := ipSvc.Create(ctx, &CreateSocialIPInput{
+		UserID:   user.ID,
+		Name:     "platform key submit proxy",
+		IPType:   SocialIPTypeResidential,
+		Endpoint: &endpoint,
+	})
+	require.NoError(t, err)
+	client.SocialIP.UpdateOneID(ip.ID).SetStatus(SocialIPStatusOnline).SaveX(ctx)
+	ip, err = ipSvc.GetByID(ctx, ip.ID)
+	require.NoError(t, err)
+	_, err = accountSvc.SetDefaultProxyForUser(ctx, account.ID, user.ID, ip)
+	require.NoError(t, err)
+
+	billing := NewSocialBillingService(
+		&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 0}},
+		subRepo,
+		&socialBillingGroupRepoStub{group: group},
+		nil,
+	)
+	workbench := NewAccountWorkbenchService(accountSvc, ipSvc, billing, nil)
+	target := "@northwind"
+
+	result, err := workbench.SubmitTask(ctx, &AccountWorkbenchTaskInput{
+		Mode:       AccountWorkbenchTaskModeUser,
+		UserID:     user.ID,
+		AccountIDs: []int64{account.ID},
+		Action:     SocialTaskActionLogin,
+		Target:     &target,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Submitted)
+	require.Equal(t, 1, result.FailedClosed)
+	require.Len(t, result.Logs, 1)
+	require.Equal(t, SocialTaskLogStatusFailed, result.Logs[0].Status)
+	require.Equal(t, SocialTaskChargeStatusNotCharged, result.Logs[0].ChargeStatus)
+	require.Zero(t, result.Logs[0].ChargedAmount)
+	stored, err := client.SocialTaskLog.Get(ctx, result.Logs[0].ID)
+	require.NoError(t, err)
+	require.Equal(t, SocialTaskLogStatusFailed, stored.Status)
+	require.Equal(t, SocialTaskChargeStatusNotCharged, stored.ChargeStatus)
+}
+
+func TestAccountWorkbenchServiceSubmitTaskSkipsAffordabilityPrecheckForFreeActions(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	accountSvc := NewSocialAccountService(client)
+	user := client.User.Create().
+		SetEmail("free-follow-submit@example.com").
+		SetPasswordHash("hash").
+		SetBalance(0).
+		SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("free_follow_submit_account").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("free_follow_submit_account").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+	endpoint := "http://8.8.8.8:8080"
+	ipSvc := NewSocialIPService(client)
+	ip, err := ipSvc.Create(ctx, &CreateSocialIPInput{
+		UserID:   user.ID,
+		Name:     "free follow submit proxy",
+		IPType:   SocialIPTypeResidential,
+		Endpoint: &endpoint,
+	})
+	require.NoError(t, err)
+	client.SocialIP.UpdateOneID(ip.ID).SetStatus(SocialIPStatusOnline).SaveX(ctx)
+	ip, err = ipSvc.GetByID(ctx, ip.ID)
+	require.NoError(t, err)
+	_, err = accountSvc.SetDefaultProxyForUser(ctx, account.ID, user.ID, ip)
+	require.NoError(t, err)
+
+	billing := NewSocialBillingService(
+		&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 0}},
+		&subscriptionRepoState{},
+		&socialBillingGroupRepoStub{},
+		nil,
+	)
+	workbench := NewAccountWorkbenchService(accountSvc, ipSvc, billing, nil)
+	target := "@northwind"
+
+	result, err := workbench.SubmitTask(ctx, &AccountWorkbenchTaskInput{
+		Mode:       AccountWorkbenchTaskModeUser,
+		UserID:     user.ID,
+		AccountIDs: []int64{account.ID},
+		Action:     SocialTaskActionFollow,
+		Target:     &target,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Submitted)
+	require.Equal(t, 1, result.FailedClosed)
+	require.Len(t, result.Logs, 1)
+	require.Equal(t, SocialTaskLogStatusFailed, result.Logs[0].Status)
+	require.Zero(t, result.Logs[0].Price)
+	require.Equal(t, SocialTaskChargeStatusNotCharged, result.Logs[0].ChargeStatus)
+	require.Zero(t, result.Logs[0].ChargedAmount)
 }
 
 func TestSocialTaskLogIdempotencyReturnsExistingOnDuplicate(t *testing.T) {
@@ -4317,6 +6773,307 @@ func TestSocialTaskLogIdempotencyReturnsExistingOnDuplicate(t *testing.T) {
 	count, err := client.SocialTaskLog.Query().Count(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
+}
+
+func TestCreateTaskLogMapsActiveTaskUniqueConstraintToBusy(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
+	createSocialTaskActiveUniqueIndexForTest(t, ctx, client)
+	user := client.User.Create().SetEmail("active-unique-busy@example.com").SetPasswordHash("hash").SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("active_unique_busy_account").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("active_unique_busy_account").
+		SaveX(ctx)
+
+	first, err := svc.CreateTaskLog(ctx, &CreateSocialTaskLogInput{
+		AccountID: account.ID,
+		UserID:    user.ID,
+		Action:    SocialTaskActionLoginCheck,
+		Status:    SocialTaskLogStatusPending,
+	})
+	require.NoError(t, err)
+	require.NotZero(t, first.ID)
+
+	second, err := svc.CreateTaskLog(ctx, &CreateSocialTaskLogInput{
+		AccountID: account.ID,
+		UserID:    user.ID,
+		Action:    SocialTaskActionFollow,
+		Status:    SocialTaskLogStatusPending,
+	})
+	require.Nil(t, second)
+	require.Error(t, err)
+	require.Equal(t, "SOCIAL_TASK_ACCOUNT_BUSY", infraerrors.Reason(err))
+
+	count, err := client.SocialTaskLog.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+}
+
+func TestCreateTaskLogAllowsNewTaskAfterFailedTaskReleasesActiveConstraint(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
+	createSocialTaskActiveUniqueIndexForTest(t, ctx, client)
+	user := client.User.Create().SetEmail("active-release-failed@example.com").SetPasswordHash("hash").SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("active_release_failed_account").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("active_release_failed_account").
+		SaveX(ctx)
+
+	first, err := svc.CreateTaskLog(ctx, &CreateSocialTaskLogInput{
+		AccountID: account.ID,
+		UserID:    user.ID,
+		Action:    SocialTaskActionLoginCheck,
+		Status:    SocialTaskLogStatusPending,
+	})
+	require.NoError(t, err)
+
+	failed, err := svc.MarkTaskLogFailedNotCharged(ctx, first.ID, "queue unavailable")
+	require.NoError(t, err)
+	require.Equal(t, SocialTaskLogStatusFailed, failed.Status)
+	require.Equal(t, SocialTaskChargeStatusNotCharged, failed.ChargeStatus)
+	require.Zero(t, failed.ChargedAmount)
+
+	second, err := svc.CreateTaskLog(ctx, &CreateSocialTaskLogInput{
+		AccountID: account.ID,
+		UserID:    user.ID,
+		Action:    SocialTaskActionLoginCheck,
+		Status:    SocialTaskLogStatusPending,
+	})
+	require.NoError(t, err)
+	require.NotZero(t, second.ID)
+	require.NotEqual(t, first.ID, second.ID)
+	require.Equal(t, SocialTaskLogStatusPending, second.Status)
+}
+
+func TestFinalizeSuccessfulTaskReleasesActiveConstraintForNextTask(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	accountSvc := NewSocialAccountService(client)
+	createSocialTaskActiveUniqueIndexForTest(t, ctx, client)
+	user := client.User.Create().SetEmail("active-release-success@example.com").SetPasswordHash("hash").SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("active_release_success_account").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("active_release_success_account").
+		SaveX(ctx)
+	first, err := accountSvc.CreateTaskLog(ctx, &CreateSocialTaskLogInput{
+		AccountID: account.ID,
+		UserID:    user.ID,
+		Action:    SocialTaskActionLoginCheck,
+		Status:    SocialTaskLogStatusPending,
+	})
+	require.NoError(t, err)
+	_, err = client.SocialTaskLog.UpdateOneID(first.ID).SetStatus(SocialTaskLogStatusRunning).Save(ctx)
+	require.NoError(t, err)
+
+	billing := NewSocialBillingService(nil, nil, nil, nil)
+	charge, err := billing.FinalizeSuccessfulTask(ctx, client, first.ID, user.ID, 0, "login check succeeded")
+	require.NoError(t, err)
+	require.NotNil(t, charge)
+	require.Zero(t, charge.Amount)
+	storedFirst := client.SocialTaskLog.GetX(ctx, first.ID)
+	require.Equal(t, SocialTaskLogStatusSuccess, storedFirst.Status)
+	require.Equal(t, SocialTaskChargeStatusNotCharged, storedFirst.ChargeStatus)
+	require.Zero(t, storedFirst.ChargedAmount)
+
+	second, err := accountSvc.CreateTaskLog(ctx, &CreateSocialTaskLogInput{
+		AccountID: account.ID,
+		UserID:    user.ID,
+		Action:    SocialTaskActionLoginCheck,
+		Status:    SocialTaskLogStatusPending,
+	})
+	require.NoError(t, err)
+	require.NotZero(t, second.ID)
+	require.NotEqual(t, first.ID, second.ID)
+	require.Equal(t, SocialTaskLogStatusPending, second.Status)
+}
+
+func createSocialTaskActiveUniqueIndexForTest(t *testing.T, ctx context.Context, client *dbent.Client) {
+	t.Helper()
+	_, err := client.ExecContext(ctx, `
+CREATE UNIQUE INDEX idx_social_task_logs_one_active_per_account_test
+ON social_task_logs (social_account_id)
+WHERE status IN ('pending', 'running')`)
+	require.NoError(t, err)
+}
+
+func TestSocialTaskLogIdempotencyRejectsDifferentTaskPayload(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	svc := NewSocialAccountService(client)
+	user := client.User.Create().SetEmail("idempotency-conflict-user@example.com").SetPasswordHash("hash").SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("idem_conflict_account").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("idem_conflict_account").
+		SaveX(ctx)
+	idempotencyKey := "idem-conflict-123"
+	firstTarget := "@first_target"
+	secondTarget := "@second_target"
+
+	first, err := svc.CreateTaskLog(ctx, &CreateSocialTaskLogInput{
+		AccountID:      account.ID,
+		UserID:         user.ID,
+		Action:         SocialTaskActionFollow,
+		Target:         &firstTarget,
+		Status:         SocialTaskLogStatusPending,
+		IdempotencyKey: &idempotencyKey,
+	})
+	require.NoError(t, err)
+	require.Equal(t, firstTarget, requireSocialStringPtr(t, first.Target))
+
+	second, err := svc.CreateTaskLog(ctx, &CreateSocialTaskLogInput{
+		AccountID:      account.ID,
+		UserID:         user.ID,
+		Action:         SocialTaskActionFollow,
+		Target:         &secondTarget,
+		Status:         SocialTaskLogStatusPending,
+		IdempotencyKey: &idempotencyKey,
+	})
+	require.ErrorIs(t, err, ErrSocialTaskIdempotencyConflict)
+	require.Nil(t, second)
+
+	count, err := client.SocialTaskLog.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+}
+
+func TestAccountWorkbenchServiceSubmitTaskRejectsIdempotencyKeyWithDifferentTarget(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	accountSvc := NewSocialAccountService(client)
+	user := client.User.Create().
+		SetEmail("workbench-idem-conflict@example.com").
+		SetPasswordHash("hash").
+		SetBalance(1).
+		SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("workbench_idem_conflict").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("workbench_idem_conflict").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+	billing := NewSocialBillingService(
+		&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}},
+		&subscriptionRepoState{},
+		nil,
+		nil,
+	)
+	workbench := NewAccountWorkbenchService(accountSvc, NewSocialIPService(client), billing, nil)
+	idempotencyKey := "workbench-idem-conflict-123"
+	firstTarget := "@first_target"
+	secondTarget := "@second_target"
+
+	first, err := workbench.SubmitTask(ctx, &AccountWorkbenchTaskInput{
+		Mode:           AccountWorkbenchTaskModeAdmin,
+		AccountIDs:     []int64{account.ID},
+		Action:         SocialTaskActionFollow,
+		Target:         &firstTarget,
+		IdempotencyKey: idempotencyKey,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, first.Submitted)
+	require.Equal(t, 1, first.FailedClosed)
+	require.Len(t, first.Logs, 1)
+	require.Equal(t, firstTarget, requireSocialStringPtr(t, first.Logs[0].Target))
+
+	second, err := workbench.SubmitTask(ctx, &AccountWorkbenchTaskInput{
+		Mode:           AccountWorkbenchTaskModeAdmin,
+		AccountIDs:     []int64{account.ID},
+		Action:         SocialTaskActionFollow,
+		Target:         &secondTarget,
+		IdempotencyKey: idempotencyKey,
+	})
+	require.ErrorIs(t, err, ErrSocialTaskIdempotencyConflict)
+	require.Nil(t, second)
+
+	count, err := client.SocialTaskLog.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+	stored := client.SocialTaskLog.GetX(ctx, first.Logs[0].ID)
+	require.NotNil(t, stored.Target)
+	require.Equal(t, firstTarget, *stored.Target)
+}
+
+func TestAccountWorkbenchServiceSubmitTaskKeepsTemplatePoolIndexAfterIdempotentReplay(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	accountSvc := NewSocialAccountService(client)
+	user := client.User.Create().
+		SetEmail("workbench-idem-pool@example.com").
+		SetPasswordHash("hash").
+		SetBalance(1).
+		SaveX(ctx)
+	firstAccount := client.SocialAccount.Create().
+		SetName("workbench_idem_pool_first").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("workbench_idem_pool_first").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+	secondAccount := client.SocialAccount.Create().
+		SetName("workbench_idem_pool_second").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("workbench_idem_pool_second").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(SocialAccountStatusAvailable).
+		SetTaskStatus(SocialTaskStatusStored).
+		SaveX(ctx)
+	billing := NewSocialBillingService(
+		&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}},
+		&subscriptionRepoState{},
+		nil,
+		nil,
+	)
+	workbench := NewAccountWorkbenchService(accountSvc, NewSocialIPService(client), billing, nil)
+	idempotencyKey := "workbench-idem-pool-123"
+	targets := []string{"@first_target", "@second_target"}
+
+	first, err := workbench.SubmitTask(ctx, &AccountWorkbenchTaskInput{
+		Mode:           AccountWorkbenchTaskModeAdmin,
+		AccountIDs:     []int64{firstAccount.ID},
+		Action:         SocialTaskActionFollow,
+		TargetPool:     targets,
+		IdempotencyKey: idempotencyKey,
+	})
+	require.NoError(t, err)
+	require.Len(t, first.Logs, 1)
+	require.Equal(t, targets[0], requireSocialStringPtr(t, first.Logs[0].Target))
+
+	replayed, err := workbench.SubmitTask(ctx, &AccountWorkbenchTaskInput{
+		Mode:           AccountWorkbenchTaskModeAdmin,
+		AccountIDs:     []int64{firstAccount.ID, secondAccount.ID},
+		Action:         SocialTaskActionFollow,
+		TargetPool:     targets,
+		IdempotencyKey: idempotencyKey,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 2, replayed.Submitted)
+	require.Equal(t, 1, replayed.FailedClosed)
+	require.Len(t, replayed.Logs, 2)
+	require.Equal(t, first.Logs[0].ID, replayed.Logs[0].ID)
+	require.Equal(t, targets[1], requireSocialStringPtr(t, replayed.Logs[1].Target))
+
+	storedSecond := client.SocialTaskLog.GetX(ctx, replayed.Logs[1].ID)
+	require.NotNil(t, storedSecond.Target)
+	require.Equal(t, targets[1], *storedSecond.Target)
+	count, err := client.SocialTaskLog.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 2, count)
 }
 
 func TestSocialBillingAffordabilityUsesSubscriptionBeforeWallet(t *testing.T) {
@@ -4514,7 +7271,7 @@ func TestSocialTaskExecutorFinalizesSuccessBillingAtomically(t *testing.T) {
 		SetChargedAmount(0).
 		SetChargeStatus(SocialTaskChargeStatusNotCharged).
 		SaveX(ctx)
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 
 	charge, err := executor.finalizeSuccessfulTask(ctx, task.ID, user.ID, SocialTaskUnitPrice, "ok")
 
@@ -4579,6 +7336,81 @@ func TestSocialTaskExecutorFinalizesSuccessBillingAtomically(t *testing.T) {
 	require.Equal(t, 2, count)
 }
 
+func TestSocialTaskExecutorRollsBackBillingWhenUsageLedgerFails(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	user := client.User.Create().SetEmail("executor-ledger-rollback@example.com").SetPasswordHash("hash").SetBalance(0.25).SaveX(ctx)
+	limit := 0.05
+	group := client.Group.Create().
+		SetName("Executor rollback quota").
+		SetPlatform("x_twitter").
+		SetStatus(StatusActive).
+		SetSubscriptionType(SubscriptionTypeSubscription).
+		SetDailyLimitUsd(limit).
+		SaveX(ctx)
+	sub := client.UserSubscription.Create().
+		SetUserID(user.ID).
+		SetGroupID(group.ID).
+		SetPlanPlatform("x_twitter").
+		SetStartsAt(time.Now().Add(-time.Hour)).
+		SetExpiresAt(time.Now().Add(time.Hour)).
+		SetStatus(SubscriptionStatusActive).
+		SaveX(ctx)
+	account := client.SocialAccount.Create().
+		SetName("executor_ledger_rollback").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("executor_ledger_rollback").
+		SetAssignedUserID(user.ID).
+		SaveX(ctx)
+	task := client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(SocialTaskActionFollow).
+		SetStatus(SocialTaskLogStatusRunning).
+		SetPrice(SocialTaskUnitPrice).
+		SetChargedAmount(0).
+		SetChargeStatus(SocialTaskChargeStatusNotCharged).
+		SaveX(ctx)
+	ledgerErr := errors.New("usage ledger unavailable")
+	client.UsageLog.Use(func(next dbent.Mutator) dbent.Mutator {
+		return dbent.MutateFunc(func(ctx context.Context, m dbent.Mutation) (dbent.Value, error) {
+			if m.Op().Is(dbent.OpCreate) {
+				if usageMutation, ok := m.(*dbent.UsageLogMutation); ok {
+					if requestID, exists := usageMutation.RequestID(); exists && strings.HasPrefix(requestID, "social-task:") {
+						return nil, ledgerErr
+					}
+				}
+			}
+			return next.Mutate(ctx, m)
+		})
+	})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{}).WithCredentialEncryptor(executionAuthEncryptorStub{})
+
+	charge, err := executor.finalizeSuccessfulTask(ctx, task.ID, user.ID, SocialTaskUnitPrice, "ok")
+
+	require.Nil(t, charge)
+	require.ErrorIs(t, err, ledgerErr)
+	storedTask, err := client.SocialTaskLog.Get(ctx, task.ID)
+	require.NoError(t, err)
+	require.Equal(t, SocialTaskLogStatusRunning, storedTask.Status)
+	require.Equal(t, SocialTaskChargeStatusNotCharged, storedTask.ChargeStatus)
+	require.Zero(t, storedTask.ChargedAmount)
+	require.Nil(t, storedTask.ChargeSource)
+	require.Nil(t, storedTask.BillingRequestID)
+	require.Nil(t, storedTask.ExecutedAt)
+	require.Nil(t, storedTask.ResultMessage)
+	storedSub, err := client.UserSubscription.Get(ctx, sub.ID)
+	require.NoError(t, err)
+	require.Zero(t, storedSub.DailyUsageUsd)
+	storedUser, err := client.User.Get(ctx, user.ID)
+	require.NoError(t, err)
+	require.InEpsilon(t, 0.25, storedUser.Balance, 0.000001)
+	ledgerCount, err := client.UsageLog.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Zero(t, ledgerCount)
+}
+
 func TestSocialTaskExecutorFinalizesSuccessFromSubscriptionOnly(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
@@ -4615,7 +7447,7 @@ func TestSocialTaskExecutorFinalizesSuccessFromSubscriptionOnly(t *testing.T) {
 		SetChargedAmount(0).
 		SetChargeStatus(SocialTaskChargeStatusNotCharged).
 		SaveX(ctx)
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 
 	charge, err := executor.finalizeSuccessfulTask(ctx, task.ID, user.ID, SocialTaskUnitPrice, "ok")
 
@@ -4672,7 +7504,7 @@ func TestSocialTaskExecutorFinalizesSuccessActivatesSubscriptionWindows(t *testi
 		SetChargedAmount(0).
 		SetChargeStatus(SocialTaskChargeStatusNotCharged).
 		SaveX(ctx)
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 	beforeFinalizeWindowStart := startOfDay(time.Now())
 
 	charge, err := executor.finalizeSuccessfulTask(ctx, task.ID, user.ID, SocialTaskUnitPrice, "ok")
@@ -4741,7 +7573,7 @@ func TestSocialTaskExecutorFinalizesSuccessResetsExpiredDailyWindowBeforeChargin
 		SetChargedAmount(0).
 		SetChargeStatus(SocialTaskChargeStatusNotCharged).
 		SaveX(ctx)
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 	beforeFinalizeWindowStart := startOfDay(time.Now())
 
 	charge, err := executor.finalizeSuccessfulTask(ctx, task.ID, user.ID, SocialTaskUnitPrice, "ok")
@@ -4805,7 +7637,7 @@ func TestSocialTaskExecutorFinalizesSuccessTreatsZeroGuardrailsAsUnlimited(t *te
 		SetChargedAmount(0).
 		SetChargeStatus(SocialTaskChargeStatusNotCharged).
 		SaveX(ctx)
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 
 	charge, err := executor.finalizeSuccessfulTask(ctx, task.ID, user.ID, SocialTaskUnitPrice, "ok")
 
@@ -4859,7 +7691,7 @@ func TestSocialTaskExecutorFinalizesSuccessIgnoresDifferentPlatformSubscription(
 		SetChargedAmount(0).
 		SetChargeStatus(SocialTaskChargeStatusNotCharged).
 		SaveX(ctx)
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 
 	charge, err := executor.finalizeSuccessfulTask(ctx, task.ID, user.ID, SocialTaskUnitPrice, "ok")
 
@@ -4897,7 +7729,7 @@ func TestSocialTaskExecutorFinalizesSuccessFromWalletOnly(t *testing.T) {
 		SetChargedAmount(0).
 		SetChargeStatus(SocialTaskChargeStatusNotCharged).
 		SaveX(ctx)
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 
 	charge, err := executor.finalizeSuccessfulTask(ctx, task.ID, user.ID, SocialTaskUnitPrice, "ok")
 
@@ -4930,7 +7762,7 @@ func TestSocialTaskExecutorFinalizesZeroPriceSuccessWithoutCharge(t *testing.T) 
 		SetChargedAmount(0).
 		SetChargeStatus(SocialTaskChargeStatusNotCharged).
 		SaveX(ctx)
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 
 	charge, err := executor.finalizeSuccessfulTask(ctx, task.ID, user.ID, 0, "ok")
 
@@ -4974,7 +7806,7 @@ func TestSocialTaskExecutorFinalizesSuccessRejectsInsufficientFunds(t *testing.T
 		SetChargedAmount(0).
 		SetChargeStatus(SocialTaskChargeStatusNotCharged).
 		SaveX(ctx)
-	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{})
+	executor := NewSocialTaskExecutor(client, NewSocialBillingService(nil, nil, nil, nil), SocialTaskExecutorConfig{}).WithCredentialEncryptor(executionAuthEncryptorStub{})
 
 	charge, err := executor.finalizeSuccessfulTask(ctx, task.ID, user.ID, SocialTaskUnitPrice, "ok")
 
@@ -5004,7 +7836,7 @@ func TestSocialIPServiceRejectsUnsafeEndpointOnCreateAndUpdate(t *testing.T) {
 		"http://10.0.0.1:8080",
 		"http://169.254.169.254:80",
 		"http://localhost:8080",
-		"http://8.8.8.8",
+		"https://127.0.0.1/proxy-api",
 		"ftp://8.8.8.8:21",
 	} {
 		t.Run("create_"+raw, func(t *testing.T) {
@@ -5090,7 +7922,7 @@ func TestSocialIPServiceRestrictsProxyTypesToExistingProductContract(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, "residential", defaulted.IPType)
 
-	for _, proxyType := range []string{"residential", "static", "mobile", "datacenter"} {
+	for _, proxyType := range []string{"residential", "static", "dynamic", "mobile", "datacenter"} {
 		t.Run("create_"+proxyType, func(t *testing.T) {
 			ip, err := svc.Create(ctx, &CreateSocialIPInput{
 				UserID: user.ID,
@@ -5173,6 +8005,31 @@ func TestSocialIPServiceRejectsMissingOwnerBeforeCreate(t *testing.T) {
 	require.Equal(t, "SOCIAL_IP_OWNER_NOT_FOUND", infraerrors.Reason(err))
 }
 
+func TestSocialIPServiceRejectsMissingUpdateInput(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	user := client.User.Create().
+		SetEmail("proxy-update-input-owner@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	ip := client.SocialIP.Create().
+		SetUserID(user.ID).
+		SetName("stable proxy").
+		SetIPType(SocialIPTypeResidential).
+		SetStatus(SocialIPStatusOnline).
+		SaveX(ctx)
+	svc := NewSocialIPService(client)
+
+	_, err := svc.Update(ctx, ip.ID, nil)
+
+	require.Error(t, err)
+	require.Equal(t, http.StatusBadRequest, infraerrors.Code(err))
+	require.Equal(t, "SOCIAL_IP_INPUT_REQUIRED", infraerrors.Reason(err))
+	stored := client.SocialIP.GetX(ctx, ip.ID)
+	require.Equal(t, "stable proxy", stored.Name)
+	require.Equal(t, SocialIPStatusOnline, stored.Status)
+}
+
 func TestSocialIPServiceResetsConnectivityStatusWhenEndpointChanges(t *testing.T) {
 	ctx := context.Background()
 	client := newSocialOpsServiceTestClient(t)
@@ -5251,6 +8108,15 @@ func TestSocialIPServiceKeepsConnectivityStatusWhenEndpointUnchanged(t *testing.
 		SetLatencyMs(latency).
 		SetLastCheckAt(checkedAt).
 		SaveX(ctx)
+	staleSnapshot := fmt.Sprintf(`{"id":%d,"name":"status proxy","ip_type":"residential","endpoint":%q,"status":"unknown"}`, ip.ID, endpoint)
+	account := client.SocialAccount.Create().
+		SetName("proxy_update_snapshot_account").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("proxy_update_snapshot_account").
+		SetAssignedUserID(user.ID).
+		SetDefaultProxySnapshot(staleSnapshot).
+		SaveX(ctx)
 	newName := "renamed status proxy"
 	updated, err := svc.Update(ctx, ip.ID, &UpdateSocialIPInput{
 		Name:     &newName,
@@ -5271,6 +8137,330 @@ func TestSocialIPServiceKeepsConnectivityStatusWhenEndpointUnchanged(t *testing.
 	require.Equal(t, latency, *stored.LatencyMs)
 	require.NotNil(t, stored.LastCheckAt)
 	require.Equal(t, endpoint, *stored.Endpoint)
+	storedAccount := client.SocialAccount.GetX(ctx, account.ID)
+	require.NotNil(t, storedAccount.DefaultProxySnapshot)
+	var snapshot map[string]any
+	require.NoError(t, json.Unmarshal([]byte(*storedAccount.DefaultProxySnapshot), &snapshot))
+	require.Equal(t, float64(ip.ID), snapshot["id"])
+	require.Equal(t, newName, snapshot["name"])
+	require.Equal(t, endpoint, snapshot["endpoint"])
+	require.Equal(t, SocialIPStatusOnline, snapshot["status"])
+}
+
+func TestSocialIPServiceDeleteForUserClearsOwnReferencesBeforeDelete(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	user := client.User.Create().
+		SetEmail("proxy-delete-cleanup-owner@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	otherUser := client.User.Create().
+		SetEmail("proxy-delete-cleanup-other@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	ip := client.SocialIP.Create().
+		SetUserID(user.ID).
+		SetName("delete cleanup proxy").
+		SetIPType(SocialIPTypeResidential).
+		SetStatus(SocialIPStatusOnline).
+		SaveX(ctx)
+	proxy, err := NewSocialIPService(client).GetByID(ctx, ip.ID)
+	require.NoError(t, err)
+	snapshot := SocialIPTaskSnapshot(proxy)
+	account := client.SocialAccount.Create().
+		SetName("proxy_delete_cleanup_account").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("proxy_delete_cleanup_account").
+		SetAssignedUserID(user.ID).
+		SetDefaultProxySnapshot(snapshot).
+		SaveX(ctx)
+	otherAccount := client.SocialAccount.Create().
+		SetName("proxy_delete_cleanup_other_account").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("proxy_delete_cleanup_other_account").
+		SetAssignedUserID(otherUser.ID).
+		SetDefaultProxySnapshot(snapshot).
+		SaveX(ctx)
+	taskLog := client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(SocialTaskActionFollow).
+		SetStatus(SocialTaskLogStatusPending).
+		SetProxyID(ip.ID).
+		SetProxySnapshot(snapshot).
+		SaveX(ctx)
+
+	inspectedBeforeDelete := false
+	client.SocialIP.Use(func(next dbent.Mutator) dbent.Mutator {
+		return dbent.MutateFunc(func(ctx context.Context, m dbent.Mutation) (dbent.Value, error) {
+			if m.Op().Is(dbent.OpDelete|dbent.OpDeleteOne) && !inspectedBeforeDelete {
+				mutation, ok := m.(*dbent.SocialIPMutation)
+				require.True(t, ok)
+				ids, err := mutation.IDs(ctx)
+				require.NoError(t, err)
+				require.Contains(t, ids, ip.ID)
+				tx, err := mutation.Tx()
+				require.NoError(t, err)
+				storedAccount, err := tx.Client().SocialAccount.Get(ctx, account.ID)
+				require.NoError(t, err)
+				require.Nil(t, storedAccount.DefaultProxySnapshot)
+				storedOtherAccount, err := tx.Client().SocialAccount.Get(ctx, otherAccount.ID)
+				require.NoError(t, err)
+				require.NotNil(t, storedOtherAccount.DefaultProxySnapshot)
+				require.Equal(t, snapshot, *storedOtherAccount.DefaultProxySnapshot)
+				storedTaskLog, err := tx.Client().SocialTaskLog.Get(ctx, taskLog.ID)
+				require.NoError(t, err)
+				require.Nil(t, storedTaskLog.ProxyID)
+				require.NotNil(t, storedTaskLog.ProxySnapshot)
+				require.Equal(t, snapshot, *storedTaskLog.ProxySnapshot)
+				inspectedBeforeDelete = true
+			}
+			return next.Mutate(ctx, m)
+		})
+	})
+
+	require.NoError(t, NewSocialIPService(client).DeleteForUser(ctx, ip.ID, user.ID))
+	require.True(t, inspectedBeforeDelete)
+	storedAccount := client.SocialAccount.GetX(ctx, account.ID)
+	require.Nil(t, storedAccount.DefaultProxySnapshot)
+	storedOtherAccount := client.SocialAccount.GetX(ctx, otherAccount.ID)
+	require.NotNil(t, storedOtherAccount.DefaultProxySnapshot)
+	require.Equal(t, snapshot, *storedOtherAccount.DefaultProxySnapshot)
+	storedTaskLog := client.SocialTaskLog.GetX(ctx, taskLog.ID)
+	require.Nil(t, storedTaskLog.ProxyID)
+	require.NotNil(t, storedTaskLog.ProxySnapshot)
+	require.Equal(t, snapshot, *storedTaskLog.ProxySnapshot)
+	_, err = client.SocialIP.Get(ctx, ip.ID)
+	require.True(t, dbent.IsNotFound(err))
+}
+
+func TestSocialIPServiceDeleteForUserRechecksOwnershipAtDeleteTime(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	user := client.User.Create().
+		SetEmail("proxy-delete-race-owner@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	otherUser := client.User.Create().
+		SetEmail("proxy-delete-race-other@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	ip := client.SocialIP.Create().
+		SetUserID(user.ID).
+		SetName("racy delete proxy").
+		SetIPType(SocialIPTypeResidential).
+		SetStatus(SocialIPStatusOnline).
+		SaveX(ctx)
+	proxy, err := NewSocialIPService(client).GetByID(ctx, ip.ID)
+	require.NoError(t, err)
+	snapshot := SocialIPTaskSnapshot(proxy)
+	account := client.SocialAccount.Create().
+		SetName("proxy_delete_race_account").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("proxy_delete_race_account").
+		SetAssignedUserID(user.ID).
+		SetDefaultProxySnapshot(snapshot).
+		SaveX(ctx)
+	taskLog := client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(SocialTaskActionFollow).
+		SetStatus(SocialTaskLogStatusPending).
+		SetProxyID(ip.ID).
+		SetProxySnapshot(snapshot).
+		SaveX(ctx)
+
+	ownershipMoved := false
+	client.SocialIP.Use(func(next dbent.Mutator) dbent.Mutator {
+		return dbent.MutateFunc(func(ctx context.Context, m dbent.Mutation) (dbent.Value, error) {
+			if m.Op().Is(dbent.OpDelete|dbent.OpDeleteOne) && !ownershipMoved {
+				if mutation, ok := m.(*dbent.SocialIPMutation); ok {
+					ids, err := mutation.IDs(ctx)
+					if err != nil {
+						return nil, err
+					}
+					require.Contains(t, ids, ip.ID)
+					tx, err := mutation.Tx()
+					if err != nil {
+						return nil, err
+					}
+					_, err = tx.Client().SocialIP.UpdateOneID(ip.ID).SetUserID(otherUser.ID).Save(ctx)
+					if err != nil {
+						return nil, err
+					}
+					ownershipMoved = true
+				}
+			}
+			return next.Mutate(ctx, m)
+		})
+	})
+
+	err = NewSocialIPService(client).DeleteForUser(ctx, ip.ID, user.ID)
+
+	require.Error(t, err)
+	require.Equal(t, "SOCIAL_IP_NOT_FOUND", infraerrors.Reason(err))
+	require.True(t, ownershipMoved)
+	storedIP := client.SocialIP.GetX(ctx, ip.ID)
+	require.Equal(t, user.ID, storedIP.UserID)
+	storedAccount := client.SocialAccount.GetX(ctx, account.ID)
+	require.NotNil(t, storedAccount.DefaultProxySnapshot)
+	require.Equal(t, snapshot, *storedAccount.DefaultProxySnapshot)
+	storedTaskLog := client.SocialTaskLog.GetX(ctx, taskLog.ID)
+	require.NotNil(t, storedTaskLog.ProxyID)
+	require.Equal(t, ip.ID, *storedTaskLog.ProxyID)
+	require.NotNil(t, storedTaskLog.ProxySnapshot)
+	require.Equal(t, snapshot, *storedTaskLog.ProxySnapshot)
+}
+
+func TestSocialIPServiceUpdateForUserRechecksOwnershipAtWriteTime(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	user := client.User.Create().
+		SetEmail("proxy-update-race-owner@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	otherUser := client.User.Create().
+		SetEmail("proxy-update-race-other@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	ip := client.SocialIP.Create().
+		SetUserID(user.ID).
+		SetName("racy update proxy").
+		SetIPType(SocialIPTypeResidential).
+		SetStatus(SocialIPStatusOnline).
+		SetRemark("original remark").
+		SaveX(ctx)
+	proxy, err := NewSocialIPService(client).GetByID(ctx, ip.ID)
+	require.NoError(t, err)
+	snapshot := SocialIPTaskSnapshot(proxy)
+	account := client.SocialAccount.Create().
+		SetName("proxy_update_race_account").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("proxy_update_race_account").
+		SetAssignedUserID(user.ID).
+		SetDefaultProxySnapshot(snapshot).
+		SaveX(ctx)
+
+	ownershipMoved := false
+	client.SocialIP.Use(func(next dbent.Mutator) dbent.Mutator {
+		return dbent.MutateFunc(func(ctx context.Context, m dbent.Mutation) (dbent.Value, error) {
+			if m.Op().Is(dbent.OpUpdateOne) && !ownershipMoved {
+				if mutation, ok := m.(*dbent.SocialIPMutation); ok {
+					ids, err := mutation.IDs(ctx)
+					if err != nil {
+						return nil, err
+					}
+					require.Contains(t, ids, ip.ID)
+					tx, err := mutation.Tx()
+					if err != nil {
+						return nil, err
+					}
+					ownershipMoved = true
+					_, err = tx.Client().SocialIP.UpdateOneID(ip.ID).SetUserID(otherUser.ID).Save(ctx)
+					if err != nil {
+						return nil, err
+					}
+				}
+			}
+			return next.Mutate(ctx, m)
+		})
+	})
+
+	newName := "should not save"
+	newRemark := "should not persist"
+	updated, err := NewSocialIPService(client).UpdateForUser(ctx, ip.ID, user.ID, &UpdateSocialIPInput{
+		Name:   &newName,
+		Remark: &newRemark,
+	})
+
+	require.Nil(t, updated)
+	require.Error(t, err)
+	require.Equal(t, "SOCIAL_IP_NOT_FOUND", infraerrors.Reason(err))
+	require.True(t, ownershipMoved)
+	storedIP := client.SocialIP.GetX(ctx, ip.ID)
+	require.Equal(t, user.ID, storedIP.UserID)
+	require.Equal(t, "racy update proxy", storedIP.Name)
+	require.NotNil(t, storedIP.Remark)
+	require.Equal(t, "original remark", *storedIP.Remark)
+	storedAccount := client.SocialAccount.GetX(ctx, account.ID)
+	require.NotNil(t, storedAccount.DefaultProxySnapshot)
+	require.Equal(t, snapshot, *storedAccount.DefaultProxySnapshot)
+}
+
+func TestSocialIPCheckerTestIPForUserRechecksOwnershipAtStatusWrite(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	user := client.User.Create().
+		SetEmail("proxy-test-race-owner@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	otherUser := client.User.Create().
+		SetEmail("proxy-test-race-other@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	ip := client.SocialIP.Create().
+		SetUserID(user.ID).
+		SetName("racy test proxy").
+		SetIPType(SocialIPTypeResidential).
+		SetStatus(SocialIPStatusOnline).
+		SetLatencyMs(321).
+		SaveX(ctx)
+	proxy, err := NewSocialIPService(client).GetByID(ctx, ip.ID)
+	require.NoError(t, err)
+	snapshot := SocialIPTaskSnapshot(proxy)
+	account := client.SocialAccount.Create().
+		SetName("proxy_test_race_account").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("proxy_test_race_account").
+		SetAssignedUserID(user.ID).
+		SetDefaultProxySnapshot(snapshot).
+		SaveX(ctx)
+
+	ownershipMoved := false
+	client.SocialIP.Use(func(next dbent.Mutator) dbent.Mutator {
+		return dbent.MutateFunc(func(ctx context.Context, m dbent.Mutation) (dbent.Value, error) {
+			if m.Op().Is(dbent.OpUpdateOne) && !ownershipMoved {
+				if mutation, ok := m.(*dbent.SocialIPMutation); ok {
+					ids, err := mutation.IDs(ctx)
+					if err != nil {
+						return nil, err
+					}
+					require.Contains(t, ids, ip.ID)
+					tx, err := mutation.Tx()
+					if err != nil {
+						return nil, err
+					}
+					ownershipMoved = true
+					_, err = tx.Client().SocialIP.UpdateOneID(ip.ID).SetUserID(otherUser.ID).Save(ctx)
+					if err != nil {
+						return nil, err
+					}
+				}
+			}
+			return next.Mutate(ctx, m)
+		})
+	})
+
+	result, err := NewSocialIPChecker(client).TestIPForUser(ctx, ip.ID, user.ID)
+
+	require.Nil(t, result)
+	require.Error(t, err)
+	require.Equal(t, "SOCIAL_IP_NOT_FOUND", infraerrors.Reason(err))
+	require.True(t, ownershipMoved)
+	storedIP := client.SocialIP.GetX(ctx, ip.ID)
+	require.Equal(t, user.ID, storedIP.UserID)
+	require.Equal(t, SocialIPStatusOnline, storedIP.Status)
+	require.NotNil(t, storedIP.LatencyMs)
+	require.Equal(t, 321, *storedIP.LatencyMs)
+	require.Nil(t, storedIP.LastCheckAt)
+	storedAccount := client.SocialAccount.GetX(ctx, account.ID)
+	require.NotNil(t, storedAccount.DefaultProxySnapshot)
+	require.Equal(t, snapshot, *storedAccount.DefaultProxySnapshot)
 }
 
 func TestSocialIPCheckerClearsStaleLatencyWhenProxyIsUnknown(t *testing.T) {
@@ -5298,6 +8488,188 @@ func TestSocialIPCheckerClearsStaleLatencyWhenProxyIsUnknown(t *testing.T) {
 	require.Equal(t, SocialIPStatusUnknown, stored.Status)
 	require.Nil(t, stored.LatencyMs)
 	require.NotNil(t, stored.LastCheckAt)
+}
+
+func TestSocialIPCheckerReturnsSafeResultErrors(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	user := client.User.Create().
+		SetEmail("proxy-safe-result-owner@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	checker := NewSocialIPChecker(client)
+	ptr := func(value string) *string { return &value }
+
+	tests := []struct {
+		name        string
+		endpoint    *string
+		wantStatus  string
+		wantMessage string
+		blockedText []string
+	}{
+		{
+			name:        "missing endpoint",
+			wantStatus:  SocialIPStatusUnknown,
+			wantMessage: "proxy endpoint is not ready for connectivity check",
+			blockedText: []string{"no endpoint configured"},
+		},
+		{
+			name:        "blocked private endpoint",
+			endpoint:    ptr("http://127.0.0.1:8080"),
+			wantStatus:  SocialIPStatusOffline,
+			wantMessage: "proxy connectivity check failed",
+			blockedText: []string{"127.0.0.1", "local address", "private"},
+		},
+		{
+			name:        "malformed endpoint with credentials",
+			endpoint:    ptr("http://user:secret_password@:0/"),
+			wantStatus:  SocialIPStatusOffline,
+			wantMessage: "proxy connectivity check failed",
+			blockedText: []string{"secret_password", "missing host", "user:"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			create := client.SocialIP.Create().
+				SetUserID(user.ID).
+				SetName("safe result " + tc.name).
+				SetIPType("residential").
+				SetStatus(SocialIPStatusOnline).
+				SetLatencyMs(123)
+			if tc.endpoint != nil {
+				create.SetEndpoint(*tc.endpoint)
+			}
+			ip := create.SaveX(ctx)
+
+			result, err := checker.TestIP(ctx, ip.ID)
+
+			require.NoError(t, err)
+			require.Equal(t, tc.wantStatus, result.Status)
+			require.Equal(t, tc.wantMessage, result.Error)
+			require.Zero(t, result.LatencyMs)
+			for _, blocked := range tc.blockedText {
+				require.NotContains(t, strings.ToLower(result.Error), strings.ToLower(blocked))
+			}
+			stored := client.SocialIP.GetX(ctx, ip.ID)
+			require.Equal(t, tc.wantStatus, stored.Status)
+			require.Nil(t, stored.LatencyMs)
+			require.NotNil(t, stored.LastCheckAt)
+		})
+	}
+}
+
+func TestSocialIPCheckerSyncsDefaultProxySnapshotsAfterStatusUpdate(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	user := client.User.Create().
+		SetEmail("proxy-snapshot-sync-owner@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	otherUser := client.User.Create().
+		SetEmail("proxy-snapshot-sync-other-owner@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	ip := client.SocialIP.Create().
+		SetUserID(user.ID).
+		SetName("snapshot sync proxy").
+		SetIPType("residential").
+		SetStatus(SocialIPStatusOnline).
+		SetLatencyMs(123).
+		SaveX(ctx)
+	staleSnapshot := fmt.Sprintf(`{"id":%d,"name":"stale proxy","ip_type":"static","endpoint":"http://203.0.113.10:8080","status":"online"}`, ip.ID)
+	accountUpdatedAt := time.Date(2026, 6, 24, 10, 1, 0, 0, time.UTC)
+	account := client.SocialAccount.Create().
+		SetName("proxy_snapshot_sync_account").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("proxy_snapshot_sync_account").
+		SetAssignedUserID(user.ID).
+		SetDefaultProxySnapshot(staleSnapshot).
+		SetUpdatedAt(accountUpdatedAt).
+		SaveX(ctx)
+	otherSnapshot := `{"id":999999,"name":"other proxy","status":"online"}`
+	otherAccount := client.SocialAccount.Create().
+		SetName("proxy_snapshot_sync_other").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("proxy_snapshot_sync_other").
+		SetAssignedUserID(user.ID).
+		SetDefaultProxySnapshot(otherSnapshot).
+		SaveX(ctx)
+	crossOwnerSnapshot := fmt.Sprintf(`{"id":%d,"name":"cross owner stale proxy","status":"online"}`, ip.ID)
+	crossOwnerAccount := client.SocialAccount.Create().
+		SetName("proxy_snapshot_sync_cross_owner").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("proxy_snapshot_sync_cross_owner").
+		SetAssignedUserID(otherUser.ID).
+		SetDefaultProxySnapshot(crossOwnerSnapshot).
+		SaveX(ctx)
+
+	result, err := NewSocialIPChecker(client).TestIP(ctx, ip.ID)
+
+	require.NoError(t, err)
+	require.Equal(t, SocialIPStatusUnknown, result.Status)
+	stored := client.SocialAccount.GetX(ctx, account.ID)
+	require.NotNil(t, stored.DefaultProxySnapshot)
+	var snapshot map[string]any
+	require.NoError(t, json.Unmarshal([]byte(*stored.DefaultProxySnapshot), &snapshot))
+	require.Equal(t, float64(ip.ID), snapshot["id"])
+	require.Equal(t, "snapshot sync proxy", snapshot["name"])
+	require.Equal(t, "residential", snapshot["ip_type"])
+	require.Equal(t, "", snapshot["endpoint"])
+	require.Equal(t, SocialIPStatusUnknown, snapshot["status"])
+	require.True(t, stored.UpdatedAt.Equal(accountUpdatedAt), "proxy snapshot maintenance should not make account updated_at shared")
+	otherStored := client.SocialAccount.GetX(ctx, otherAccount.ID)
+	require.NotNil(t, otherStored.DefaultProxySnapshot)
+	require.Equal(t, otherSnapshot, *otherStored.DefaultProxySnapshot)
+	crossOwnerStored := client.SocialAccount.GetX(ctx, crossOwnerAccount.ID)
+	require.NotNil(t, crossOwnerStored.DefaultProxySnapshot)
+	require.Equal(t, crossOwnerSnapshot, *crossOwnerStored.DefaultProxySnapshot)
+}
+
+func TestSocialIPServiceMarkExecutionReachableSyncsDefaultProxySnapshots(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	user := client.User.Create().
+		SetEmail("proxy-execution-reachable-owner@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	endpoint := "http://203.0.113.20:8080"
+	ip := client.SocialIP.Create().
+		SetUserID(user.ID).
+		SetName("execution reachable proxy").
+		SetIPType("residential").
+		SetEndpoint(endpoint).
+		SetStatus(SocialIPStatusOffline).
+		SaveX(ctx)
+	staleSnapshot := fmt.Sprintf(`{"id":%d,"name":"execution reachable proxy","ip_type":"residential","endpoint":%q,"status":"offline"}`, ip.ID, endpoint)
+	accountUpdatedAt := time.Date(2026, 6, 24, 11, 2, 0, 0, time.UTC)
+	account := client.SocialAccount.Create().
+		SetName("proxy_execution_reachable_account").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("proxy_execution_reachable_account").
+		SetAssignedUserID(user.ID).
+		SetDefaultProxySnapshot(staleSnapshot).
+		SetUpdatedAt(accountUpdatedAt).
+		SaveX(ctx)
+
+	err := NewSocialIPService(client).MarkExecutionReachable(ctx, ip.ID)
+
+	require.NoError(t, err)
+	storedIP := client.SocialIP.GetX(ctx, ip.ID)
+	require.Equal(t, SocialIPStatusOnline, storedIP.Status)
+	require.NotNil(t, storedIP.LastCheckAt)
+	storedAccount := client.SocialAccount.GetX(ctx, account.ID)
+	require.NotNil(t, storedAccount.DefaultProxySnapshot)
+	var snapshot map[string]any
+	require.NoError(t, json.Unmarshal([]byte(*storedAccount.DefaultProxySnapshot), &snapshot))
+	require.Equal(t, float64(ip.ID), snapshot["id"])
+	require.Equal(t, endpoint, snapshot["endpoint"])
+	require.Equal(t, SocialIPStatusOnline, snapshot["status"])
+	require.True(t, storedAccount.UpdatedAt.Equal(accountUpdatedAt), "execution proxy reachability sync should not refresh account updated_at")
 }
 
 func TestSocialIPCheckerReturnsErrorWhenStatusPersistenceFails(t *testing.T) {
@@ -5334,6 +8706,95 @@ func TestSocialIPCheckerReturnsErrorWhenStatusPersistenceFails(t *testing.T) {
 	require.NotNil(t, stored.LatencyMs)
 	require.Equal(t, 123, *stored.LatencyMs)
 	require.Nil(t, stored.LastCheckAt)
+}
+
+func TestSocialIPCheckerTestAllReturnsErrorWhenStatusPersistenceFails(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	user := client.User.Create().
+		SetEmail("proxy-batch-persist-failure-owner@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	ip := client.SocialIP.Create().
+		SetUserID(user.ID).
+		SetName("batch status persistence proxy").
+		SetIPType("residential").
+		SetStatus(SocialIPStatusOnline).
+		SetLatencyMs(123).
+		SaveX(ctx)
+	persistErr := errors.New("batch status persistence failed")
+	client.SocialIP.Use(func(next dbent.Mutator) dbent.Mutator {
+		return dbent.MutateFunc(func(ctx context.Context, m dbent.Mutation) (dbent.Value, error) {
+			if m.Op().Is(dbent.OpUpdateOne) {
+				return nil, persistErr
+			}
+			return next.Mutate(ctx, m)
+		})
+	})
+
+	results, err := NewSocialIPChecker(client).TestAllByUser(ctx, user.ID)
+
+	require.Nil(t, results)
+	require.ErrorIs(t, err, persistErr)
+	stored, getErr := client.SocialIP.Get(ctx, ip.ID)
+	require.NoError(t, getErr)
+	require.Equal(t, SocialIPStatusOnline, stored.Status)
+	require.NotNil(t, stored.LatencyMs)
+	require.Equal(t, 123, *stored.LatencyMs)
+	require.Nil(t, stored.LastCheckAt)
+}
+
+func TestSocialIPCheckerTestAllRollsBackEarlierStatusUpdatesWhenLaterPersistenceFails(t *testing.T) {
+	ctx := context.Background()
+	client := newSocialOpsServiceTestClient(t)
+	user := client.User.Create().
+		SetEmail("proxy-batch-rollback-owner@example.com").
+		SetPasswordHash("hashed-password").
+		SaveX(ctx)
+	first := client.SocialIP.Create().
+		SetUserID(user.ID).
+		SetName("batch rollback first").
+		SetIPType("residential").
+		SetStatus(SocialIPStatusOnline).
+		SetLatencyMs(111).
+		SaveX(ctx)
+	second := client.SocialIP.Create().
+		SetUserID(user.ID).
+		SetName("batch rollback second").
+		SetIPType("residential").
+		SetStatus(SocialIPStatusOnline).
+		SetLatencyMs(222).
+		SaveX(ctx)
+	persistErr := errors.New("second proxy status persistence failed")
+	var updateCount int
+	client.SocialIP.Use(func(next dbent.Mutator) dbent.Mutator {
+		return dbent.MutateFunc(func(ctx context.Context, m dbent.Mutation) (dbent.Value, error) {
+			if m.Op().Is(dbent.OpUpdateOne) {
+				updateCount++
+				if updateCount == 2 {
+					return nil, persistErr
+				}
+			}
+			return next.Mutate(ctx, m)
+		})
+	})
+
+	results, err := NewSocialIPChecker(client).TestAllByUser(ctx, user.ID)
+
+	require.Nil(t, results)
+	require.ErrorIs(t, err, persistErr)
+	storedFirst, firstErr := client.SocialIP.Get(ctx, first.ID)
+	require.NoError(t, firstErr)
+	require.Equal(t, SocialIPStatusOnline, storedFirst.Status)
+	require.NotNil(t, storedFirst.LatencyMs)
+	require.Equal(t, 111, *storedFirst.LatencyMs)
+	require.Nil(t, storedFirst.LastCheckAt)
+	storedSecond, secondErr := client.SocialIP.Get(ctx, second.ID)
+	require.NoError(t, secondErr)
+	require.Equal(t, SocialIPStatusOnline, storedSecond.Status)
+	require.NotNil(t, storedSecond.LatencyMs)
+	require.Equal(t, 222, *storedSecond.LatencyMs)
+	require.Nil(t, storedSecond.LastCheckAt)
 }
 
 func newSocialOpsServiceTestClient(t *testing.T) *dbent.Client {

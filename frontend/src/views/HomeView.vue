@@ -191,7 +191,7 @@
             <span
               class="min-w-0 text-center text-sm font-medium text-gray-700 [overflow-wrap:anywhere] dark:text-dark-200"
               >{{
-              t('home.tags.subscriptionToApi')
+              t('home.tags.subscriptionAccess')
             }}</span>
           </div>
           <div
@@ -201,7 +201,7 @@
             <span
               class="min-w-0 text-center text-sm font-medium text-gray-700 [overflow-wrap:anywhere] dark:text-dark-200"
               >{{
-              t('home.tags.stickySession')
+              t('home.tags.accountAssignment')
             }}</span>
           </div>
           <div
@@ -211,7 +211,7 @@
             <span
               class="min-w-0 text-center text-sm font-medium text-gray-700 [overflow-wrap:anywhere] dark:text-dark-200"
               >{{
-              t('home.tags.realtimeBilling')
+              t('home.tags.taskRecords')
             }}</span>
           </div>
         </div>

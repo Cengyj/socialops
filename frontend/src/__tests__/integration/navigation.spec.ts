@@ -7,7 +7,7 @@ import { createRouter, createWebHistory, type Router } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, nextTick } from 'vue'
-import { useNavigationLoadingState, _resetNavigationLoadingInstance } from '@/composables/useNavigationLoading'
+import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 
 // Mock 视图组件
@@ -97,7 +97,7 @@ describe('Navigation Integration Tests', () => {
     setActivePinia(createPinia())
 
     // 重置导航加载状态
-    _resetNavigationLoadingInstance()
+    useNavigationLoadingState().resetState()
 
     // 创建新的路由实例
     router = createTestRouter()

@@ -36,10 +36,6 @@ func (storeUnavailableRepoStub) MarkSucceeded(context.Context, int64, int, strin
 func (storeUnavailableRepoStub) MarkFailedRetryable(context.Context, int64, string, time.Time, time.Time) error {
 	return errors.New("store unavailable")
 }
-func (storeUnavailableRepoStub) DeleteExpired(context.Context, time.Time, int) (int64, error) {
-	return 0, errors.New("store unavailable")
-}
-
 func TestExecuteAdminIdempotentJSONFailCloseOnStoreUnavailable(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	service.SetDefaultIdempotencyCoordinator(service.NewIdempotencyCoordinator(storeUnavailableRepoStub{}, service.DefaultIdempotencyConfig()))
@@ -226,10 +222,6 @@ func (r *memoryIdempotencyRepoStub) MarkFailedRetryable(_ context.Context, id in
 		return nil
 	}
 	return nil
-}
-
-func (r *memoryIdempotencyRepoStub) DeleteExpired(_ context.Context, _ time.Time, _ int) (int64, error) {
-	return 0, nil
 }
 
 func TestExecuteAdminIdempotentJSONConcurrentRetryOnlyOneSideEffect(t *testing.T) {

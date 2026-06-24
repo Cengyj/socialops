@@ -71,7 +71,7 @@ func TestAccountWorkbenchTaskInputValidatesStructuredPayloadMediaBeforePersistin
 					URL:         "data:video/mp4;base64,QUJD",
 				}},
 			}},
-			wantError: "video media is not implemented yet",
+			wantError: "video media is not supported for SocialOps execution",
 		},
 		{
 			name:   "avatar rejects non-image",
@@ -110,7 +110,9 @@ func TestAccountWorkbenchTaskInputValidatesStructuredPayloadMediaBeforePersistin
 
 func TestSocialTaskExecutorFailuresRemainNotChargedAcrossAuthProxyAndMedia(t *testing.T) {
 	ctx := context.Background()
-	baseAuth := `{"access_token":"access-token","token_secret":"token-secret","client_uuid":"client-uuid","twitter_client":"TwitterAndroid","client_version":"11.46.0-release.0","twitter_api_version":"5","client_language":"en-US","client_device_id":"device-id","client_limit_ad_tracking":"0","user_agent":"TwitterAndroid/11.46.0-release.0","accept_language":"en-US","accept_encoding":"gzip","timezone":"Pacific/Honolulu","os_security_patch_level":"2024-10-05"}`
+	baseAuth := `{"access_token":"access-token","token_secret":"token-secret","screen_name":"northwind_ops"}`
+	encryptedBaseAuth, err := normalizeTwitterExecutionAuthForEncryptedStorage(baseAuth, "northwind_ops", executionAuthEncryptorStub{})
+	require.NoError(t, err)
 	onlineProxy := `{"id":1,"endpoint":"http://8.8.8.8:8080","status":"online"}`
 	offlineProxy := `{"id":1,"endpoint":"http://8.8.8.8:8080","status":"offline"}`
 
@@ -148,7 +150,7 @@ func TestSocialTaskExecutorFailuresRemainNotChargedAcrossAuthProxyAndMedia(t *te
 			name:           "offline proxy",
 			action:         SocialTaskActionFollow,
 			payload:        SocialTaskPayload{Target: "123456789"},
-			auth:           &baseAuth,
+			auth:           &encryptedBaseAuth,
 			proxySnapshot:  &offlineProxy,
 			wantMessage:    "执行代理不可用，本次未扣费",
 			wantStatus:     SocialAccountStatusAvailable,
@@ -167,7 +169,7 @@ func TestSocialTaskExecutorFailuresRemainNotChargedAcrossAuthProxyAndMedia(t *te
 					URL:         "data:video/mp4;base64,QUJD",
 				}},
 			}},
-			auth:           &baseAuth,
+			auth:           &encryptedBaseAuth,
 			proxySnapshot:  &onlineProxy,
 			wantMessage:    "视频发帖媒体暂未开放，本次未扣费",
 			wantStatus:     SocialAccountStatusAvailable,
@@ -186,7 +188,7 @@ func TestSocialTaskExecutorFailuresRemainNotChargedAcrossAuthProxyAndMedia(t *te
 					URL:         "data:application/pdf;base64,QUJD",
 				}},
 			}},
-			auth:           &baseAuth,
+			auth:           &encryptedBaseAuth,
 			proxySnapshot:  &onlineProxy,
 			wantMessage:    "发帖媒体类型暂不支持，本次未扣费",
 			wantStatus:     SocialAccountStatusAvailable,
@@ -228,8 +230,9 @@ func TestSocialTaskExecutorFailuresRemainNotChargedAcrossAuthProxyAndMedia(t *te
 			}
 			task := taskCreate.SaveX(ctx)
 
-			executor := NewSocialTaskExecutor(client, NewSocialBillingService(&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1})
-			exec := NewTwitterExecutor()
+			executor := NewSocialTaskExecutor(client, NewSocialBillingService(&socialBillingUserRepoStub{user: &User{ID: user.ID, Balance: 1}}, &subscriptionRepoState{}, &socialBillingGroupRepoStub{}, nil), SocialTaskExecutorConfig{WorkerCount: 1, QueueSize: 1}).
+				WithCredentialEncryptor(executionAuthEncryptorStub{})
+			exec := NewTwitterExecutor().WithCredentialEncryptor(executionAuthEncryptorStub{})
 			exec.clientForProxy = func(proxyURL string) (twitterHTTPClient, error) {
 				t.Fatalf("%s should fail closed before external HTTP", tc.name)
 				return nil, nil
@@ -272,7 +275,7 @@ func TestAccountWorkbenchTaskInputAcceptsStructuredPayloadTarget(t *testing.T) {
 		AccountIDs: []int64{1},
 		Action:     SocialTaskActionRetweet,
 		Payload: &SocialTaskPayload{
-			Target: "https://x.com/openai/status/123456789",
+			Target: "https://x.com/northwind/status/123456789",
 		},
 	})
 

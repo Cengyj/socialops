@@ -88,10 +88,10 @@
               >
                 <div class="flex items-center justify-between gap-3">
                   <span class="text-gray-500 dark:text-gray-400">{{ formatTrendLabel(point.date) }}</span>
-                  <span class="font-semibold text-gray-900 dark:text-white">{{ t('admin.dashboard.taskCount', { count: formatNumber(point.requests || 0) }) }}</span>
+                  <span class="font-semibold text-gray-900 dark:text-white">{{ t('admin.dashboard.taskCount', { count: formatNumber(point.operations || 0) }) }}</span>
                 </div>
                 <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {{ t('admin.dashboard.successfulCharges', { amount: formatCurrency(point.actual_cost || point.cost || 0) }) }}
+                  {{ t('admin.dashboard.successfulCharges', { amount: formatCurrency(point.charged || 0) }) }}
                 </div>
               </div>
             </div>
@@ -162,9 +162,9 @@
               <div v-for="item in rankingRows" :key="item.user_id" class="flex items-center justify-between gap-3">
                 <div class="min-w-0">
                   <p class="truncate text-sm font-medium text-gray-900 dark:text-white">{{ userIdentity(item) }}</p>
-                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.dashboard.taskCountShort', { count: formatNumber(item.requests || 0) }) }}</p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.dashboard.taskCountShort', { count: formatNumber(item.operations || 0) }) }}</p>
                 </div>
-                <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ formatCurrency(item.actual_cost || 0) }}</span>
+                <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ formatCurrency(item.charged || 0) }}</span>
               </div>
               <p v-if="rankingRows.length === 0" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                 {{ t('admin.dashboard.noSpendingRanking') }}
@@ -192,8 +192,8 @@
               <tbody class="divide-y divide-gray-100 bg-white dark:divide-dark-700 dark:bg-dark-900">
                 <tr v-for="row in recentActivityRows" :key="row.date">
                   <td class="px-5 py-3 text-sm font-medium text-gray-900 dark:text-white">{{ formatTrendLabel(row.date) }}</td>
-                  <td class="px-5 py-3 text-right text-sm text-gray-600 dark:text-gray-300">{{ formatNumber(row.requests || 0) }}</td>
-                  <td class="px-5 py-3 text-right text-sm text-gray-600 dark:text-gray-300">{{ formatCurrency(row.actual_cost || row.cost || 0) }}</td>
+                  <td class="px-5 py-3 text-right text-sm text-gray-600 dark:text-gray-300">{{ formatNumber(row.operations || 0) }}</td>
+                  <td class="px-5 py-3 text-right text-sm text-gray-600 dark:text-gray-300">{{ formatCurrency(row.charged || 0) }}</td>
                 </tr>
                 <tr v-if="recentActivityRows.length === 0">
                   <td class="px-5 py-10 text-center text-sm text-gray-500 dark:text-gray-400" colspan="3">
@@ -345,15 +345,15 @@ const metricCards = computed<Array<{
   },
   {
     label: t('admin.dashboard.todayTasks'),
-    value: formatNumber(stats.value.today_requests || 0),
-    meta: t('admin.dashboard.recentRpmMeta', { count: formatNumber(stats.value.rpm || 0) }),
+    value: formatNumber(stats.value.today_operations || 0),
+    meta: t('admin.dashboard.recentOperationsPerMinuteMeta', { count: formatNumber(stats.value.recent_operations_per_minute || 0) }),
     icon: 'clock',
     iconBg: 'bg-amber-50 dark:bg-amber-900/20',
     iconClass: 'text-amber-600 dark:text-amber-300',
   },
   {
     label: t('admin.dashboard.totalTasks'),
-    value: formatNumber(stats.value.total_requests || 0),
+    value: formatNumber(stats.value.total_operations || 0),
     meta: t('admin.dashboard.executionRecordsMeta'),
     icon: 'chart',
     iconBg: 'bg-indigo-50 dark:bg-indigo-900/20',
@@ -361,8 +361,8 @@ const metricCards = computed<Array<{
   },
   {
     label: t('admin.dashboard.todaySuccessfulCharges'),
-    value: formatCurrency(stats.value.today_actual_cost || 0),
-    meta: t('admin.dashboard.cumulativeChargesMeta', { amount: formatCurrency(stats.value.total_actual_cost || 0) }),
+    value: formatCurrency(stats.value.today_charged || 0),
+    meta: t('admin.dashboard.cumulativeChargesMeta', { amount: formatCurrency(stats.value.total_charged || 0) }),
     icon: 'dollar',
     iconBg: 'bg-emerald-50 dark:bg-emerald-900/20',
     iconClass: 'text-emerald-600 dark:text-emerald-300',
@@ -391,13 +391,13 @@ const trendDots = computed(() => {
   const height = 130
   const padding = 12
   const points = trend.value
-  const maxValue = Math.max(1, ...points.map(point => point.requests || 0))
+  const maxValue = Math.max(1, ...points.map(point => point.operations || 0))
 
   return points.map((point, index) => {
     const x = points.length > 1
       ? padding + ((width - padding * 2) / (points.length - 1)) * index
       : width / 2
-    const y = height - padding - ((point.requests || 0) / maxValue) * (height - padding * 2)
+    const y = height - padding - ((point.operations || 0) / maxValue) * (height - padding * 2)
     return { ...point, x, y }
   })
 })
@@ -502,7 +502,7 @@ function accountStatusLabel(value?: string | null) {
 }
 
 function userIdentity(item: AdminUserSpendingRankingItem) {
-  return item.username || item.email || t('admin.dashboard.userFallback', { id: item.user_id })
+  return item.email || t('admin.dashboard.userFallback', { id: item.user_id })
 }
 
 function formatNumber(value?: number) {

@@ -3,8 +3,9 @@
     <template #header-select>
       <input
         type="checkbox"
-        class="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+        class="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60"
         :checked="allVisibleSelected"
+        :disabled="loading || testing"
         :indeterminate="someVisibleSelected"
         @click.stop
         @change="emit('toggleAllVisible')"
@@ -13,14 +14,15 @@
     <template #cell-select="{ row }">
       <input
         type="checkbox"
-        class="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+        class="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60"
         :checked="isSelected(row.id)"
+        :disabled="loading || testing"
         @click.stop
         @change="emit('toggleSelection', row.id)"
       />
     </template>
     <template #cell-name="{ row }">
-      <button type="button" class="font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400" @click="emit('edit', row)">
+      <button type="button" class="inline-block max-w-full break-all text-right font-medium text-primary-600 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-60 sm:break-normal dark:text-primary-400" :title="row.name" :disabled="loading || testing" @click="emit('edit', row)">
         {{ row.name }}
       </button>
     </template>
@@ -30,7 +32,7 @@
       </span>
     </template>
     <template #cell-endpoint="{ value }">
-      <span class="block max-w-[360px] truncate" :title="String(value || '')">{{ value || '-' }}</span>
+      <span class="block min-w-0 break-all text-right sm:max-w-[360px] sm:truncate sm:break-normal" :title="String(value || '')">{{ value || '-' }}</span>
     </template>
     <template #cell-status="{ value }">
       <span :class="['badge', statusBadgeClass(String(value))]">{{ proxyStatusLabel(String(value)) }}</span>
@@ -40,9 +42,36 @@
     </template>
     <template #cell-actions="{ row }">
       <div class="flex flex-wrap items-center justify-end gap-2">
-        <button type="button" class="btn btn-secondary px-2 py-1 text-xs" :disabled="testing" @click="emit('test', row.id)">{{ t('proxies.test') }}</button>
-        <button type="button" class="btn btn-secondary px-2 py-1 text-xs" @click="emit('edit', row)">{{ t('common.edit') }}</button>
-        <button type="button" class="btn btn-danger px-2 py-1 text-xs" @click="emit('delete', row)">{{ t('common.delete') }}</button>
+        <button
+          type="button"
+          class="btn btn-secondary min-w-0 max-w-full justify-center px-2 py-1 text-xs"
+          :aria-label="rowActionTestButtonTitle"
+          :title="rowActionTestButtonTitle"
+          :disabled="loading || testing"
+          @click="emit('test', row.id)"
+        >
+          <span class="min-w-0 truncate">{{ t('proxies.test') }}</span>
+        </button>
+        <button
+          type="button"
+          class="btn btn-secondary min-w-0 max-w-full justify-center px-2 py-1 text-xs"
+          :aria-label="rowActionEditButtonTitle"
+          :title="rowActionEditButtonTitle"
+          :disabled="loading || testing"
+          @click="emit('edit', row)"
+        >
+          <span class="min-w-0 truncate">{{ t('common.edit') }}</span>
+        </button>
+        <button
+          type="button"
+          class="btn btn-danger min-w-0 max-w-full justify-center px-2 py-1 text-xs"
+          :aria-label="rowActionDeleteButtonTitle"
+          :title="rowActionDeleteButtonTitle"
+          :disabled="loading || testing"
+          @click="emit('delete', row)"
+        >
+          <span class="min-w-0 truncate">{{ t('common.delete') }}</span>
+        </button>
       </div>
     </template>
     <template #empty>
@@ -54,9 +83,17 @@
         <p class="mt-1 max-w-md text-sm text-gray-500 dark:text-gray-400">
           {{ hasActiveProxyFilters ? t('proxies.noResults.description') : t('proxies.empty.description') }}
         </p>
-        <button v-if="!hasActiveProxyFilters" type="button" class="btn btn-primary btn-sm mt-4" @click="emit('create')">
+        <button
+          v-if="!hasActiveProxyFilters"
+          type="button"
+          class="btn btn-primary btn-sm mt-4 min-w-0 max-w-full justify-center"
+          :aria-label="emptyCreateButtonTitle"
+          :title="emptyCreateButtonTitle"
+          :disabled="testing"
+          @click="emit('create')"
+        >
           <Icon name="plus" size="sm" />
-          <span>{{ t('proxies.addProxy') }}</span>
+          <span class="min-w-0 truncate">{{ t('proxies.addProxy') }}</span>
         </button>
       </div>
     </template>
@@ -70,8 +107,14 @@ import DataTable from '@/components/common/DataTable.vue'
 import Icon from '@/components/icons/Icon.vue'
 import type { Column } from '@/components/common/types'
 import type { ProxyRow } from '../useProxyManagement'
+import {
+  proxyCreateButtonTitle as buildCreateButtonTitle,
+  proxyRowDeleteButtonTitle as buildRowDeleteButtonTitle,
+  proxyRowEditButtonTitle as buildRowEditButtonTitle,
+  proxyRowTestButtonTitle as buildRowTestButtonTitle,
+} from '../proxyActionTitles'
 
-defineProps<{
+const props = defineProps<{
   allVisibleSelected: boolean
   hasActiveProxyFilters: boolean
   isSelected: (id: number) => boolean
@@ -94,6 +137,20 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+
+const rowActionTestButtonTitle = computed(() => buildRowTestButtonTitle(t, {
+  loading: props.loading,
+  testing: props.testing,
+}))
+const rowActionEditButtonTitle = computed(() => buildRowEditButtonTitle(t, {
+  loading: props.loading,
+  testing: props.testing,
+}))
+const rowActionDeleteButtonTitle = computed(() => buildRowDeleteButtonTitle(t, {
+  loading: props.loading,
+  testing: props.testing,
+}))
+const emptyCreateButtonTitle = computed(() => buildCreateButtonTitle(t, { testing: props.testing }))
 
 const columns = computed<Column[]>(() => [
   { key: 'select', label: '', class: 'w-[56px] min-w-[56px]' },

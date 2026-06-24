@@ -60,8 +60,7 @@ func provideCleanup(
 	backupSvc *service.BackupService,
 	paymentOrderExpiry *service.PaymentOrderExpiryService,
 	subscriptionExpiry *service.SubscriptionExpiryService,
-	usageCleanup *service.UsageCleanupService,
-	idempotencyCleanup *service.IdempotencyCleanupService,
+	_ *service.IdempotencyCoordinator,
 	socialTaskExecutor *service.SocialTaskExecutor,
 ) func() {
 	return func() {
@@ -77,18 +76,6 @@ func provideCleanup(
 			{"SocialTaskExecutor", func() error {
 				if socialTaskExecutor != nil {
 					socialTaskExecutor.Stop()
-				}
-				return nil
-			}},
-			{"UsageCleanupService", func() error {
-				if usageCleanup != nil {
-					usageCleanup.Stop()
-				}
-				return nil
-			}},
-			{"IdempotencyCleanupService", func() error {
-				if idempotencyCleanup != nil {
-					idempotencyCleanup.Stop()
 				}
 				return nil
 			}},

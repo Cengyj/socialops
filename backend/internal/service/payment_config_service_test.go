@@ -452,18 +452,18 @@ func TestPaymentConfigServiceCreatePlanRejectsGroupPlatformMismatch(t *testing.T
 	}
 }
 
-func TestPaymentConfigServiceCreatePlanFindsLegacyTwitterSubscriptionGroup(t *testing.T) {
+func TestPaymentConfigServiceCreatePlanFindsExistingTwitterSubscriptionGroup(t *testing.T) {
 	ctx := context.Background()
 	client := newPaymentConfigServiceTestClient(t)
 
 	group, err := client.Group.Create().
-		SetName("Legacy Twitter Subscription").
+		SetName("Existing Twitter Subscription").
 		SetPlatform("twitter").
 		SetStatus(StatusActive).
 		SetSubscriptionType(SubscriptionTypeSubscription).
 		Save(ctx)
 	if err != nil {
-		t.Fatalf("create legacy subscription group: %v", err)
+		t.Fatalf("create existing subscription group: %v", err)
 	}
 
 	svc := &PaymentConfigService{entClient: client}
@@ -479,7 +479,7 @@ func TestPaymentConfigServiceCreatePlanFindsLegacyTwitterSubscriptionGroup(t *te
 		t.Fatalf("CreatePlan returned error: %v", err)
 	}
 	if plan.GroupID != group.ID {
-		t.Fatalf("plan group id = %d, want legacy twitter group %d", plan.GroupID, group.ID)
+		t.Fatalf("plan group id = %d, want existing twitter group %d", plan.GroupID, group.ID)
 	}
 	if plan.Platform != "x_twitter" {
 		t.Fatalf("plan platform = %q, want x_twitter", plan.Platform)

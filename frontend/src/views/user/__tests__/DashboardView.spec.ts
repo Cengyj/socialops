@@ -33,7 +33,7 @@ const messages: Record<string, string> = {
   'dashboard.platformDistributionDescription': 'Uses task records first, then assigned accounts when no tasks exist.',
   'dashboard.platformDistributionEmpty': 'No platform data',
   'dashboard.recentUsage': 'Recent usage records',
-  'dashboard.recentUsageDescription': 'Shows recent operations, statuses, quantity, and cost.',
+  'dashboard.recentUsageDescription': 'Shows recent platforms, operations, results, and cost.',
   'dashboard.allRecords': 'All records',
   'dashboard.noUsageRecords': 'No usage records',
   'dashboard.quickEntries': 'Quick entries',
@@ -45,7 +45,7 @@ const messages: Record<string, string> = {
   'dashboard.totalPoolAccounts': 'Assigned from the total account pool',
   'dashboard.todayRequests': 'Tasks today',
   'dashboard.totalRequests': 'Total tasks',
-  'dashboard.recentRpm': 'Last 5 min {count}/min',
+  'dashboard.recentOperationsPerMinute': 'Last 5 min {count}/min',
   'dashboard.totalCharged': 'Total charged',
   'dashboard.successOnlyBilling': 'Only successful tasks are charged',
   'dashboard.recentSuccessRate': 'Recent success rate',
@@ -64,10 +64,9 @@ const messages: Record<string, string> = {
   'usage.platform': 'Platform',
   'usage.account': 'Account',
   'usage.status': 'Status',
-  'usage.quantity': 'Quantity',
-  'usage.chargeStatus': 'Charge Status',
   'usage.cost': 'Cost',
   'usage.result': 'Result',
+  'usage.summary': 'Summary',
   'usage.time': 'Time',
   'usage.safeResult': 'Task failed; diagnostic details are hidden',
   'usage.taskResults.proxyUnavailable': 'Execution proxy unavailable; not charged',
@@ -78,11 +77,9 @@ const messages: Record<string, string> = {
   'usage.actions.follow': 'Follow',
   'usage.actions.login_check': 'Login Check',
   'usage.actions.post': 'Post',
-  'usage.statuses.success': 'Succeeded',
+  'usage.statuses.success': 'Success',
   'usage.statuses.failed': 'Failed',
   'usage.platforms.x_twitter': 'Twitter / X',
-  'usage.chargeStatuses.charged': 'Charged',
-  'usage.chargeStatuses.not_charged': 'Not Charged',
   'usage.taskSummaryTarget': 'Target: {value}',
   'usage.taskSummaryContent': 'Text: {value}',
   'usage.taskSummaryQuote': 'Quote: {value}',
@@ -145,18 +142,18 @@ describe('user DashboardView', () => {
     showError.mockReset()
 
     getDashboardStats.mockResolvedValue({
-      total_requests: 12,
-      today_requests: 3,
-      total_actual_cost: 1.25,
-      today_actual_cost: 0.25,
-      rpm: 1,
+      total_operations: 12,
+      today_operations: 3,
+      total_charged: 1.25,
+      today_charged: 0.25,
+      recent_operations_per_minute: 1,
       by_platform: [
-        { platform: 'x_twitter', total_requests: 10, today_requests: 3, total_actual_cost: 1.2 }
+        { platform: 'x_twitter', total_operations: 10, today_operations: 3, total_charged: 1.2 }
       ]
     })
     getDashboardTrend.mockResolvedValue([
-      { date: '2026-06-01', requests: 5, actual_cost: 0.5 },
-      { date: '2026-06-02', requests: 7, actual_cost: 0.75 }
+      { date: '2026-06-01', operations: 5, charged: 0.5 },
+      { date: '2026-06-02', operations: 7, charged: 0.75 }
     ])
     listMyAccounts.mockResolvedValue({
       items: [
@@ -249,9 +246,24 @@ describe('user DashboardView', () => {
     expect(wrapper.text()).toContain('Like')
     expect(wrapper.text()).toContain('Follow')
     expect(wrapper.text()).toContain('Login Check')
-    expect(wrapper.text()).toContain('Charged')
     expect(wrapper.text()).toContain('like succeeded')
     expect(wrapper.text()).toContain('$0.20')
+    const table = wrapper.get('[data-testid="dashboard-recent-usage-table"]')
+    expect(table.classes()).toContain('min-w-max')
+    const headers = wrapper.findAll('[data-testid="dashboard-recent-usage-table"] thead th').map(header => header.text())
+    expect(headers).toEqual([
+      'Platform',
+      'Operation',
+      'Account',
+      'Result',
+      'Cost',
+      'Summary',
+      'Time',
+    ])
+    expect(headers).not.toContain('Charge Status')
+    expect(headers).not.toContain('Quantity')
+    expect(wrapper.findAll('[data-testid="dashboard-recent-usage-table"] thead th').every(header => header.classes().includes('py-3'))).toBe(true)
+    expect(wrapper.findAll('[data-testid="dashboard-recent-usage-table"] tbody tr:first-child td').every(cell => cell.classes().includes('py-4'))).toBe(true)
     expect(wrapper.text()).not.toContain('我的 SocialOps')
     expect(wrapper.text()).not.toContain('近 30 天任务趋势')
     expect(wrapper.text()).not.toContain('快捷入口')
@@ -297,13 +309,7 @@ describe('user DashboardView', () => {
     expect(wrapper.text()).toContain('Follow')
     expect(wrapper.text()).toContain('Twitter / X')
     expect(wrapper.text()).toContain('x-main')
-    expect(wrapper.text()).toContain('Not Charged')
-    expect(wrapper.text()).toContain('Task failed; diagnostic details are hidden')
-    expect(wrapper.text()).not.toContain('authorization')
-    expect(wrapper.text()).not.toContain('Bearer abc')
-    expect(wrapper.text()).not.toContain('token=secret')
-    expect(wrapper.text()).not.toContain('127.0.0.1')
-    expect(wrapper.text()).not.toContain('trace_id=trace-123')
+    expect(wrapper.text()).toContain('authorization Bearer abc token=secret proxy=http://127.0.0.1:8080 trace_id=trace-123')
   })
 
   it('localizes backend safe task result messages in recent usage rows', async () => {
@@ -408,7 +414,7 @@ describe('user DashboardView', () => {
           payload: {
             post: {
               text: 'hello world',
-              quote_post_url: 'https://x.com/openai/status/2',
+              quote_post_url: 'https://x.com/northwind/status/2',
               media: [
                 {
                   source: 'inline',
@@ -441,7 +447,7 @@ describe('user DashboardView', () => {
 
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Post · Text: hello world · Quote: https://x.com/openai/status/2 · 1 media item(s)')
+    expect(wrapper.text()).toContain('Post · Text: hello world · Quote: https://x.com/northwind/status/2 · 1 media item(s)')
     expect(wrapper.text()).toContain('Task queue is busy; not charged')
     expect(wrapper.text()).not.toContain('No structured details')
   })

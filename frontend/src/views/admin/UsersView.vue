@@ -246,7 +246,7 @@
           :columns="columns"
           :data="sortedUsers"
           :loading="loading"
-          :actions-count="7"
+          :actions-count="6"
           :server-side-sort="true"
           default-sort-key="created_at"
           default-sort-order="desc"
@@ -531,15 +531,6 @@
         <div class="py-1">
           <template v-for="user in users" :key="user.id">
             <template v-if="user.id === activeMenuId">
-              <!-- View API Keys -->
-              <button
-                @click="handleViewApiKeys(user); closeActionMenu()"
-                class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
-              >
-                <Icon name="key" size="sm" class="text-gray-400" :stroke-width="2" />
-                {{ t('admin.users.apiKeys') }}
-              </button>
-
               <!-- Allowed Groups -->
               <button
                 @click="handleAllowedGroups(user); closeActionMenu()"
@@ -977,11 +968,9 @@ const pagination = reactive({
 const showCreateModal = ref(false)
 const showEditModal = ref(false)
 const showDeleteDialog = ref(false)
-const showApiKeysModal = ref(false)
 const showAttributesModal = ref(false)
 const editingUser = ref<AdminUser | null>(null)
 const deletingUser = ref<AdminUser | null>(null)
-const viewingUser = ref<AdminUser | null>(null)
 let abortController: AbortController | null = null
 let secondaryDataSeq = 0
 
@@ -1310,11 +1299,6 @@ const handleToggleStatus = async (user: AdminUser) => {
     appStore.showError(error.response?.data?.detail || t('admin.users.failedToToggle'))
     console.error('Error toggling user status:', error)
   }
-}
-
-const handleViewApiKeys = (user: AdminUser) => {
-  viewingUser.value = user
-  showApiKeysModal.value = true
 }
 
 const handleAllowedGroups = (user: AdminUser) => {

@@ -147,14 +147,13 @@ type RedeemCodeStats struct {
 
 // RedeemService 兑换码服务
 type RedeemService struct {
-	redeemRepo           RedeemCodeRepository
-	userRepo             UserRepository
-	subscriptionService  *SubscriptionService
-	cache                RedeemCache
-	billingCacheService  *BillingCacheService
-	entClient            *dbent.Client
-	authCacheInvalidator APIKeyAuthCacheInvalidator
-	affiliateService     *AffiliateService
+	redeemRepo          RedeemCodeRepository
+	userRepo            UserRepository
+	subscriptionService *SubscriptionService
+	cache               RedeemCache
+	billingCacheService *BillingCacheService
+	entClient           *dbent.Client
+	affiliateService    *AffiliateService
 }
 
 // NewRedeemService 创建兑换码服务实例
@@ -165,18 +164,16 @@ func NewRedeemService(
 	cache RedeemCache,
 	billingCacheService *BillingCacheService,
 	entClient *dbent.Client,
-	authCacheInvalidator APIKeyAuthCacheInvalidator,
 	affiliateService *AffiliateService,
 ) *RedeemService {
 	return &RedeemService{
-		redeemRepo:           redeemRepo,
-		userRepo:             userRepo,
-		subscriptionService:  subscriptionService,
-		cache:                cache,
-		billingCacheService:  billingCacheService,
-		entClient:            entClient,
-		authCacheInvalidator: authCacheInvalidator,
-		affiliateService:     affiliateService,
+		redeemRepo:          redeemRepo,
+		userRepo:            userRepo,
+		subscriptionService: subscriptionService,
+		cache:               cache,
+		billingCacheService: billingCacheService,
+		entClient:           entClient,
+		affiliateService:    affiliateService,
 	}
 }
 
@@ -637,16 +634,8 @@ func (s *RedeemService) invalidateRedeemCaches(ctx context.Context, userID int64
 	case RedeemTypeBalance:
 		s.invalidateBalanceCaches(ctx, userID)
 	case RedeemTypeConcurrency:
-		if s.authCacheInvalidator != nil {
-			s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
-		}
-		if s.billingCacheService == nil {
-			return
-		}
+		return
 	case RedeemTypeSubscription:
-		if s.authCacheInvalidator != nil {
-			s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
-		}
 		if s.billingCacheService == nil {
 			return
 		}
@@ -663,9 +652,6 @@ func (s *RedeemService) invalidateRedeemCaches(ctx context.Context, userID int64
 func (s *RedeemService) invalidateBalanceCaches(ctx context.Context, userID int64) {
 	if s == nil || userID <= 0 {
 		return
-	}
-	if s.authCacheInvalidator != nil {
-		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
 	}
 	if s.billingCacheService == nil {
 		return
@@ -689,11 +675,11 @@ func (s *RedeemService) tryAccrueAffiliateRebateForRedeem(ctx context.Context, u
 	}
 	rebate, err := s.affiliateService.AccrueInviteRebate(ctx, userID, amount)
 	if err != nil {
-		logger.LegacyPrintf("service.redeem", "[Redeem] affiliate rebate failed for user %d amount %.2f: %v", userID, amount, err)
+		logger.ComponentPrintf("service.redeem", "[Redeem] affiliate rebate failed for user %d amount %.2f: %v", userID, amount, err)
 		return
 	}
 	if rebate > 0 {
-		logger.LegacyPrintf("service.redeem", "[Redeem] affiliate rebate accrued %.8f for inviter of user %d", rebate, userID)
+		logger.ComponentPrintf("service.redeem", "[Redeem] affiliate rebate accrued %.8f for inviter of user %d", rebate, userID)
 	}
 }
 

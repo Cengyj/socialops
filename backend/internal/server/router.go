@@ -58,7 +58,7 @@ func SetupRouter(
 	if web.HasEmbeddedFrontend() {
 		frontendServer, err := web.NewFrontendServer(settingService)
 		if err != nil {
-			log.Printf("Warning: Failed to create frontend server with settings injection: %v, using legacy mode", err)
+			log.Printf("Warning: Failed to create frontend server with settings injection: %v, using embedded frontend fallback", err)
 			r.Use(web.ServeEmbeddedFrontend())
 			settingService.SetOnUpdateCallback(refreshFrameOrigins)
 		} else {

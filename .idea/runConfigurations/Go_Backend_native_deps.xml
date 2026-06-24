@@ -1,0 +1,40 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Go Backend (native PostgreSQL Redis)" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="socialops" />
+    <working_directory value="$PROJECT_DIR$/backend" />
+    <kind value="PACKAGE" />
+    <package value="github.com/Wei-Shaw/socialops/cmd/server" />
+    <directory value="$PROJECT_DIR$/backend/cmd/server" />
+    <filePath value="" />
+    <envs>
+      <env name="DATA_DIR" value="$PROJECT_DIR$/backend" />
+      <env name="SERVER_HOST" value="127.0.0.1" />
+      <env name="SERVER_PORT" value="8080" />
+      <env name="SERVER_MODE" value="debug" />
+      <env name="RUN_MODE" value="standard" />
+      <env name="TZ" value="Asia/Shanghai" />
+      <env name="DATABASE_HOST" value="127.0.0.1" />
+      <env name="DATABASE_PORT" value="5432" />
+      <env name="DATABASE_USER" value="postgres" />
+      <env name="DATABASE_PASSWORD" value="postgres" />
+      <env name="DATABASE_DBNAME" value="socialops" />
+      <env name="DATABASE_SSLMODE" value="disable" />
+      <env name="REDIS_HOST" value="127.0.0.1" />
+      <env name="REDIS_PORT" value="6379" />
+      <env name="REDIS_PASSWORD" value="" />
+      <env name="REDIS_DB" value="0" />
+      <env name="REDIS_ENABLE_TLS" value="false" />
+      <env name="ADMIN_EMAIL" value="3081794680@qq.com" />
+      <env name="ADMIN_PASSWORD" value="668435li" />
+      <env name="JWT_SECRET" value="136e8c47ba71137f97086e34f37892884b37da530a88a39bf7beee30e9e0c605" />
+      <env name="TOTP_ENCRYPTION_KEY" value="5294d262293a5666fbab9aac5cd49fb1225a861a0063e887a751f07a224c6547" />
+      <env name="TWITTER_LOGIN_DEVICE_PARAMS_URL" value="http://124.221.212.129:9005/api/queryAndDeleteOne" />
+      <env name="TWITTER_LOGIN_DEVICE_PARAMS_COLLECTION" value="twitter_parameter" />
+      <env name="TWITTER_LOGIN_EMAIL_CODE_URL" value="http://152.53.90.135:9001/api/v1/email/get-code" />
+      <env name="GOTOOLCHAIN" value="auto" />
+    </envs>
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

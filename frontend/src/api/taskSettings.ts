@@ -1,21 +1,14 @@
 import { apiClient } from './client'
-import type { SocialTaskTemplateParams } from '@/types/socialTask'
+import { unwrapData } from './utils'
+import type { ParameterSocialTaskAction, SocialTaskTemplateParams } from '@/types/socialTask'
 export type {
+  ParameterSocialTaskAction,
   SocialProfileUpdateParams,
   SocialTaskMediaRef,
   SocialTaskTemplateParams,
 } from '@/types/socialTask'
 
-export type TaskTemplateType =
-  | 'login'
-  | 'login_check'
-  | 'post'
-  | 'like'
-  | 'retweet'
-  | 'follow'
-  | 'update_profile'
-  | 'update_avatar'
-  | 'update_banner'
+export type TaskTemplateType = ParameterSocialTaskAction
 
 export interface TaskTemplate {
   id: string
@@ -44,11 +37,6 @@ export interface TaskTemplateValidationResult {
 }
 
 const BASE = '/task-settings/templates'
-
-const unwrapData = async <T>(request: Promise<{ data: T }>): Promise<T> => {
-  const { data } = await request
-  return data
-}
 
 const taskSettingsAPI = {
   async listTemplates(): Promise<TaskTemplate[]> {

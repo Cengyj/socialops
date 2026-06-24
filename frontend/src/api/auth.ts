@@ -251,27 +251,6 @@ export function getOAuthCompletionKind(
   return isOAuthLoginCompletion(completion) ? 'login' : 'bind'
 }
 
-export function getPendingOAuthBindLoginKind(
-  completion: PendingOAuthBindLoginResponse
-): OAuthCompletionKind {
-  return getOAuthCompletionKind(completion)
-}
-
-export function isPendingOAuthCreateAccountRequired(
-  completion: Pick<PendingOAuthBindLoginResponse, 'error'>
-): boolean {
-  return completion.error === 'invitation_required'
-}
-
-export function hasPendingOAuthSuggestedProfile(
-  completion: Pick<
-    PendingOAuthBindLoginResponse,
-    'suggested_display_name' | 'suggested_avatar_url'
-  >
-): boolean {
-  return Boolean(completion.suggested_display_name || completion.suggested_avatar_url)
-}
-
 export function persistOAuthTokenContext(tokens: Partial<OAuthTokenResponse>): void {
   if (tokens.refresh_token) {
     setRefreshToken(tokens.refresh_token)
@@ -363,13 +342,13 @@ export type WeChatOAuthPublicSettings = {
 export function isWeChatWebOAuthEnabled(
   settings: WeChatOAuthPublicSettings | null | undefined,
 ): boolean {
-  const legacyEnabled = settings?.wechat_oauth_enabled ?? false
+  const aggregateEnabled = settings?.wechat_oauth_enabled ?? false
   const hasExplicitCapabilities =
     typeof settings?.wechat_oauth_open_enabled === 'boolean' ||
     typeof settings?.wechat_oauth_mp_enabled === 'boolean'
 
   if (!hasExplicitCapabilities) {
-    return legacyEnabled
+    return aggregateEnabled
   }
 
   return settings?.wechat_oauth_open_enabled === true || settings?.wechat_oauth_mp_enabled === true
@@ -393,13 +372,13 @@ export function resolveWeChatOAuthStart(
     ?? (typeof navigator !== 'undefined' ? navigator.userAgent : '')
     ?? '').trim()
   const isWeChatBrowser = /MicroMessenger/i.test(normalizedUserAgent)
-  const legacyEnabled = settings?.wechat_oauth_enabled ?? false
+  const aggregateEnabled = settings?.wechat_oauth_enabled ?? false
   const openEnabled = typeof settings?.wechat_oauth_open_enabled === 'boolean'
     ? settings.wechat_oauth_open_enabled
-    : legacyEnabled
+    : aggregateEnabled
   const mpEnabled = typeof settings?.wechat_oauth_mp_enabled === 'boolean'
     ? settings.wechat_oauth_mp_enabled
-    : legacyEnabled
+    : aggregateEnabled
   const mobileEnabled = typeof settings?.wechat_oauth_mobile_enabled === 'boolean'
     ? settings.wechat_oauth_mobile_enabled
     : false
@@ -633,28 +612,14 @@ export async function createPendingWeChatOAuthAccount(
   return createPendingOAuthAccount('wechat', invitationCode, decision, affiliateCode)
 }
 
-export async function createPendingDingTalkOAuthAccount(
-  invitationCode: string,
-  decision?: OAuthAdoptionDecision,
-  affiliateCode?: string
-): Promise<PendingOAuthCreateAccountResponse> {
-  return createPendingOAuthAccount('dingtalk', invitationCode, decision, affiliateCode)
-}
-
-export async function completePendingOAuthBindLogin(
+export async function exchangePendingOAuthCompletion(
   decision?: OAuthAdoptionDecision
-): Promise<PendingOAuthBindLoginResponse> {
+): Promise<PendingOAuthExchangeResponse> {
   const { data } = await apiClient.post<PendingOAuthBindLoginResponse>(
     '/auth/oauth/pending/exchange',
     serializeOAuthAdoptionDecision(decision)
   )
   return data
-}
-
-export async function exchangePendingOAuthCompletion(
-  decision?: OAuthAdoptionDecision
-): Promise<PendingOAuthExchangeResponse> {
-  return completePendingOAuthBindLogin(decision)
 }
 
 export const authAPI = {
@@ -681,18 +646,13 @@ export const authAPI = {
   resetPassword,
   refreshToken,
   revokeAllSessions,
-  getPendingOAuthBindLoginKind,
-  isPendingOAuthCreateAccountRequired,
-  hasPendingOAuthSuggestedProfile,
-  completePendingOAuthBindLogin,
   createPendingLinuxDoOAuthAccount,
   createPendingOIDCOAuthAccount,
   createPendingWeChatOAuthAccount,
   exchangePendingOAuthCompletion,
   completeLinuxDoOAuthRegistration,
   completeOIDCOAuthRegistration,
-  completeWeChatOAuthRegistration,
-  createPendingDingTalkOAuthAccount
+  completeWeChatOAuthRegistration
 }
 
 export default authAPI

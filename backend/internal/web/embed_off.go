@@ -5,6 +5,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -14,7 +15,7 @@ import (
 // PublicSettingsProvider is an interface to fetch public settings
 // This stub is needed for compilation when frontend is not embedded
 type PublicSettingsProvider interface {
-	GetPublicSettingsForInjection(ctx context.Context) (any, error)
+	GetPublicSettingsForInjection(ctx context.Context) (json.RawMessage, error)
 }
 
 // FrontendServer is a stub for non-embed builds

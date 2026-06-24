@@ -156,19 +156,6 @@ func (r *inMemoryIdempotencyRepo) MarkFailedRetryable(_ context.Context, id int6
 	return errors.New("record not found")
 }
 
-func (r *inMemoryIdempotencyRepo) DeleteExpired(_ context.Context, now time.Time, _ int) (int64, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	var deleted int64
-	for k, rec := range r.data {
-		if !rec.ExpiresAt.After(now) {
-			delete(r.data, k)
-			deleted++
-		}
-	}
-	return deleted, nil
-}
-
 func TestIdempotencyCoordinator_RequireKey(t *testing.T) {
 	resetIdempotencyMetricsForTest()
 	repo := newInMemoryIdempotencyRepo()
@@ -417,10 +404,6 @@ func (failingIdempotencyRepo) MarkSucceeded(context.Context, int64, int, string,
 func (failingIdempotencyRepo) MarkFailedRetryable(context.Context, int64, string, time.Time, time.Time) error {
 	return errors.New("store unavailable")
 }
-func (failingIdempotencyRepo) DeleteExpired(context.Context, time.Time, int) (int64, error) {
-	return 0, errors.New("store unavailable")
-}
-
 func TestIdempotencyCoordinator_StoreUnavailableMetrics(t *testing.T) {
 	resetIdempotencyMetricsForTest()
 	coordinator := NewIdempotencyCoordinator(failingIdempotencyRepo{}, DefaultIdempotencyConfig())
@@ -547,8 +530,6 @@ func (noIDOwnerRepo) MarkSucceeded(context.Context, int64, int, string, time.Tim
 func (noIDOwnerRepo) MarkFailedRetryable(context.Context, int64, string, time.Time, time.Time) error {
 	return nil
 }
-func (noIDOwnerRepo) DeleteExpired(context.Context, time.Time, int) (int64, error) { return 0, nil }
-
 func TestIdempotencyCoordinator_RepoNilScopeRequiredAndRecordIDMissing(t *testing.T) {
 	cfg := DefaultIdempotencyConfig()
 	coordinator := NewIdempotencyCoordinator(nil, cfg)
@@ -612,10 +593,6 @@ func (r *conflictBranchRepo) MarkSucceeded(context.Context, int64, int, string, 
 func (r *conflictBranchRepo) MarkFailedRetryable(context.Context, int64, string, time.Time, time.Time) error {
 	return nil
 }
-func (r *conflictBranchRepo) DeleteExpired(context.Context, time.Time, int) (int64, error) {
-	return 0, nil
-}
-
 func TestIdempotencyCoordinator_ConflictBranchesAndDecodeError(t *testing.T) {
 	now := time.Now()
 	fp, err := BuildIdempotencyFingerprint("POST", "/x", "u:1", map[string]any{"a": 1})

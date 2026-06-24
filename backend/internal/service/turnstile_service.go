@@ -47,36 +47,36 @@ func NewTurnstileService(settingService *SettingService, verifier TurnstileVerif
 func (s *TurnstileService) VerifyToken(ctx context.Context, token string, remoteIP string) error {
 	// 检查是否启用 Turnstile
 	if !s.settingService.IsTurnstileEnabled(ctx) {
-		logger.LegacyPrintf("service.turnstile", "%s", "[Turnstile] Disabled, skipping verification")
+		logger.ComponentPrintf("service.turnstile", "%s", "[Turnstile] Disabled, skipping verification")
 		return nil
 	}
 
 	// 获取 Secret Key
 	secretKey := s.settingService.GetTurnstileSecretKey(ctx)
 	if secretKey == "" {
-		logger.LegacyPrintf("service.turnstile", "%s", "[Turnstile] Secret key not configured")
+		logger.ComponentPrintf("service.turnstile", "%s", "[Turnstile] Secret key not configured")
 		return ErrTurnstileNotConfigured
 	}
 
 	// 如果 token 为空，返回错误
 	if token == "" {
-		logger.LegacyPrintf("service.turnstile", "%s", "[Turnstile] Token is empty")
+		logger.ComponentPrintf("service.turnstile", "%s", "[Turnstile] Token is empty")
 		return ErrTurnstileVerificationFailed
 	}
 
-	logger.LegacyPrintf("service.turnstile", "[Turnstile] Verifying token for IP: %s", remoteIP)
+	logger.ComponentPrintf("service.turnstile", "[Turnstile] Verifying token for IP: %s", remoteIP)
 	result, err := s.verifier.VerifyToken(ctx, secretKey, token, remoteIP)
 	if err != nil {
-		logger.LegacyPrintf("service.turnstile", "[Turnstile] Request failed: %v", err)
+		logger.ComponentPrintf("service.turnstile", "[Turnstile] Request failed: %v", err)
 		return fmt.Errorf("send request: %w", err)
 	}
 
 	if !result.Success {
-		logger.LegacyPrintf("service.turnstile", "[Turnstile] Verification failed, error codes: %v", result.ErrorCodes)
+		logger.ComponentPrintf("service.turnstile", "[Turnstile] Verification failed, error codes: %v", result.ErrorCodes)
 		return ErrTurnstileVerificationFailed
 	}
 
-	logger.LegacyPrintf("service.turnstile", "%s", "[Turnstile] Verification successful")
+	logger.ComponentPrintf("service.turnstile", "%s", "[Turnstile] Verification successful")
 	return nil
 }
 

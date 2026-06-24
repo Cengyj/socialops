@@ -6,19 +6,93 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Wei-Shaw/socialops/internal/config"
+	"github.com/Wei-Shaw/socialops/internal/service"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestDingTalkOAuthStart_Disabled は sentinel テスト。
-// TODO(task-1.10): newTestAuthHandlerWithDingTalk helper が追加されたら t.Skip を外す。
+// TestDingTalkOAuthStart_Disabled 验证未启用 DingTalk Connect 时返回前端错误回调。
 func TestDingTalkOAuthStart_Disabled(t *testing.T) {
-	t.Skip("helper newTestAuthHandlerWithDingTalk added in Task 1.10; sentinel only")
+	gin.SetMode(gin.TestMode)
+
+	settingSvc := service.NewSettingService(&dingtalkOAuthSettingRepoStub{
+		values: map[string]string{
+			service.SettingKeyDingTalkConnectEnabled: "false",
+		},
+	}, &config.Config{})
+	handler := &AuthHandler{settingSvc: settingSvc}
+	router := gin.New()
+	router.GET("/api/v1/auth/oauth/dingtalk/start", handler.DingTalkOAuthStart)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/oauth/dingtalk/start?redirect=/dashboard", nil)
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusFound, rec.Code)
+	require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+	require.Equal(t, "no-cache", rec.Header().Get("Pragma"))
+
+	location := rec.Header().Get("Location")
+	parsed, err := url.Parse(location)
+	require.NoError(t, err)
+	require.Equal(t, dingTalkOAuthDefaultFrontendCB, parsed.Path)
+
+	fragment, err := url.ParseQuery(parsed.Fragment)
+	require.NoError(t, err)
+	require.Equal(t, "dingtalk_not_enabled", fragment.Get("error"))
+}
+
+type dingtalkOAuthSettingRepoStub struct {
+	values map[string]string
+}
+
+func (s *dingtalkOAuthSettingRepoStub) Get(context.Context, string) (*service.Setting, error) {
+	return nil, service.ErrSettingNotFound
+}
+
+func (s *dingtalkOAuthSettingRepoStub) GetValue(_ context.Context, key string) (string, error) {
+	value, ok := s.values[key]
+	if !ok {
+		return "", service.ErrSettingNotFound
+	}
+	return value, nil
+}
+
+func (s *dingtalkOAuthSettingRepoStub) Set(context.Context, string, string) error {
+	return nil
+}
+
+func (s *dingtalkOAuthSettingRepoStub) GetMultiple(_ context.Context, keys []string) (map[string]string, error) {
+	result := make(map[string]string, len(keys))
+	for _, key := range keys {
+		if value, ok := s.values[key]; ok {
+			result[key] = value
+		}
+	}
+	return result, nil
+}
+
+func (s *dingtalkOAuthSettingRepoStub) SetMultiple(context.Context, map[string]string) error {
+	return nil
+}
+
+func (s *dingtalkOAuthSettingRepoStub) GetAll(context.Context) (map[string]string, error) {
+	result := make(map[string]string, len(s.values))
+	for key, value := range s.values {
+		result[key] = value
+	}
+	return result, nil
+}
+
+func (s *dingtalkOAuthSettingRepoStub) Delete(context.Context, string) error {
+	return nil
 }
 
 // TestBuildDingTalkSyntheticEmail_UsesUnionID 验证合成邮箱种子使用 unionID。

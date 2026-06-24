@@ -15,7 +15,7 @@ import (
 )
 
 func TestUsageService_GetByID_DoesNotFabricateMissingUsage(t *testing.T) {
-	svc := NewUsageService(nil, nil)
+	svc := NewUsageService(nil)
 
 	usage, err := svc.GetByID(context.Background(), 42, 1001)
 
@@ -25,7 +25,7 @@ func TestUsageService_GetByID_DoesNotFabricateMissingUsage(t *testing.T) {
 }
 
 func TestUsageServiceDoesNotFabricateUsageWhenRepositoryMissing(t *testing.T) {
-	svc := NewUsageService(nil, nil)
+	svc := NewUsageService(nil)
 
 	items, page, err := svc.List(context.Background(), pagination.PaginationParams{Page: 1, PageSize: 20}, usagestats.UsageLogFilters{UserID: 42})
 	require.Nil(t, items)
@@ -49,8 +49,86 @@ func TestUsageServiceDoesNotFabricateUsageWhenRepositoryMissing(t *testing.T) {
 	require.Equal(t, "USAGE_SERVICE_UNAVAILABLE", infraerrors.Reason(err))
 }
 
+func TestUsageServiceNormalizesUsageLogFiltersBeforeRepository(t *testing.T) {
+	repo := &socialOpsUsageDashboardRepoStub{
+		stats: &usagestats.UsageStats{TotalOperations: 1},
+	}
+	svc := NewUsageService(repo)
+
+	items, page, err := svc.List(context.Background(), pagination.PaginationParams{Page: 1, PageSize: 20}, usagestats.UsageLogFilters{
+		UserID:    42,
+		Operation: " UPDATE_PROFILE ",
+		Status:    " SUCCESS ",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, items)
+	require.NotNil(t, page)
+	require.Equal(t, 1, repo.listCalls)
+	require.Equal(t, SocialTaskActionUpdateProfile, repo.listFilters.Operation)
+	require.Equal(t, SocialTaskLogStatusSuccess, repo.listFilters.Status)
+
+	stats, err := svc.Stats(context.Background(), usagestats.UsageLogFilters{
+		UserID:    42,
+		Operation: " LIKE ",
+		Status:    " FAILED ",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, stats)
+	require.Equal(t, 1, repo.statsCalls)
+	require.Equal(t, SocialTaskActionLike, repo.statsFilters.Operation)
+	require.Equal(t, SocialTaskLogStatusFailed, repo.statsFilters.Status)
+}
+
+func TestUsageServiceRejectsUnsupportedUsageLogFiltersBeforeRepository(t *testing.T) {
+	tests := []struct {
+		name    string
+		filters usagestats.UsageLogFilters
+		reason  string
+	}{
+		{
+			name:    "old tweet action",
+			filters: usagestats.UsageLogFilters{UserID: 42, Operation: "tweet"},
+			reason:  "SOCIAL_TASK_UNSUPPORTED_ACTION",
+		},
+		{
+			name:    "unsupported direct message action",
+			filters: usagestats.UsageLogFilters{UserID: 42, Operation: "message"},
+			reason:  "SOCIAL_TASK_UNSUPPORTED_ACTION",
+		},
+		{
+			name:    "non-final status",
+			filters: usagestats.UsageLogFilters{UserID: 42, Status: SocialTaskLogStatusRunning},
+			reason:  "USAGE_STATUS_INVALID",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &socialOpsUsageDashboardRepoStub{}
+			svc := NewUsageService(repo)
+
+			items, page, err := svc.List(context.Background(), pagination.PaginationParams{Page: 1, PageSize: 20}, tt.filters)
+
+			require.Nil(t, items)
+			require.Nil(t, page)
+			require.Error(t, err)
+			require.Equal(t, tt.reason, infraerrors.Reason(err))
+			require.Zero(t, repo.listCalls)
+
+			stats, err := svc.Stats(context.Background(), tt.filters)
+
+			require.Nil(t, stats)
+			require.Error(t, err)
+			require.Equal(t, tt.reason, infraerrors.Reason(err))
+			require.Zero(t, repo.statsCalls)
+		})
+	}
+}
+
 func TestDashboardServiceDoesNotFabricateUsageWhenRepositoryMissing(t *testing.T) {
-	svc := ProvideDashboardService(nil, nil, nil)
+	svc := ProvideDashboardService(nil)
 	start := time.Now().Add(-time.Hour)
 	end := time.Now()
 
@@ -59,7 +137,7 @@ func TestDashboardServiceDoesNotFabricateUsageWhenRepositoryMissing(t *testing.T
 	require.True(t, infraerrors.IsServiceUnavailable(err), "expected service unavailable for missing dashboard stats repository, got %v", err)
 	require.Equal(t, "USAGE_SERVICE_UNAVAILABLE", infraerrors.Reason(err))
 
-	trend, err := svc.GetUsageTrend(context.Background(), start, end, "day", nil, nil)
+	trend, err := svc.GetUsageTrend(context.Background(), start, end, "day")
 	require.Nil(t, trend)
 	require.True(t, infraerrors.IsServiceUnavailable(err), "expected service unavailable for missing dashboard trend repository, got %v", err)
 	require.Equal(t, "USAGE_SERVICE_UNAVAILABLE", infraerrors.Reason(err))
@@ -78,30 +156,28 @@ func TestDashboardServiceDoesNotFabricateUsageWhenRepositoryMissing(t *testing.T
 func TestUsageService_GetUserDashboardStatsDelegatesToRepository(t *testing.T) {
 	repo := &socialOpsUsageDashboardRepoStub{
 		userStats: &usagestats.UserDashboardStats{
-			TotalRequests:   7,
-			TotalTokens:     7,
-			TotalActualCost: 0.7,
-			TodayRequests:   3,
-			TodayTokens:     3,
-			TodayActualCost: 0.3,
+			TotalOperations: 7,
+			TotalCharged:    0.7,
+			TodayOperations: 3,
+			TodayCharged:    0.3,
 		},
 	}
-	svc := NewUsageService(repo, nil)
+	svc := NewUsageService(repo)
 
 	stats, err := svc.GetUserDashboardStats(context.Background(), 42)
 
 	require.NoError(t, err)
 	require.Equal(t, int64(42), repo.userStatsUserID)
-	require.Equal(t, int64(7), stats.TotalRequests)
-	require.Equal(t, int64(3), stats.TodayRequests)
-	require.InEpsilon(t, 0.7, stats.TotalActualCost, 0.000001)
+	require.Equal(t, int64(7), stats.TotalOperations)
+	require.Equal(t, int64(3), stats.TodayOperations)
+	require.InEpsilon(t, 0.7, stats.TotalCharged, 0.000001)
 }
 
 func TestUsageService_GetUserUsageTrendByUserIDDelegatesToRepository(t *testing.T) {
 	repo := &socialOpsUsageDashboardRepoStub{
-		userTrend: []usagestats.TrendDataPoint{{Date: "2026-06-01", Requests: 4, TotalTokens: 4, ActualCost: 0.4}},
+		userTrend: []usagestats.TrendDataPoint{{Date: "2026-06-01", Operations: 4, Charged: 0.4}},
 	}
-	svc := NewUsageService(repo, nil)
+	svc := NewUsageService(repo)
 	start := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	end := start.Add(24 * time.Hour)
 
@@ -147,7 +223,7 @@ func TestUsageServicePreviewTaskMediaResolvesStoredPayloadAndTemplateAssets(t *t
 			Body:        []byte("preview"),
 		},
 	}
-	svc := NewUsageService(repo, nil).WithMediaResolver(resolver)
+	svc := NewUsageService(repo).WithMediaResolver(resolver)
 
 	postResolved, err := svc.PreviewTaskMedia(context.Background(), 501, 42, UsageTaskMediaLocator{
 		Scope:   "payload",
@@ -189,7 +265,7 @@ func TestUsageServicePreviewTaskMediaFailsClosedForUnsupportedOrMissingRefs(t *t
 				},
 			},
 		},
-	}, nil).WithMediaResolver(&usageMediaResolverStub{})
+	}).WithMediaResolver(&usageMediaResolverStub{})
 
 	_, err := svc.PreviewTaskMedia(context.Background(), 501, 42, UsageTaskMediaLocator{
 		Scope:   "payload",
@@ -212,24 +288,23 @@ func TestDashboardServiceDelegatesSocialOpsAggregatesToRepository(t *testing.T) 
 	start := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	end := start.Add(24 * time.Hour)
 	repo := &socialOpsUsageDashboardRepoStub{
-		dashboardStats: &usagestats.DashboardStats{TotalUsers: 5, ActiveUsers: 2, TodayRequests: 9},
-		adminTrend:     []usagestats.TrendDataPoint{{Date: "2026-06-01", Requests: 9, TotalTokens: 9}},
-		userUsageTrend: []usagestats.UserUsageTrendPoint{{Date: "2026-06-01", UserID: 42, Email: "u@example.com", Requests: 9, Tokens: 9}},
+		dashboardStats: &usagestats.DashboardStats{TotalUsers: 5, ActiveUsers: 2, TodayOperations: 9},
+		adminTrend:     []usagestats.TrendDataPoint{{Date: "2026-06-01", Operations: 9}},
+		userUsageTrend: []usagestats.UserUsageTrendPoint{{Date: "2026-06-01", UserID: 42, Email: "u@example.com", Operations: 9}},
 		ranking: &usagestats.UserSpendingRankingResponse{
-			Ranking:         []usagestats.UserSpendingRankingItem{{UserID: 42, Email: "u@example.com", ActualCost: 0.9, Requests: 9, Tokens: 9}},
-			TotalActualCost: 0.9,
-			TotalRequests:   9,
-			TotalTokens:     9,
+			Ranking:         []usagestats.UserSpendingRankingItem{{UserID: 42, Email: "u@example.com", Charged: 0.9, Operations: 9}},
+			TotalCharged:    0.9,
+			TotalOperations: 9,
 		},
 	}
-	svc := ProvideDashboardService(repo, nil, nil)
+	svc := ProvideDashboardService(repo)
 
 	stats, err := svc.GetStats(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, int64(5), stats.TotalUsers)
-	require.Equal(t, int64(9), stats.TodayRequests)
+	require.Equal(t, int64(9), stats.TodayOperations)
 
-	trend, err := svc.GetUsageTrend(context.Background(), start, end, "day", nil, nil)
+	trend, err := svc.GetUsageTrend(context.Background(), start, end, "day")
 	require.NoError(t, err)
 	require.Equal(t, repo.adminTrend, trend)
 	require.Equal(t, "day", repo.adminTrendGranularity)
@@ -248,6 +323,13 @@ func TestDashboardServiceDelegatesSocialOpsAggregatesToRepository(t *testing.T) 
 type socialOpsUsageDashboardRepoStub struct {
 	userStats       *usagestats.UserDashboardStats
 	userStatsUserID int64
+
+	listCalls   int
+	listFilters usagestats.UsageLogFilters
+
+	stats        *usagestats.UsageStats
+	statsCalls   int
+	statsFilters usagestats.UsageLogFilters
 
 	userTrend            []usagestats.TrendDataPoint
 	userTrendUserID      int64
@@ -305,12 +387,19 @@ func (r *usageMediaResolverStub) Resolve(_ context.Context, userID int64, ref *d
 	return r.resolved, nil
 }
 
-func (r *socialOpsUsageDashboardRepoStub) ListWithFilters(context.Context, pagination.PaginationParams, usagestats.UsageLogFilters) ([]UsageLog, *pagination.PaginationResult, error) {
-	return nil, nil, nil
+func (r *socialOpsUsageDashboardRepoStub) ListWithFilters(_ context.Context, _ pagination.PaginationParams, filters usagestats.UsageLogFilters) ([]UsageLog, *pagination.PaginationResult, error) {
+	r.listCalls++
+	r.listFilters = filters
+	return []UsageLog{}, &pagination.PaginationResult{Page: 1, PageSize: 20}, nil
 }
 
-func (r *socialOpsUsageDashboardRepoStub) GetStatsWithFilters(context.Context, usagestats.UsageLogFilters) (*usagestats.UsageStats, error) {
-	return nil, nil
+func (r *socialOpsUsageDashboardRepoStub) GetStatsWithFilters(_ context.Context, filters usagestats.UsageLogFilters) (*usagestats.UsageStats, error) {
+	r.statsCalls++
+	r.statsFilters = filters
+	if r.stats != nil {
+		return r.stats, nil
+	}
+	return &usagestats.UsageStats{}, nil
 }
 
 func (r *socialOpsUsageDashboardRepoStub) GetByID(context.Context, int64, int64) (*UsageLog, error) {
@@ -332,7 +421,7 @@ func (r *socialOpsUsageDashboardRepoStub) GetDashboardStats(context.Context) (*u
 	return r.dashboardStats, nil
 }
 
-func (r *socialOpsUsageDashboardRepoStub) GetUsageTrend(_ context.Context, _ time.Time, _ time.Time, granularity string, _ *int16, _ *bool) ([]usagestats.TrendDataPoint, error) {
+func (r *socialOpsUsageDashboardRepoStub) GetUsageTrend(_ context.Context, _ time.Time, _ time.Time, granularity string) ([]usagestats.TrendDataPoint, error) {
 	r.adminTrendGranularity = granularity
 	return r.adminTrend, nil
 }

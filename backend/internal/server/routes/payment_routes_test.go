@@ -35,7 +35,7 @@ func TestRegisterPaymentRoutesKeepsRefundEligibleProvidersRouteReachable(t *test
 	requireRouteRegistered(t, router, "GET", "/api/v1/payment/orders/:id")
 }
 
-func TestRegisterPaymentRoutesDoesNotExposeAdminChannelManagement(t *testing.T) {
+func TestRegisterPaymentRoutesKeepsCurrentPlanCatalog(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	v1 := router.Group("/api/v1")
@@ -54,7 +54,29 @@ func TestRegisterPaymentRoutesDoesNotExposeAdminChannelManagement(t *testing.T) 
 		nil,
 	)
 
-	requireRouteRegistered(t, router, "GET", "/api/v1/payment/channels")
+	requireRouteRegistered(t, router, "GET", "/api/v1/payment/plans")
+}
+
+func TestRegisterPaymentRoutesDoesNotExposeChannelManagementOrEmptyUserChannelList(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	v1 := router.Group("/api/v1")
+
+	RegisterPaymentRoutes(
+		v1,
+		&handler.PaymentHandler{},
+		&handler.PaymentWebhookHandler{},
+		&admin.PaymentHandler{},
+		middleware.JWTAuthMiddleware(func(c *gin.Context) {
+			c.Next()
+		}),
+		middleware.AdminAuthMiddleware(func(c *gin.Context) {
+			c.Next()
+		}),
+		nil,
+	)
+
+	requireRouteNotRegistered(t, router, "GET", "/api/v1/payment/channels")
 	requireRouteNotRegistered(t, router, "GET", "/api/v1/admin/payment/channels")
 	requireRouteNotRegistered(t, router, "POST", "/api/v1/admin/payment/channels")
 	requireRouteNotRegistered(t, router, "PUT", "/api/v1/admin/payment/channels/:id")

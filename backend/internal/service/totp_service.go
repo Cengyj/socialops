@@ -49,6 +49,12 @@ type SecretEncryptor interface {
 	Decrypt(ciphertext string) (string, error)
 }
 
+// ExecutionAuthEncryptor defines encryption operations for social execution_auth.
+type ExecutionAuthEncryptor interface {
+	Encrypt(plaintext string) (string, error)
+	Decrypt(ciphertext string) (string, error)
+}
+
 // TotpSetupSession represents a TOTP setup session
 type TotpSetupSession struct {
 	Secret     string // Plain text TOTP secret (not encrypted yet)

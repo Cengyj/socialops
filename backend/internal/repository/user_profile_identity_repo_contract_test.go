@@ -4,6 +4,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"testing"
@@ -188,26 +189,26 @@ func (s *UserProfileIdentityRepoSuite) TestBindAuthIdentityToUser_IsIdempotentAn
 	s.Require().ErrorIs(err, ErrAuthIdentityChannelOwnershipConflict)
 }
 
-func (s *UserProfileIdentityRepoSuite) TestBindAuthIdentityToUser_ReusesLegacyWeChatAliasRecords() {
-	user := s.mustCreateUser("wechat-legacy-alias")
+func (s *UserProfileIdentityRepoSuite) TestBindAuthIdentityToUser_ReusesStoredWeChatAliasRecords() {
+	user := s.mustCreateUser("wechat-stored-alias")
 
-	legacyIdentity, err := s.client.AuthIdentity.Create().
+	storedIdentity, err := s.client.AuthIdentity.Create().
 		SetUserID(user.ID).
 		SetProviderType("wechat").
 		SetProviderKey("wechat").
-		SetProviderSubject("union-legacy-123").
-		SetMetadata(map[string]any{"source": "legacy-alias"}).
+		SetProviderSubject("union-stored-123").
+		SetMetadata(map[string]any{"source": "stored-alias"}).
 		Save(s.ctx)
 	s.Require().NoError(err)
 
-	legacyChannel, err := s.client.AuthIdentityChannel.Create().
-		SetIdentityID(legacyIdentity.ID).
+	storedChannel, err := s.client.AuthIdentityChannel.Create().
+		SetIdentityID(storedIdentity.ID).
 		SetProviderType("wechat").
 		SetProviderKey("wechat").
 		SetChannel("oa").
-		SetChannelAppID("wx-app-legacy").
-		SetChannelSubject("openid-legacy-123").
-		SetMetadata(map[string]any{"scene": "legacy-alias"}).
+		SetChannelAppID("wx-app-stored").
+		SetChannelSubject("openid-stored-123").
+		SetMetadata(map[string]any{"scene": "stored-alias"}).
 		Save(s.ctx)
 	s.Require().NoError(err)
 
@@ -216,14 +217,14 @@ func (s *UserProfileIdentityRepoSuite) TestBindAuthIdentityToUser_ReusesLegacyWe
 		Canonical: AuthIdentityKey{
 			ProviderType:    "wechat",
 			ProviderKey:     "wechat-main",
-			ProviderSubject: "union-legacy-123",
+			ProviderSubject: "union-stored-123",
 		},
 		Channel: &AuthIdentityChannelKey{
 			ProviderType:   "wechat",
 			ProviderKey:    "wechat-main",
 			Channel:        "oa",
-			ChannelAppID:   "wx-app-legacy",
-			ChannelSubject: "openid-legacy-123",
+			ChannelAppID:   "wx-app-stored",
+			ChannelSubject: "openid-stored-123",
 		},
 		Metadata:        map[string]any{"source": "canonical-bind"},
 		ChannelMetadata: map[string]any{"scene": "canonical-bind"},
@@ -232,8 +233,8 @@ func (s *UserProfileIdentityRepoSuite) TestBindAuthIdentityToUser_ReusesLegacyWe
 	s.Require().NotNil(bound)
 	s.Require().NotNil(bound.Identity)
 	s.Require().NotNil(bound.Channel)
-	s.Require().Equal(legacyIdentity.ID, bound.Identity.ID)
-	s.Require().Equal(legacyChannel.ID, bound.Channel.ID)
+	s.Require().Equal(storedIdentity.ID, bound.Identity.ID)
+	s.Require().Equal(storedChannel.ID, bound.Channel.ID)
 	s.Require().Equal("wechat-main", bound.Identity.ProviderKey)
 	s.Require().Equal("wechat-main", bound.Channel.ProviderKey)
 	s.Require().Equal("canonical-bind", bound.Identity.Metadata["source"])
@@ -243,7 +244,7 @@ func (s *UserProfileIdentityRepoSuite) TestBindAuthIdentityToUser_ReusesLegacyWe
 		Where(
 			authidentity.UserIDEQ(user.ID),
 			authidentity.ProviderTypeEQ("wechat"),
-			authidentity.ProviderSubjectEQ("union-legacy-123"),
+			authidentity.ProviderSubjectEQ("union-stored-123"),
 		).
 		Count(s.ctx)
 	s.Require().NoError(err)
@@ -253,8 +254,8 @@ func (s *UserProfileIdentityRepoSuite) TestBindAuthIdentityToUser_ReusesLegacyWe
 		Where(
 			authidentitychannel.ProviderTypeEQ("wechat"),
 			authidentitychannel.ChannelEQ("oa"),
-			authidentitychannel.ChannelAppIDEQ("wx-app-legacy"),
-			authidentitychannel.ChannelSubjectEQ("openid-legacy-123"),
+			authidentitychannel.ChannelAppIDEQ("wx-app-stored"),
+			authidentitychannel.ChannelSubjectEQ("openid-stored-123"),
 		).
 		Count(s.ctx)
 	s.Require().NoError(err)
@@ -294,7 +295,7 @@ func (s *UserProfileIdentityRepoSuite) TestBindAuthIdentityToUser_RejectsChannel
 		},
 		Channel: &AuthIdentityChannelKey{
 			ProviderType:   "wechat",
-			ProviderKey:    "wechat-legacy",
+			ProviderKey:    "wechat-alt",
 			Channel:        "oa",
 			ChannelAppID:   "wx-app-bind-mismatch",
 			ChannelSubject: "openid-bind-mismatch",
@@ -465,6 +466,89 @@ func (s *UserProfileIdentityRepoSuite) TestUpsertIdentityAdoptionDecision_Reassi
 	reloadedFirst, err := s.repo.GetIdentityAdoptionDecisionByPendingAuthSessionID(s.ctx, firstSession.ID)
 	s.Require().NoError(err)
 	s.Require().Nil(reloadedFirst.IdentityID)
+}
+
+func (s *UserProfileIdentityRepoSuite) TestUpsertIdentityAdoptionDecision_ClearsHistoricalNullSessionReference() {
+	tx, err := s.client.Tx(s.ctx)
+	s.Require().NoError(err)
+	defer func() { _ = tx.Rollback() }()
+
+	txCtx := dbent.NewTxContext(s.ctx, tx)
+	txClient := tx.Client()
+	exec := sqlExecutorFromEntClient(txClient)
+	s.Require().NotNil(exec)
+
+	_, err = exec.ExecContext(txCtx, `ALTER TABLE identity_adoption_decisions ALTER COLUMN pending_auth_session_id DROP NOT NULL`)
+	s.Require().NoError(err)
+
+	user, err := txClient.User.Create().
+		SetEmail(fmt.Sprintf("historical-null-adoption-%d@example.com", time.Now().UnixNano())).
+		SetPasswordHash("test-password-hash").
+		SetRole("user").
+		SetStatus("active").
+		Save(txCtx)
+	s.Require().NoError(err)
+
+	identity, err := txClient.AuthIdentity.Create().
+		SetUserID(user.ID).
+		SetProviderType("wechat").
+		SetProviderKey("wechat-open").
+		SetProviderSubject("union-historical-null-adoption").
+		SetMetadata(map[string]any{}).
+		Save(txCtx)
+	s.Require().NoError(err)
+
+	now := time.Now().UTC()
+	rows, err := exec.QueryContext(
+		txCtx,
+		`INSERT INTO identity_adoption_decisions
+			(identity_id, adopt_display_name, adopt_avatar, decided_at, created_at, updated_at, pending_auth_session_id)
+		VALUES ($1, $2, $3, $4, $5, $6, NULL)
+		RETURNING id`,
+		identity.ID,
+		true,
+		false,
+		now,
+		now,
+		now,
+	)
+	s.Require().NoError(err)
+	defer func() { _ = rows.Close() }()
+	s.Require().True(rows.Next())
+	var historicalDecisionID int64
+	s.Require().NoError(rows.Scan(&historicalDecisionID))
+	s.Require().NoError(rows.Err())
+
+	session, err := txClient.PendingAuthSession.Create().
+		SetSessionToken(fmt.Sprintf("pending-historical-null-%d", time.Now().UnixNano())).
+		SetIntent("bind_current_user").
+		SetProviderType("wechat").
+		SetProviderKey("wechat-open").
+		SetProviderSubject("union-historical-null-adoption").
+		SetExpiresAt(time.Now().UTC().Add(15 * time.Minute)).
+		SetUpstreamIdentityClaims(map[string]any{"provider_subject": "union-historical-null-adoption"}).
+		SetLocalFlowState(map[string]any{"step": "pending"}).
+		Save(txCtx)
+	s.Require().NoError(err)
+
+	decision, err := s.repo.UpsertIdentityAdoptionDecision(txCtx, IdentityAdoptionDecisionInput{
+		PendingAuthSessionID: session.ID,
+		IdentityID:           &identity.ID,
+		AdoptDisplayName:     false,
+		AdoptAvatar:          true,
+	})
+	s.Require().NoError(err)
+	s.Require().NotNil(decision.IdentityID)
+	s.Require().Equal(identity.ID, *decision.IdentityID)
+
+	historicalRows, err := exec.QueryContext(txCtx, `SELECT identity_id FROM identity_adoption_decisions WHERE id = $1`, historicalDecisionID)
+	s.Require().NoError(err)
+	defer func() { _ = historicalRows.Close() }()
+	s.Require().True(historicalRows.Next())
+	var historicalIdentityID sql.NullInt64
+	s.Require().NoError(historicalRows.Scan(&historicalIdentityID))
+	s.Require().False(historicalIdentityID.Valid)
+	s.Require().NoError(historicalRows.Err())
 }
 
 func (s *UserProfileIdentityRepoSuite) TestWithUserProfileIdentityTx_AllowsAvatarOnlyProfileUpdate() {

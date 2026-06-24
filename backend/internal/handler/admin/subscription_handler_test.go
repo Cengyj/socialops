@@ -161,7 +161,7 @@ func TestSubscriptionHandlerResetQuotaHonorsRequestedWindowsAndReturnsSubscripti
 	require.Equal(t, "x_twitter", envelope.Data.Group.Platform)
 }
 
-func TestSubscriptionHandlerAssignSupportsPlanDrivenCreation(t *testing.T) {
+func TestSubscriptionHandlerCreateReturnsPlanLimitsFromConfiguredPackage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx := context.Background()
 	client := newAdminSubscriptionHandlerTestClient(t)
@@ -220,15 +220,15 @@ func TestSubscriptionHandlerAssignSupportsPlanDrivenCreation(t *testing.T) {
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(
 		http.MethodPost,
-		"/api/v1/admin/subscriptions/assign",
+		"/api/v1/admin/subscriptions",
 		bytes.NewBufferString(`{"user_id":`+strconv.FormatInt(user.ID, 10)+`,"plan_id":`+strconv.FormatInt(plan.ID, 10)+`,"validity_days":45,"notes":"admin created package subscription"}`),
 	)
 	c.Request.Header.Set("Content-Type", "application/json")
 	c.Set(string(servermiddleware.ContextKeyUser), servermiddleware.AuthSubject{UserID: adminActor.ID})
 
-	handler.Assign(c)
+	handler.Create(c)
 
-	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, http.StatusCreated, rec.Code)
 
 	var envelope struct {
 		Code int `json:"code"`

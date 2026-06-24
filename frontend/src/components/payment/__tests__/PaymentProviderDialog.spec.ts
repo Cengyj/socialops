@@ -1,9 +1,11 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import PaymentProviderDialog from '@/components/payment/PaymentProviderDialog.vue'
 import { STRIPE_SDK_API_VERSION } from '@/components/payment/providerConfig'
 import type { ProviderInstance } from '@/types/payment'
+
+const showError = vi.hoisted(() => vi.fn())
 
 const messages: Record<string, string> = {
   'admin.settings.payment.providerConfig': 'Credentials',
@@ -14,6 +16,7 @@ const messages: Record<string, string> = {
   'admin.settings.payment.stripeWebhookHint': 'Configure Stripe webhook.',
   'admin.settings.payment.stripeWebhookApiVersionHint': 'Use Stripe API version {version}.',
   'admin.settings.payment.airwallexWebhookHint': 'Select payment_intent.succeeded and use the latest stable API version.',
+  'admin.settings.payment.validationNameRequired': 'Provider name is required.',
 }
 
 vi.mock('vue-i18n', () => ({
@@ -26,6 +29,12 @@ vi.mock('vue-i18n', () => ({
         message,
       )
     },
+  }),
+}))
+
+vi.mock('@/stores', () => ({
+  useAppStore: () => ({
+    showError,
   }),
 }))
 
@@ -87,6 +96,10 @@ function mountDialog(options: { editing?: ProviderInstance | null } = {}) {
 }
 
 describe('PaymentProviderDialog payment guide', () => {
+  beforeEach(() => {
+    showError.mockReset()
+  })
+
   it('shows no payment guide for providers without a flow guide', () => {
     const wrapper = mountDialog()
 
@@ -155,5 +168,17 @@ describe('PaymentProviderDialog payment guide', () => {
 
     const payload = wrapper.emitted('save')?.[0]?.[0] as { config: Record<string, string> }
     expect(payload.config.accountId).toBe('')
+  })
+
+  it('shows provider validation errors through the app toast store without saving', async () => {
+    const wrapper = mountDialog()
+
+    ;(wrapper.vm as unknown as { reset: (key: string) => void }).reset('airwallex')
+    await nextTick()
+
+    await wrapper.find('form').trigger('submit.prevent')
+
+    expect(showError).toHaveBeenCalledWith(messages['admin.settings.payment.validationNameRequired'])
+    expect(wrapper.emitted('save')).toBeUndefined()
   })
 })

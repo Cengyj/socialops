@@ -2,15 +2,11 @@
  * useNavigationLoading 组合式函数单元测试
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import {
-  useNavigationLoading,
-  _resetNavigationLoadingInstance
-} from '../useNavigationLoading'
+import { useNavigationLoading } from '../useNavigationLoading'
 
 describe('useNavigationLoading', () => {
   beforeEach(() => {
     vi.useFakeTimers()
-    _resetNavigationLoadingInstance()
   })
 
   afterEach(() => {

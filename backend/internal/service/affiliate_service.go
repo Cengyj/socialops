@@ -207,18 +207,16 @@ type AffiliateUserOverview struct {
 }
 
 type AffiliateService struct {
-	repo                 AffiliateRepository
-	settingService       *SettingService
-	authCacheInvalidator APIKeyAuthCacheInvalidator
-	billingCacheService  *BillingCacheService
+	repo                AffiliateRepository
+	settingService      *SettingService
+	billingCacheService *BillingCacheService
 }
 
-func NewAffiliateService(repo AffiliateRepository, settingService *SettingService, authCacheInvalidator APIKeyAuthCacheInvalidator, billingCacheService *BillingCacheService) *AffiliateService {
+func NewAffiliateService(repo AffiliateRepository, settingService *SettingService, billingCacheService *BillingCacheService) *AffiliateService {
 	return &AffiliateService{
-		repo:                 repo,
-		settingService:       settingService,
-		authCacheInvalidator: authCacheInvalidator,
-		billingCacheService:  billingCacheService,
+		repo:                repo,
+		settingService:      settingService,
+		billingCacheService: billingCacheService,
 	}
 }
 
@@ -482,12 +480,9 @@ func maskSegment(s string) string {
 }
 
 func (s *AffiliateService) invalidateAffiliateCaches(ctx context.Context, userID int64) {
-	if s.authCacheInvalidator != nil {
-		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
-	}
 	if s.billingCacheService != nil {
 		if err := s.billingCacheService.InvalidateUserBalance(ctx, userID); err != nil {
-			logger.LegacyPrintf("service.affiliate", "[Affiliate] Failed to invalidate billing cache for user %d: %v", userID, err)
+			logger.ComponentPrintf("service.affiliate", "[Affiliate] Failed to invalidate billing cache for user %d: %v", userID, err)
 		}
 	}
 }

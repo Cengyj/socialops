@@ -5,6 +5,7 @@ package admin
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"net/url"
 	"strconv"
 	"testing"
@@ -17,6 +18,12 @@ import (
 	entsql "entgo.io/ent/dialect/sql"
 	_ "modernc.org/sqlite"
 )
+
+type apiEnvelope struct {
+	Code    int             `json:"code"`
+	Message string          `json:"message"`
+	Data    json.RawMessage `json:"data"`
+}
 
 func newProxyAdminTestClient(t *testing.T) *dbent.Client {
 	t.Helper()

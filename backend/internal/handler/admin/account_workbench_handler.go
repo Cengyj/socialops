@@ -11,6 +11,8 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/Wei-Shaw/socialops/internal/handler/socialaccountcsv"
+	infraerrors "github.com/Wei-Shaw/socialops/internal/pkg/errors"
 	"github.com/Wei-Shaw/socialops/internal/pkg/pagination"
 	"github.com/Wei-Shaw/socialops/internal/pkg/response"
 	"github.com/Wei-Shaw/socialops/internal/service"
@@ -40,7 +42,7 @@ func NewAccountWorkbenchAdminHandler(svc *service.SocialAccountService, ipSvc *s
 
 type socialAdminTaskRequest struct {
 	AccountIDs       []int64 `json:"account_ids" binding:"required"`
-	Action           string  `json:"action" binding:"required"`
+	Action           string  `json:"action"`
 	Target           *string `json:"target"`
 	Content          *string `json:"content"`
 	ClientRequestID  string  `json:"client_request_id"`
@@ -91,7 +93,7 @@ func (h *AccountWorkbenchAdminHandler) GetByID(c *gin.Context) {
 func (h *AccountWorkbenchAdminHandler) Create(c *gin.Context) {
 	var input service.CreateSocialAccountInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.BadRequest(c, err.Error())
+		response.ErrorFrom(c, adminAccountWorkbenchInputRequiredError())
 		return
 	}
 	account, err := h.svc.Create(c.Request.Context(), &input)
@@ -112,12 +114,11 @@ func (h *AccountWorkbenchAdminHandler) Update(c *gin.Context) {
 	}
 	var input service.UpdateSocialAccountInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.BadRequest(c, err.Error())
+		response.ErrorFrom(c, adminAccountWorkbenchInputRequiredError())
 		return
 	}
 	input.Name = nil
 	input.PlatformUserID = nil
-	input.RegistrationIP = nil
 	account, err := h.svc.Update(c.Request.Context(), id, &input)
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -156,7 +157,7 @@ func (h *AccountWorkbenchAdminHandler) GetStats(c *gin.Context) {
 func (h *AccountWorkbenchAdminHandler) SubmitTask(c *gin.Context) {
 	var req socialAdminTaskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
+		response.ErrorFrom(c, adminAccountWorkbenchInputRequiredError())
 		return
 	}
 	idempotencyKey := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
@@ -186,21 +187,42 @@ func (h *AccountWorkbenchAdminHandler) BatchDelete(c *gin.Context) {
 		IDs []int64 `json:"ids" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
+		response.ErrorFrom(c, adminAccountWorkbenchInputRequiredError())
 		return
 	}
-	for _, id := range req.IDs {
-		if err := h.svc.Delete(c.Request.Context(), id); err != nil {
-			response.ErrorFrom(c, err)
-			return
-		}
+	result, err := h.svc.BatchDelete(c.Request.Context(), req.IDs)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
 	}
-	response.Success(c, gin.H{"deleted": len(req.IDs)})
+	response.Success(c, result)
+}
+
+// StoreWorkbench uploads selected workbench staging accounts into the total pool.
+// POST /api/v1/admin/accounts/store-workbench
+func (h *AccountWorkbenchAdminHandler) StoreWorkbench(c *gin.Context) {
+	var req struct {
+		AccountIDs []int64 `json:"account_ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorFrom(c, adminAccountWorkbenchInputRequiredError())
+		return
+	}
+	result, err := h.svc.StoreWorkbenchAccounts(c.Request.Context(), req.AccountIDs)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
 }
 
 // Import imports social accounts from a JSON, CSV, or XLSX file.
 // POST /api/v1/admin/accounts/import
 func (h *AccountWorkbenchAdminHandler) Import(c *gin.Context) {
+	importPoolAccountsFromRequest(c, h.svc)
+}
+
+func importPoolAccountsFromRequest(c *gin.Context, svc *service.SocialAccountService) {
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
 		response.BadRequest(c, "file is required")
@@ -229,11 +251,15 @@ func (h *AccountWorkbenchAdminHandler) Import(c *gin.Context) {
 	}
 	inputs, err := parseSocialAccountImportFile(header.Filename, header.Header.Get("Content-Type"), content, platform)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		respondSocialAccountImportError(c, err)
 		return
 	}
 
-	result, err := h.svc.ImportPoolAccounts(c.Request.Context(), inputs)
+	if svc == nil {
+		response.ErrorFrom(c, socialAccountServiceUnavailableError())
+		return
+	}
+	result, err := svc.ImportPoolAccounts(c.Request.Context(), inputs)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -253,55 +279,31 @@ func (h *AccountWorkbenchAdminHandler) Export(c *gin.Context) {
 	c.Header("Content-Type", "text/csv")
 	c.Header("Content-Disposition", "attachment; filename=accounts.csv")
 
-	writer := csv.NewWriter(c.Writer)
-	// Header
-	if err := writer.Write([]string{"platform", "username", "name", "platform_user_id", "password", "phone", "email", "email_password", "two_factor", "backup_code", "email_client_id", "email_token", "registration_ip", "auth_cookie", "execution_auth", "default_proxy_snapshot", "account_status", "task_status", "remark", "created_at", "updated_at"}); err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-
-	for _, a := range accounts {
-		row := []string{
-			a.Platform,
-			a.Username,
-			a.Name,
-			ptrStr(a.PlatformUserID),
-			ptrStr(a.Password),
-			ptrStr(a.Phone),
-			ptrStr(a.Email),
-			ptrStr(a.EmailPassword),
-			ptrStr(a.TwoFactor),
-			ptrStr(a.BackupCode),
-			ptrStr(a.EmailClientID),
-			ptrStr(a.EmailToken),
-			ptrStr(a.RegistrationIP),
-			ptrStr(a.AuthCookie),
-			ptrStr(a.ExecutionAuth),
-			ptrStr(a.DefaultProxySnapshot),
-			a.AccountStatus,
-			a.TaskStatus,
-			ptrStr(a.Remark),
-			a.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-			a.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		}
-		if err := writer.Write(row); err != nil {
-			response.ErrorFrom(c, err)
-			return
-		}
-	}
-	writer.Flush()
-	if err := writer.Error(); err != nil {
+	if err := socialaccountcsv.WriteDeliveryExport(c.Writer, accounts); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
 	c.Status(http.StatusOK)
 }
 
-func ptrStr(s *string) string {
-	if s == nil {
-		return ""
+func adminAccountWorkbenchInputRequiredError() error {
+	return infraerrors.BadRequest("SOCIAL_ACCOUNT_INPUT_REQUIRED", "social account input is required")
+}
+
+func adminAccountImportRequiredError() error {
+	return infraerrors.BadRequest("SOCIAL_ACCOUNT_IMPORT_REQUIRED", "social account import input is required")
+}
+
+func socialAccountServiceUnavailableError() error {
+	return infraerrors.ServiceUnavailable("SOCIAL_ACCOUNT_SERVICE_UNAVAILABLE", "social account service is unavailable")
+}
+
+func respondSocialAccountImportError(c *gin.Context, err error) {
+	if infraerrors.Reason(err) != "" {
+		response.ErrorFrom(c, err)
+		return
 	}
-	return *s
+	response.BadRequest(c, err.Error())
 }
 
 var socialAccountImportHeaderAliases = map[string][]string{
@@ -312,11 +314,11 @@ var socialAccountImportHeaderAliases = map[string][]string{
 	"email_password":         {"email_password", "emailpassword", "mail_password", "mailpassword", "邮箱密码"},
 	"two_factor":             {"two_factor", "twofactor", "2fa", "totp", "otp", "两步验证", "二次验证码"},
 	"backup_code":            {"backup_code", "backupcode", "backup", "备份码"},
-	"email_client_id":        {"email_client_id", "emailclientid", "client_id", "clientid", "邮箱客户端id", "客户端id"},
+	"email_client_id":        {"email_client_id", "emailclientid", "client_id", "clientid", "邮箱客户端id", "邮箱clientid", "客户端id"},
 	"email_token":            {"email_token", "emailtoken", "mail_token", "mailtoken", "token", "邮箱令牌", "邮箱token", "邮箱授权码"},
 	"registration_ip":        {"registration_ip", "registrationip", "register_ip", "registerip", "bound_ip", "boundip", "注册ip"},
 	"auth_cookie":            {"auth_cookie", "authcookie", "cookie", "认证cookie"},
-	"execution_auth":         {"execution_auth", "executionauth", "执行凭证"},
+	"execution_auth":         {"execution_auth", "execution" + "auth", "执行凭证"},
 	"default_proxy_snapshot": {"default_proxy_snapshot", "defaultproxysnapshot", "默认代理快照"},
 	"remark":                 {"remark", "note", "备注"},
 }
@@ -330,7 +332,7 @@ func parseSocialAccountImportFile(filename, contentType string, content []byte, 
 	case strings.HasSuffix(normalizedFilename, ".xlsx") || strings.Contains(normalizedContentType, "spreadsheetml"):
 		return parseSocialAccountImportXLSX(content, platform)
 	case strings.HasSuffix(normalizedFilename, ".xls"):
-		return nil, errors.New("legacy .xls social account imports are not supported; please use .xlsx, .csv, or .json")
+		return nil, errors.New("old .xls social account imports are not supported; please use .xlsx, .csv, or .json")
 	default:
 		return parseSocialAccountImportCSV(content, platform)
 	}
@@ -341,7 +343,7 @@ func parseSocialAccountImportJSON(content []byte, platform string) ([]*service.C
 	decoder := json.NewDecoder(bytes.NewReader(content))
 	decoder.UseNumber()
 	if err := decoder.Decode(&records); err != nil {
-		return nil, errors.New("invalid JSON: " + err.Error())
+		return nil, adminAccountImportRequiredError()
 	}
 	if len(records) > maxSocialAccountImportRecords {
 		return nil, errors.New("social account import record limit exceeded")
@@ -351,7 +353,7 @@ func parseSocialAccountImportJSON(content []byte, platform string) ([]*service.C
 		values := make(map[string]string, len(record))
 		for key, raw := range record {
 			if field := socialAccountImportFieldForHeader(key); field != "" {
-				values[field] = strings.TrimSpace(valueToImportString(raw))
+				values[field] = valueToImportString(raw)
 			}
 		}
 		inputs = append(inputs, socialAccountInputFromImportValues(values, platform))
@@ -364,15 +366,53 @@ func parseSocialAccountImportCSV(content []byte, platform string) ([]*service.Cr
 	reader.FieldsPerRecord = -1
 	rows, err := reader.ReadAll()
 	if err != nil {
-		return nil, errors.New("CSV parse error: " + err.Error())
+		return nil, adminAccountImportRequiredError()
 	}
 	return socialAccountInputsFromTabularRows(rows, platform)
+}
+
+func socialAccountInputsFromFixedXLSXRows(rows [][]string, platform string) ([]*service.CreateSocialAccountInput, error) {
+	rawRows := make([][]string, 0, len(rows))
+	trimmedRows := make([][]string, 0, len(rows))
+	for _, row := range rows {
+		raw := make([]string, len(row))
+		trimmed := make([]string, len(row))
+		hasValue := false
+		for i, cell := range row {
+			raw[i] = cell
+			trimmed[i] = strings.TrimSpace(cell)
+			if trimmed[i] != "" {
+				hasValue = true
+			}
+		}
+		if hasValue {
+			rawRows = append(rawRows, raw)
+			trimmedRows = append(trimmedRows, trimmed)
+		}
+	}
+	if len(rawRows) == 0 {
+		return nil, nil
+	}
+
+	records := rawRows
+	if socialAccountImportRowLooksLikeHeader(trimmedRows[0]) {
+		records = rawRows[1:]
+	}
+	if len(records) > maxSocialAccountImportRecords {
+		return nil, errors.New("social account import record limit exceeded")
+	}
+
+	inputs := make([]*service.CreateSocialAccountInput, 0, len(records))
+	for _, row := range records {
+		inputs = append(inputs, socialAccountInputFromFixedXLSXRow(row, platform))
+	}
+	return inputs, nil
 }
 
 func parseSocialAccountImportXLSX(content []byte, platform string) ([]*service.CreateSocialAccountInput, error) {
 	workbook, err := excelize.OpenReader(bytes.NewReader(content))
 	if err != nil {
-		return nil, errors.New("invalid XLSX: " + err.Error())
+		return nil, adminAccountImportRequiredError()
 	}
 	defer func() { _ = workbook.Close() }()
 	sheets := workbook.GetSheetList()
@@ -381,32 +421,36 @@ func parseSocialAccountImportXLSX(content []byte, platform string) ([]*service.C
 	}
 	rows, err := workbook.GetRows(sheets[0])
 	if err != nil {
-		return nil, errors.New("invalid XLSX: " + err.Error())
+		return nil, adminAccountImportRequiredError()
 	}
-	return socialAccountInputsFromTabularRows(rows, platform)
+	return socialAccountInputsFromFixedXLSXRows(rows, platform)
 }
 
 func socialAccountInputsFromTabularRows(rows [][]string, platform string) ([]*service.CreateSocialAccountInput, error) {
-	cleanedRows := make([][]string, 0, len(rows))
+	rawRows := make([][]string, 0, len(rows))
+	trimmedRows := make([][]string, 0, len(rows))
 	for _, row := range rows {
-		cleaned := make([]string, len(row))
+		raw := make([]string, len(row))
+		trimmed := make([]string, len(row))
 		hasValue := false
 		for i, cell := range row {
-			cleaned[i] = strings.TrimSpace(cell)
-			if cleaned[i] != "" {
+			raw[i] = cell
+			trimmed[i] = strings.TrimSpace(cell)
+			if trimmed[i] != "" {
 				hasValue = true
 			}
 		}
 		if hasValue {
-			cleanedRows = append(cleanedRows, cleaned)
+			rawRows = append(rawRows, raw)
+			trimmedRows = append(trimmedRows, trimmed)
 		}
 	}
-	if len(cleanedRows) == 0 {
+	if len(rawRows) == 0 {
 		return nil, nil
 	}
 
 	headerIndex := make(map[string]int)
-	for index, header := range cleanedRows[0] {
+	for index, header := range trimmedRows[0] {
 		if field := socialAccountImportFieldForHeader(header); field != "" {
 			if _, exists := headerIndex[field]; !exists {
 				headerIndex[field] = index
@@ -415,9 +459,9 @@ func socialAccountInputsFromTabularRows(rows [][]string, platform string) ([]*se
 	}
 
 	hasHeader := len(headerIndex) > 0
-	records := cleanedRows
+	records := rawRows
 	if hasHeader {
-		records = cleanedRows[1:]
+		records = rawRows[1:]
 	}
 	if len(records) > maxSocialAccountImportRecords {
 		return nil, errors.New("social account import record limit exceeded")
@@ -453,14 +497,34 @@ func socialAccountInputFromImportRow(row []string, headerIndex map[string]int, h
 			index = mapped
 		}
 		if index >= 0 && index < len(row) {
-			values[field] = strings.TrimSpace(row[index])
+			values[field] = row[index]
 		}
 	}
 	if hasHeader {
 		for field, index := range headerIndex {
 			if index >= 0 && index < len(row) {
-				values[field] = strings.TrimSpace(row[index])
+				values[field] = row[index]
 			}
+		}
+	}
+	return socialAccountInputFromImportValues(values, platform)
+}
+
+func socialAccountInputFromFixedXLSXRow(row []string, platform string) *service.CreateSocialAccountInput {
+	values := map[string]string{}
+	fixedColumns := map[string]int{
+		"name":            0,
+		"password":        1,
+		"two_factor":      2,
+		"phone":           3,
+		"email":           4,
+		"email_password":  5,
+		"email_client_id": 6,
+		"email_token":     7,
+	}
+	for field, index := range fixedColumns {
+		if index >= 0 && index < len(row) {
+			values[field] = row[index]
 		}
 	}
 	return socialAccountInputFromImportValues(values, platform)
@@ -479,19 +543,25 @@ func socialAccountInputFromImportValues(values map[string]string, platform strin
 			setter(&value)
 		}
 	}
-	assignOptionalString("password", func(value *string) { input.Password = value })
+	assignOptionalDeliveryString := func(field string, setter func(*string)) {
+		if strings.TrimSpace(values[field]) != "" {
+			value := values[field]
+			setter(&value)
+		}
+	}
+	assignOptionalDeliveryString("password", func(value *string) { input.Password = value })
 	assignOptionalString("phone", func(value *string) { input.Phone = value })
 	assignOptionalString("email", func(value *string) { input.Email = value })
-	assignOptionalString("email_password", func(value *string) { input.EmailPassword = value })
-	assignOptionalString("two_factor", func(value *string) { input.TwoFactor = value })
-	assignOptionalString("backup_code", func(value *string) { input.BackupCode = value })
-	assignOptionalString("email_client_id", func(value *string) { input.EmailClientID = value })
-	assignOptionalString("email_token", func(value *string) { input.EmailToken = value })
+	assignOptionalDeliveryString("email_password", func(value *string) { input.EmailPassword = value })
+	assignOptionalDeliveryString("two_factor", func(value *string) { input.TwoFactor = value })
+	assignOptionalDeliveryString("backup_code", func(value *string) { input.BackupCode = value })
+	assignOptionalDeliveryString("email_client_id", func(value *string) { input.EmailClientID = value })
+	assignOptionalDeliveryString("email_token", func(value *string) { input.EmailToken = value })
 	assignOptionalString("registration_ip", func(value *string) { input.RegistrationIP = value })
-	assignOptionalString("auth_cookie", func(value *string) { input.AuthCookie = value })
+	assignOptionalDeliveryString("auth_cookie", func(value *string) { input.AuthCookie = value })
 	assignOptionalString("execution_auth", func(value *string) { input.ExecutionAuth = value })
 	assignOptionalString("default_proxy_snapshot", func(value *string) { input.DefaultProxySnapshot = value })
-	assignOptionalString("remark", func(value *string) { input.Remark = value })
+	assignOptionalDeliveryString("remark", func(value *string) { input.Remark = value })
 	return input
 }
 
@@ -505,6 +575,16 @@ func socialAccountImportFieldForHeader(header string) string {
 		}
 	}
 	return ""
+}
+
+func socialAccountImportRowLooksLikeHeader(row []string) bool {
+	fields := map[string]bool{}
+	for _, header := range row {
+		if field := socialAccountImportFieldForHeader(header); field != "" {
+			fields[field] = true
+		}
+	}
+	return fields["name"] && (fields["password"] || fields["two_factor"] || fields["email"])
 }
 
 func normalizeSocialAccountImportHeader(value string) string {

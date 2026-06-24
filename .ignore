@@ -1,0 +1,14 @@
+# Local generated artifacts that should not pollute source searches.
+*.log
+
+backend/internal/web/dist/
+frontend/dist/
+node_modules/
+frontend/node_modules/
+
+deploy/dev-*.log
+deploy/dev-data/
+deploy/dev-data-real/
+deploy/dev-postgres_data/
+deploy/postgres_data/
+deploy/redis_data/

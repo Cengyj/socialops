@@ -56,7 +56,7 @@ const orderFactory = (overrides: Partial<PaymentOrder> = {}): PaymentOrder => ({
   fee_rate: 3,
   currency: 'HKD',
   payment_type: 'stripe',
-  out_trade_no: 'sub2_admin_view_currency',
+  out_trade_no: 'socialops_admin_view_currency',
   status: 'COMPLETED',
   order_type: 'subscription',
   created_at: '2026-06-04T12:00:00Z',

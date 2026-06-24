@@ -47,7 +47,6 @@ type SystemSettings struct {
 	TurnstileEnabled             bool   `json:"turnstile_enabled"`
 	TurnstileSiteKey             string `json:"turnstile_site_key"`
 	TurnstileSecretKeyConfigured bool   `json:"turnstile_secret_key_configured"`
-	APIKeyACLTrustForwardedIP    bool   `json:"api_key_acl_trust_forwarded_ip"`
 
 	LinuxDoConnectEnabled                bool   `json:"linuxdo_connect_enabled"`
 	LinuxDoConnectClientID               string `json:"linuxdo_connect_client_id"`
@@ -138,7 +137,6 @@ type SystemSettings struct {
 
 	DefaultConcurrency           int                          `json:"default_concurrency"`
 	DefaultBalance               float64                      `json:"default_balance"`
-	RiskControlEnabled           bool                         `json:"risk_control_enabled"`
 	AffiliateRebateRate          float64                      `json:"affiliate_rebate_rate"`
 	AffiliateRebateFreezeHours   int                          `json:"affiliate_rebate_freeze_hours"`
 	AffiliateRebateDurationDays  int                          `json:"affiliate_rebate_duration_days"`
@@ -238,8 +236,7 @@ type PublicSettings struct {
 	BalanceLowNotifyThreshold        float64                  `json:"balance_low_notify_threshold"`
 	BalanceLowNotifyRechargeURL      string                   `json:"balance_low_notify_recharge_url"`
 
-	AffiliateEnabled   bool `json:"affiliate_enabled"`
-	RiskControlEnabled bool `json:"risk_control_enabled"`
+	AffiliateEnabled bool `json:"affiliate_enabled"`
 }
 
 type LoginAgreementDocument struct {

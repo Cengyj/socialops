@@ -7,13 +7,11 @@ import UsersView from '../UsersView.vue'
 const {
   listUsers,
   getAllGroups,
-  getBatchUsersUsage,
   listEnabledDefinitions,
   getBatchUserAttributes
 } = vi.hoisted(() => ({
   listUsers: vi.fn(),
   getAllGroups: vi.fn(),
-  getBatchUsersUsage: vi.fn(),
   listEnabledDefinitions: vi.fn(),
   getBatchUserAttributes: vi.fn()
 }))
@@ -27,9 +25,6 @@ vi.mock('@/api/admin', () => ({
     },
     groups: {
       getAll: getAllGroups
-    },
-    dashboard: {
-      getBatchUsersUsage
     },
     userAttributes: {
       listEnabledDefinitions,
@@ -95,7 +90,6 @@ describe('admin UsersView', () => {
 
     listUsers.mockReset()
     getAllGroups.mockReset()
-    getBatchUsersUsage.mockReset()
     listEnabledDefinitions.mockReset()
     getBatchUserAttributes.mockReset()
 
@@ -107,7 +101,6 @@ describe('admin UsersView', () => {
       pages: 1
     })
     getAllGroups.mockResolvedValue([])
-    getBatchUsersUsage.mockResolvedValue({ stats: {} })
     listEnabledDefinitions.mockResolvedValue([])
     getBatchUserAttributes.mockResolvedValue({ values: {} })
   })
@@ -130,7 +123,6 @@ describe('admin UsersView', () => {
           UserConcurrencyCell: true,
           UserCreateModal: true,
           UserEditModal: true,
-          UserApiKeysModal: true,
           UserAllowedGroupsModal: true,
           UserBalanceModal: true,
           UserBalanceHistoryModal: true,

@@ -2,6 +2,7 @@ package dto
 
 import (
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -17,36 +18,39 @@ import (
 // into the SSR payload, so the frontend could read `undefined` on refresh until
 // the async /api/v1/settings/public round-trip finished.
 //
-// This test compares the two JSON-tag sets and fails if injection is missing
-// any field that dto.PublicSettings exposes. Adding a new feature flag with
-// only a DTO entry will fail this test until the injection struct is updated.
-//
-// Intentional exclusions (fields present on dto.PublicSettings that SSR does
-// not need to inject) are listed in `dtoOnlyFields` below with a reason.
+// This test compares the two JSON-tag sets and fails if either side drifts.
+// Adding a new feature flag with only a DTO entry will fail until the injection
+// struct is updated; injecting a field without a DTO contract fails too.
 func TestPublicSettingsInjectionPayload_SchemaDoesNotDrift(t *testing.T) {
 	injection := jsonTags(reflect.TypeOf(service.PublicSettingsInjectionPayload{}))
 	dtoKeys := jsonTags(reflect.TypeOf(PublicSettings{}))
-
-	// Fields that legitimately live only on the DTO. Keep tiny; document each.
-	dtoOnlyFields := map[string]string{
-		// sora_client_enabled is an upstream-only field the fork does not surface.
-		"sora_client_enabled": "upstream-only field, not used on this fork",
-	}
 
 	var missing []string
 	for key := range dtoKeys {
 		if _, ok := injection[key]; ok {
 			continue
 		}
-		if _, allowed := dtoOnlyFields[key]; allowed {
-			continue
-		}
 		missing = append(missing, key)
 	}
 	if len(missing) > 0 {
+		sort.Strings(missing)
 		t.Fatalf("service.PublicSettingsInjectionPayload is missing JSON fields present on dto.PublicSettings: %s\n"+
-			"add the field to PublicSettingsInjectionPayload (and GetPublicSettingsForInjection), or "+
-			"document the exclusion in dtoOnlyFields with a reason.", strings.Join(missing, ", "))
+			"add the field to PublicSettingsInjectionPayload and GetPublicSettingsForInjection, or remove the unused public DTO field.",
+			strings.Join(missing, ", "))
+	}
+
+	var extra []string
+	for key := range injection {
+		if _, ok := dtoKeys[key]; ok {
+			continue
+		}
+		extra = append(extra, key)
+	}
+	if len(extra) > 0 {
+		sort.Strings(extra)
+		t.Fatalf("service.PublicSettingsInjectionPayload has JSON fields missing from dto.PublicSettings: %s\n"+
+			"add the field to dto.PublicSettings and SettingHandler.GetPublicSettings, or remove the unused injection field.",
+			strings.Join(extra, ", "))
 	}
 }
 

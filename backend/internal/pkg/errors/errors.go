@@ -27,7 +27,7 @@ type ApplicationError struct {
 	cause error
 }
 
-// Error is kept for backwards compatibility within this package.
+// Error is a package-local alias for callers that use the shorter name.
 type Error = ApplicationError
 
 func (e *ApplicationError) Error() string {
@@ -40,7 +40,7 @@ func (e *ApplicationError) Error() string {
 	return fmt.Sprintf("error: code=%d reason=%q message=%q metadata=%v cause=%v", e.Code, e.Reason, e.Message, e.Metadata, e.cause)
 }
 
-// Unwrap provides compatibility for Go 1.13 error chains.
+// Unwrap exposes the cause to standard Go error chains.
 func (e *ApplicationError) Unwrap() error { return e.cause }
 
 // Is matches each error in the chain with the target value.

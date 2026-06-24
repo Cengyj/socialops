@@ -17,6 +17,7 @@ type SocialAccountCredentialRequest struct {
 	TwoFactor     string
 	EmailToken    string
 	EmailClientID string
+	ProxyID       int64
 	ProxyEndpoint string
 }
 
@@ -109,6 +110,10 @@ func (s *SocialAccountService) RegisterWithCredentials(ctx context.Context, inpu
 	if executionAuth == "" {
 		return s.markRegisteredAccountFailed(ctx, account.ID, newSocialExecutionError(SocialExecutionFailureAuthInvalid, "login succeeded without usable auth credentials", nil))
 	}
+	executionAuth, err = s.normalizeTwitterExecutionAuth(executionAuth, name)
+	if err != nil {
+		return s.markRegisteredAccountFailed(ctx, account.ID, err)
+	}
 	message := strings.TrimSpace(result.Message)
 	if message == "" {
 		message = "login succeeded"
@@ -127,7 +132,7 @@ func (s *SocialAccountService) RegisterWithCredentials(ctx context.Context, inpu
 		}
 		return nil, err
 	}
-	return socialAccountFromEnt(ent), nil
+	return s.socialAccountFromEnt(ent), nil
 }
 
 func (s *SocialAccountService) createRegisteringAccount(ctx context.Context, input *RegisterSocialAccountInput, name, platform string, identity socialidentity.BusinessIdentity) (*dbent.SocialAccount, error) {
@@ -192,7 +197,7 @@ func (s *SocialAccountService) markRegisteredAccountFailed(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	return socialAccountFromEnt(ent), nil
+	return s.socialAccountFromEnt(ent), nil
 }
 
 func socialAccountRegistrationFailureState(err error) (accountStatus, taskStatus string) {
@@ -203,14 +208,16 @@ func socialAccountRegistrationFailureState(err error) (accountStatus, taskStatus
 	switch kind {
 	case SocialExecutionFailureAuthMissing:
 		return SocialAccountStatusNotStored, SocialTaskStatusManualReview
-	case SocialExecutionFailureAuthInvalid:
+	case SocialExecutionFailureAuthInvalid, SocialExecutionFailurePasswordInvalid:
 		return SocialAccountStatusInvalid, SocialTaskStatusRegisterFailed
 	case SocialExecutionFailureAccountLimited:
 		return SocialAccountStatusLimited, SocialTaskStatusManualReview
 	case SocialExecutionFailureChallengeRequired:
 		return SocialAccountStatusPendingCheck, SocialTaskStatusManualReview
-	case SocialExecutionFailureProxyMissing, SocialExecutionFailureProxyInvalid, SocialExecutionFailureProxyUnavailable, SocialExecutionFailureNetwork:
+	case SocialExecutionFailureProxyMissing, SocialExecutionFailureProxyInvalid, SocialExecutionFailureProxyUnavailable:
 		return SocialAccountStatusPendingCheck, SocialTaskStatusIPUnavailable
+	case SocialExecutionFailureNetwork:
+		return SocialAccountStatusPendingCheck, SocialTaskStatusRegisterFailed
 	default:
 		return SocialAccountStatusPendingCheck, SocialTaskStatusRegisterFailed
 	}

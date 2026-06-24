@@ -13,7 +13,9 @@ import (
 const (
 	emailSendTimeout = 30 * time.Second
 	defaultSiteName  = "SocialOps"
-) // BalanceNotifyService handles balance threshold notifications.
+)
+
+// BalanceNotifyService handles balance threshold notifications.
 type BalanceNotifyService struct {
 	emailService             *EmailService
 	settingRepo              SettingRepository

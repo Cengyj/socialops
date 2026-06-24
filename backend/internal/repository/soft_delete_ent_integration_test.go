@@ -41,21 +41,15 @@ func TestEntSoftDelete_ApiKey_DefaultFilterAndSkip(t *testing.T) {
 
 	u := createEntUser(t, ctx, client, uniqueSoftDeleteValue(t, "sd-user")+"@example.com")
 
-	repo := NewAPIKeyRepository(client, integrationDB)
-	key := &service.APIKey{
+	key := mustCreateHistoricalAPIKey(t, client, historicalAPIKeyRow{
 		UserID: u.ID,
 		Key:    uniqueSoftDeleteValue(t, "sk-soft-delete"),
 		Name:   "soft-delete",
-		Status: service.StatusActive,
-	}
-	require.NoError(t, repo.Create(ctx, key), "create api key")
+	})
 
-	require.NoError(t, repo.Delete(ctx, key.ID), "soft delete api key")
+	require.NoError(t, client.APIKey.DeleteOneID(key.ID).Exec(ctx), "soft delete historical api key row")
 
-	_, err := repo.GetByID(ctx, key.ID)
-	require.ErrorIs(t, err, service.ErrAPIKeyNotFound, "deleted rows should be hidden by default")
-
-	_, err = client.APIKey.Query().Where(apikey.IDEQ(key.ID)).Only(ctx)
+	_, err := client.APIKey.Query().Where(apikey.IDEQ(key.ID)).Only(ctx)
 	require.Error(t, err, "default ent query should not see soft-deleted rows")
 	require.True(t, dbent.IsNotFound(err), "expected ent not-found after default soft delete filter")
 
@@ -66,26 +60,6 @@ func TestEntSoftDelete_ApiKey_DefaultFilterAndSkip(t *testing.T) {
 	require.NotNil(t, got.DeletedAt, "deleted_at should be set after soft delete")
 }
 
-func TestEntSoftDelete_ApiKey_DeleteIdempotent(t *testing.T) {
-	ctx := context.Background()
-	// 使用全局 ent client，避免事务回滚影响幂等性验证。
-	client := testEntClient(t)
-
-	u := createEntUser(t, ctx, client, uniqueSoftDeleteValue(t, "sd-user2")+"@example.com")
-
-	repo := NewAPIKeyRepository(client, integrationDB)
-	key := &service.APIKey{
-		UserID: u.ID,
-		Key:    uniqueSoftDeleteValue(t, "sk-soft-delete2"),
-		Name:   "soft-delete2",
-		Status: service.StatusActive,
-	}
-	require.NoError(t, repo.Create(ctx, key), "create api key")
-
-	require.NoError(t, repo.Delete(ctx, key.ID), "first delete")
-	require.NoError(t, repo.Delete(ctx, key.ID), "second delete should be idempotent")
-}
-
 func TestEntSoftDelete_ApiKey_HardDeleteViaSkipSoftDelete(t *testing.T) {
 	ctx := context.Background()
 	// 使用全局 ent client，确保 SkipSoftDelete 的硬删除语义可验证。
@@ -93,16 +67,13 @@ func TestEntSoftDelete_ApiKey_HardDeleteViaSkipSoftDelete(t *testing.T) {
 
 	u := createEntUser(t, ctx, client, uniqueSoftDeleteValue(t, "sd-user3")+"@example.com")
 
-	repo := NewAPIKeyRepository(client, integrationDB)
-	key := &service.APIKey{
+	key := mustCreateHistoricalAPIKey(t, client, historicalAPIKeyRow{
 		UserID: u.ID,
 		Key:    uniqueSoftDeleteValue(t, "sk-soft-delete3"),
 		Name:   "soft-delete3",
-		Status: service.StatusActive,
-	}
-	require.NoError(t, repo.Create(ctx, key), "create api key")
+	})
 
-	require.NoError(t, repo.Delete(ctx, key.ID), "soft delete api key")
+	require.NoError(t, client.APIKey.DeleteOneID(key.ID).Exec(ctx), "soft delete historical api key row")
 
 	// Hard delete using SkipSoftDelete so the hook doesn't convert it to update-deleted_at.
 	_, err := client.APIKey.Delete().Where(apikey.IDEQ(key.ID)).Exec(mixins.SkipSoftDelete(ctx))
@@ -189,28 +160,27 @@ func TestEntSoftDelete_UserSubscription_ListExcludesDeleted(t *testing.T) {
 
 	repo := NewUserSubscriptionRepository(client)
 
-	sub1 := &service.UserSubscription{
+	deletedSubscription := &service.UserSubscription{
 		UserID:    u.ID,
 		GroupID:   g1.ID,
 		Status:    service.SubscriptionStatusActive,
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	}
-	require.NoError(t, repo.Create(ctx, sub1), "create subscription 1")
+	require.NoError(t, repo.Create(ctx, deletedSubscription), "create subscription to delete")
 
-	sub2 := &service.UserSubscription{
+	activeSubscription := &service.UserSubscription{
 		UserID:    u.ID,
 		GroupID:   g2.ID,
 		Status:    service.SubscriptionStatusActive,
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	}
-	require.NoError(t, repo.Create(ctx, sub2), "create subscription 2")
+	require.NoError(t, repo.Create(ctx, activeSubscription), "create subscription to keep")
 
-	// 软删除 sub1
-	require.NoError(t, repo.Delete(ctx, sub1.ID), "soft delete subscription 1")
+	require.NoError(t, repo.Delete(ctx, deletedSubscription.ID), "soft delete one subscription")
 
 	// ListByUserID 应只返回未删除的订阅
 	subs, err := repo.ListByUserID(ctx, u.ID)
 	require.NoError(t, err, "ListByUserID")
 	require.Len(t, subs, 1, "should only return non-deleted subscriptions")
-	require.Equal(t, sub2.ID, subs[0].ID, "expected sub2 to be returned")
+	require.Equal(t, activeSubscription.ID, subs[0].ID, "expected active subscription to be returned")
 }

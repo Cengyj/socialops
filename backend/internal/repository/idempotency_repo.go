@@ -171,31 +171,6 @@ WHERE id = $5`,
 	return err
 }
 
-func (r *idempotencyRepository) DeleteExpired(ctx context.Context, now time.Time, limit int) (int64, error) {
-	if r == nil || r.sql == nil {
-		return 0, sql.ErrConnDone
-	}
-	if limit <= 0 {
-		limit = 1000
-	}
-	res, err := r.sql.ExecContext(ctx, `
-DELETE FROM idempotency_records
-WHERE id IN (
-	SELECT id
-	FROM idempotency_records
-	WHERE expires_at <= $1
-	ORDER BY expires_at ASC
-	LIMIT $2
-)`,
-		now,
-		limit,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return res.RowsAffected()
-}
-
 type idempotencyRecordScanner interface {
 	Scan(dest ...any) error
 }

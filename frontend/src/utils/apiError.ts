@@ -179,7 +179,7 @@ export function extractApiErrorMessage(
     // Interceptor shape: { message, error }
     if (e.message) return e.message
     if (e.error) return e.error
-    // Legacy axios shape: { response.data.detail }
+    // Axios error response shape: { response.data.detail }
     if (e.response?.data?.detail) return e.response.data.detail
     if (e.response?.data?.message) return e.response.data.message
   }

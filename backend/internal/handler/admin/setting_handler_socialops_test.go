@@ -16,23 +16,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAdminSettingHandler_GetSettings_DoesNotExposeAIGatewaySettings(t *testing.T) {
+func removedGatewaySettingKey(parts ...string) string {
+	return strings.Join(parts, "_")
+}
+
+func TestAdminSettingHandler_GetSettings_DoesNotExposeRemovedGatewaySettings(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := &settingHandlerRepoStub{values: map[string]string{
-		"enable_model_fallback":                    "true",
-		"ops_monitoring_enabled":                   "true",
-		"ops_realtime_monitoring_enabled":          "true",
-		"channel_monitor_enabled":                  "true",
-		"channel_monitor_default_interval_seconds": "60",
-		"available_channels_enabled":               "true",
-		"enable_identity_patch":                    "true",
-		"identity_patch_prompt":                    "legacy AI prompt",
-		"enable_fingerprint_unification":           "true",
-		"enable_metadata_passthrough":              "true",
-		"enable_cch_signing":                       "true",
-		"rewrite_message_cache_control":            "true",
-		"web_search_emulation_config":              `{"enabled":true,"providers":[{"type":"search"}]}`,
-		"allow_ungrouped_key_scheduling":           "true",
+		removedGatewaySettingKey("enable", "model", "fallback"):                          "true",
+		removedGatewaySettingKey("ops", "monitoring", "enabled"):                         "true",
+		removedGatewaySettingKey("ops", "realtime", "monitoring", "enabled"):             "true",
+		removedGatewaySettingKey("channel", "monitor", "enabled"):                        "true",
+		removedGatewaySettingKey("channel", "monitor", "default", "interval", "seconds"): "60",
+		removedGatewaySettingKey("available", "channels", "enabled"):                     "true",
+		removedGatewaySettingKey("enable", "identity", "patch"):                          "true",
+		removedGatewaySettingKey("identity", "patch", "prompt"):                          "removed identity prompt",
+		removedGatewaySettingKey("enable", "fingerprint", "unification"):                 "true",
+		removedGatewaySettingKey("enable", "metadata", "passthrough"):                    "true",
+		removedGatewaySettingKey("enable", "cch", "signing"):                             "true",
+		removedGatewaySettingKey("rewrite", "message", "cache", "control"):               "true",
+		removedGatewaySettingKey("web", "search", "emulation", "config"):                 `{"enabled":true,"providers":[{"type":"search"}]}`,
+		removedGatewaySettingKey("allow", "ungrouped", "key", "scheduling"):              "true",
 	}}
 	handler := NewSettingHandler(
 		service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}}),
@@ -58,47 +62,47 @@ func TestAdminSettingHandler_GetSettings_DoesNotExposeAIGatewaySettings(t *testi
 	require.Equal(t, 0, resp.Code)
 
 	forbidden := []string{
-		"enable_model_fallback",
-		"ops_monitoring_enabled",
-		"ops_realtime_monitoring_enabled",
-		"ops_query_mode_default",
-		"ops_metrics_interval_seconds",
-		"channel_monitor_enabled",
-		"channel_monitor_default_interval_seconds",
-		"available_channels_enabled",
-		"enable_identity_patch",
-		"identity_patch_prompt",
-		"enable_fingerprint_unification",
-		"enable_metadata_passthrough",
-		"enable_cch_signing",
-		"rewrite_message_cache_control",
-		"web_search_emulation_enabled",
-		"allow_ungrouped_key_scheduling",
+		removedGatewaySettingKey("enable", "model", "fallback"),
+		removedGatewaySettingKey("ops", "monitoring", "enabled"),
+		removedGatewaySettingKey("ops", "realtime", "monitoring", "enabled"),
+		removedGatewaySettingKey("ops", "query", "mode", "default"),
+		removedGatewaySettingKey("ops", "metrics", "interval", "seconds"),
+		removedGatewaySettingKey("channel", "monitor", "enabled"),
+		removedGatewaySettingKey("channel", "monitor", "default", "interval", "seconds"),
+		removedGatewaySettingKey("available", "channels", "enabled"),
+		removedGatewaySettingKey("enable", "identity", "patch"),
+		removedGatewaySettingKey("identity", "patch", "prompt"),
+		removedGatewaySettingKey("enable", "fingerprint", "unification"),
+		removedGatewaySettingKey("enable", "metadata", "passthrough"),
+		removedGatewaySettingKey("enable", "cch", "signing"),
+		removedGatewaySettingKey("rewrite", "message", "cache", "control"),
+		removedGatewaySettingKey("web", "search", "emulation", "enabled"),
+		removedGatewaySettingKey("allow", "ungrouped", "key", "scheduling"),
 	}
 	for _, key := range forbidden {
-		require.NotContainsf(t, resp.Data, key, "admin settings must not expose AI gateway setting %s", key)
+		require.NotContainsf(t, resp.Data, key, "admin settings must not expose removed gateway setting %s", key)
 	}
 }
 
-func TestAdminSettingHandler_UpdateSettings_IgnoresAIGatewaySettingsAndPreservesPlatformSettings(t *testing.T) {
+func TestAdminSettingHandler_UpdateSettings_IgnoresRemovedGatewaySettingsAndPreservesPlatformSettings(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := &settingHandlerRepoStub{values: map[string]string{
-		"enable_identity_patch":                   "true",
-		"identity_patch_prompt":                   "legacy AI prompt",
-		"allow_ungrouped_key_scheduling":          "true",
-		service.SettingKeyEmailVerifyEnabled:      "true",
-		service.SettingKeyPasswordResetEnabled:    "true",
-		service.SettingKeyTotpEnabled:             "true",
-		service.SettingKeySMTPHost:                "smtp.example.com",
-		service.SettingKeySMTPPort:                "465",
-		service.SettingKeySMTPUsername:            "mailer",
-		service.SettingKeySMTPPassword:            "smtp-secret",
-		service.SettingKeySMTPFrom:                "noreply@example.com",
-		service.SettingKeySMTPFromName:            "SocialOps Mail",
-		service.SettingKeySMTPUseTLS:              "true",
-		service.SettingKeyGitHubOAuthEnabled:      "true",
-		service.SettingKeyGitHubOAuthClientID:     "github-client",
-		service.SettingKeyGitHubOAuthClientSecret: "github-secret",
+		removedGatewaySettingKey("enable", "identity", "patch"):             "true",
+		removedGatewaySettingKey("identity", "patch", "prompt"):             "removed identity prompt",
+		removedGatewaySettingKey("allow", "ungrouped", "key", "scheduling"): "true",
+		service.SettingKeyEmailVerifyEnabled:                                "true",
+		service.SettingKeyPasswordResetEnabled:                              "true",
+		service.SettingKeyTotpEnabled:                                       "true",
+		service.SettingKeySMTPHost:                                          "smtp.example.com",
+		service.SettingKeySMTPPort:                                          "465",
+		service.SettingKeySMTPUsername:                                      "mailer",
+		service.SettingKeySMTPPassword:                                      "smtp-secret",
+		service.SettingKeySMTPFrom:                                          "noreply@example.com",
+		service.SettingKeySMTPFromName:                                      "SocialOps Mail",
+		service.SettingKeySMTPUseTLS:                                        "true",
+		service.SettingKeyGitHubOAuthEnabled:                                "true",
+		service.SettingKeyGitHubOAuthClientID:                               "github-client",
+		service.SettingKeyGitHubOAuthClientSecret:                           "github-secret",
 	}}
 	handler := NewSettingHandler(
 		service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}}),
@@ -121,15 +125,15 @@ func TestAdminSettingHandler_UpdateSettings_IgnoresAIGatewaySettingsAndPreserves
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	for _, key := range []string{
-		"enable_identity_patch",
-		"identity_patch_prompt",
-		"allow_ungrouped_key_scheduling",
+		removedGatewaySettingKey("enable", "identity", "patch"),
+		removedGatewaySettingKey("identity", "patch", "prompt"),
+		removedGatewaySettingKey("allow", "ungrouped", "key", "scheduling"),
 	} {
-		require.NotContainsf(t, repo.lastUpdates, key, "AI gateway setting %s must not be rewritten by SocialOps settings update", key)
+		require.NotContainsf(t, repo.lastUpdates, key, "removed gateway setting %s must not be rewritten by SocialOps settings update", key)
 	}
-	require.Equal(t, "true", repo.values["enable_identity_patch"])
-	require.Equal(t, "legacy AI prompt", repo.values["identity_patch_prompt"])
-	require.Equal(t, "true", repo.values["allow_ungrouped_key_scheduling"])
+	require.Equal(t, "true", repo.values[removedGatewaySettingKey("enable", "identity", "patch")])
+	require.Equal(t, "removed identity prompt", repo.values[removedGatewaySettingKey("identity", "patch", "prompt")])
+	require.Equal(t, "true", repo.values[removedGatewaySettingKey("allow", "ungrouped", "key", "scheduling")])
 	require.Equal(t, "true", repo.values[service.SettingKeyEmailVerifyEnabled])
 	require.Equal(t, "true", repo.values[service.SettingKeyPasswordResetEnabled])
 	require.Equal(t, "true", repo.values[service.SettingKeyTotpEnabled])

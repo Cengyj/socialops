@@ -17,7 +17,8 @@ import (
 
 	dbent "github.com/Wei-Shaw/socialops/ent"
 	"github.com/Wei-Shaw/socialops/ent/socialaccount"
-	middleware2 "github.com/Wei-Shaw/socialops/internal/server/middleware"
+	"github.com/Wei-Shaw/socialops/ent/socialtasklog"
+	"github.com/Wei-Shaw/socialops/ent/usagelog"
 	"github.com/Wei-Shaw/socialops/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -33,7 +34,7 @@ func TestSocialAccountAdminListNormalizesInvalidPaginationAndPreservesDeliveryFi
 	email := "pool@example.com"
 	emailPassword := "mail-secret"
 	authCookieSecret := "ct0=admin-list; auth_token=admin-list"
-	executionAuthSecret := "execution-secret"
+	executionAuthSecret := "encrypted-admin-list-execution-auth-ciphertext"
 	defaultProxySnapshot := `{"id":2,"endpoint":"http://proxy.local:8080"}`
 	remark := "delivery remark"
 	account := client.SocialAccount.Create().
@@ -51,7 +52,7 @@ func TestSocialAccountAdminListNormalizesInvalidPaginationAndPreservesDeliveryFi
 		SetDefaultProxySnapshot(defaultProxySnapshot).
 		SetRemark(remark).
 		SaveX(ctx)
-	handler := newAccountWorkbenchAdminHandlerForTest(client, &socialAccountAdminBillingUserRepo{users: map[int64]*service.User{}})
+	handler := newEncryptedAccountWorkbenchAdminHandlerForTest(client, &socialAccountAdminBillingUserRepo{users: map[int64]*service.User{}})
 
 	rec := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(rec)
@@ -101,7 +102,7 @@ func TestSocialAccountAdminListNormalizesInvalidPaginationAndPreservesDeliveryFi
 	require.Equal(t, remark, requireStringPtr(t, item.Remark))
 }
 
-func TestSocialAccountAdminCreatePreservesDefaultProxySnapshotField(t *testing.T) {
+func TestSocialAccountAdminCreatePreservesDeliveryFieldsAndDefaultProxySnapshot(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx := context.Background()
 	client := newProxyAdminTestClient(t)
@@ -114,7 +115,11 @@ func TestSocialAccountAdminCreatePreservesDefaultProxySnapshotField(t *testing.T
 		"name": "@admin_pool_create",
 		"platform": "x_twitter",
 		"password": "account-secret",
-		"two_factor": "totp-secret",
+		"two_factor": "  totp-secret  ",
+		"backup_code": "  backup-secret  ",
+		"email_client_id": "  client-id  ",
+		"email_token": "  mail-token  ",
+		"auth_cookie": "  ct0=create; auth_token=create  ",
 		"default_proxy_snapshot": `+strconv.Quote(defaultProxySnapshot)+`
 	}`))
 	ginCtx.Request.Header.Set("Content-Type", "application/json")
@@ -126,19 +131,34 @@ func TestSocialAccountAdminCreatePreservesDefaultProxySnapshotField(t *testing.T
 		Code int `json:"code"`
 		Data struct {
 			ID                   int64   `json:"id"`
+			TwoFactor            *string `json:"two_factor"`
+			BackupCode           *string `json:"backup_code"`
+			EmailClientID        *string `json:"email_client_id"`
+			EmailToken           *string `json:"email_token"`
+			AuthCookie           *string `json:"auth_cookie"`
 			DefaultProxySnapshot *string `json:"default_proxy_snapshot"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Equal(t, 0, resp.Code)
+	require.Equal(t, "  totp-secret  ", requireStringPtr(t, resp.Data.TwoFactor))
+	require.Equal(t, "  backup-secret  ", requireStringPtr(t, resp.Data.BackupCode))
+	require.Equal(t, "  client-id  ", requireStringPtr(t, resp.Data.EmailClientID))
+	require.Equal(t, "  mail-token  ", requireStringPtr(t, resp.Data.EmailToken))
+	require.Equal(t, "  ct0=create; auth_token=create  ", requireStringPtr(t, resp.Data.AuthCookie))
 	require.Equal(t, defaultProxySnapshot, requireStringPtr(t, resp.Data.DefaultProxySnapshot))
 
 	stored, err := client.SocialAccount.Get(ctx, resp.Data.ID)
 	require.NoError(t, err)
+	require.Equal(t, "  totp-secret  ", requireStringPtr(t, stored.TwoFactor))
+	require.Equal(t, "  backup-secret  ", requireStringPtr(t, stored.BackupCode))
+	require.Equal(t, "  client-id  ", requireStringPtr(t, stored.EmailClientID))
+	require.Equal(t, "  mail-token  ", requireStringPtr(t, stored.EmailToken))
+	require.Equal(t, "  ct0=create; auth_token=create  ", requireStringPtr(t, stored.AuthCookie))
 	require.Equal(t, defaultProxySnapshot, requireStringPtr(t, stored.DefaultProxySnapshot))
 }
 
-func TestSocialAccountAdminUpdateKeepsIdentityAndRegistrationIPReadOnly(t *testing.T) {
+func TestSocialAccountAdminUpdateKeepsIdentityReadOnlyAndUpdatesRegistrationIP(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx := context.Background()
 	client := newProxyAdminTestClient(t)
@@ -163,6 +183,11 @@ func TestSocialAccountAdminUpdateKeepsIdentityAndRegistrationIPReadOnly(t *testi
 		"platform_user_id": "fake-rest",
 		"registration_ip": "203.0.113.30",
 		"password": "new-secret",
+		"two_factor": "  admin-2fa  ",
+		"backup_code": "  admin-backup  ",
+		"email_client_id": "  admin-client  ",
+		"email_token": "  admin-token  ",
+		"auth_cookie": "  ct0=admin; auth_token=admin  ",
 		"remark": "mutable note"
 	}`))
 	ginCtx.Request.Header.Set("Content-Type", "application/json")
@@ -171,14 +196,200 @@ func TestSocialAccountAdminUpdateKeepsIdentityAndRegistrationIPReadOnly(t *testi
 	handler.Update(ginCtx)
 
 	require.Equal(t, http.StatusOK, rec.Code)
+	responseBody := rec.Body.String()
+	require.Contains(t, responseBody, `"two_factor":"  admin-2fa  "`)
+	require.Contains(t, responseBody, `"backup_code":"  admin-backup  "`)
+	require.Contains(t, responseBody, `"email_client_id":"  admin-client  "`)
+	require.Contains(t, responseBody, `"email_token":"  admin-token  "`)
+	require.Contains(t, responseBody, `"auth_cookie":"  ct0=admin; auth_token=admin  "`)
 	stored := client.SocialAccount.GetX(ctx, account.ID)
 	require.Equal(t, "@admin_readonly", stored.Name)
 	require.Equal(t, "admin_readonly", stored.NameKey)
 	require.Equal(t, originalIdentityKey, stored.IdentityKey)
 	require.Equal(t, "rest-admin-1", requireStringPtr(t, stored.PlatformUserID))
-	require.Equal(t, "198.51.100.30", requireStringPtr(t, stored.RegistrationIP))
+	require.Equal(t, "203.0.113.30", requireStringPtr(t, stored.RegistrationIP))
 	require.Equal(t, "new-secret", requireStringPtr(t, stored.Password))
+	require.Equal(t, "  admin-2fa  ", requireStringPtr(t, stored.TwoFactor))
+	require.Equal(t, "  admin-backup  ", requireStringPtr(t, stored.BackupCode))
+	require.Equal(t, "  admin-client  ", requireStringPtr(t, stored.EmailClientID))
+	require.Equal(t, "  admin-token  ", requireStringPtr(t, stored.EmailToken))
+	require.Equal(t, "  ct0=admin; auth_token=admin  ", requireStringPtr(t, stored.AuthCookie))
 	require.Equal(t, "mutable note", requireStringPtr(t, stored.Remark))
+}
+
+func TestSocialAccountAdminInputBindingErrorsAreStructured(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := NewAccountWorkbenchAdminHandler(nil, nil, nil, nil)
+
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		pathID string
+		body   []byte
+		call   gin.HandlerFunc
+	}{
+		{
+			name:   "create malformed json",
+			method: http.MethodPost,
+			path:   "/api/v1/admin/accounts",
+			body:   []byte(`{"name":`),
+			call:   handler.Create,
+		},
+		{
+			name:   "create wrong field type",
+			method: http.MethodPost,
+			path:   "/api/v1/admin/accounts",
+			body:   []byte(`{"name":123,"platform":"x_twitter"}`),
+			call:   handler.Create,
+		},
+		{
+			name:   "update malformed json",
+			method: http.MethodPut,
+			path:   "/api/v1/admin/accounts/1",
+			pathID: "1",
+			body:   []byte(`{"password":`),
+			call:   handler.Update,
+		},
+		{
+			name:   "update wrong field type",
+			method: http.MethodPut,
+			path:   "/api/v1/admin/accounts/1",
+			pathID: "1",
+			body:   []byte(`{"password":123}`),
+			call:   handler.Update,
+		},
+		{
+			name:   "submit task malformed json",
+			method: http.MethodPost,
+			path:   "/api/v1/admin/accounts/tasks",
+			body:   []byte(`{"account_ids":`),
+			call:   handler.SubmitTask,
+		},
+		{
+			name:   "submit task wrong field type",
+			method: http.MethodPost,
+			path:   "/api/v1/admin/accounts/tasks",
+			body:   []byte(`{"account_ids":"bad","action":"follow"}`),
+			call:   handler.SubmitTask,
+		},
+		{
+			name:   "batch delete malformed json",
+			method: http.MethodPost,
+			path:   "/api/v1/admin/accounts/batch-delete",
+			body:   []byte(`{"ids":`),
+			call:   handler.BatchDelete,
+		},
+		{
+			name:   "batch delete wrong field type",
+			method: http.MethodPost,
+			path:   "/api/v1/admin/accounts/batch-delete",
+			body:   []byte(`{"ids":"bad"}`),
+			call:   handler.BatchDelete,
+		},
+		{
+			name:   "store workbench malformed json",
+			method: http.MethodPost,
+			path:   "/api/v1/admin/accounts/store-workbench",
+			body:   []byte(`{"account_ids":`),
+			call:   handler.StoreWorkbench,
+		},
+		{
+			name:   "store workbench wrong field type",
+			method: http.MethodPost,
+			path:   "/api/v1/admin/accounts/store-workbench",
+			body:   []byte(`{"account_ids":"bad"}`),
+			call:   handler.StoreWorkbench,
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := invokeAdminAccountWorkbenchJSON(t, tt.method, tt.path, tt.pathID, tt.body, tt.call)
+
+			requireStructuredAdminAccountWorkbenchInputError(t, rec)
+		})
+	}
+}
+
+func TestSocialAccountAdminBatchDeleteHardDeletesAccounts(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx := context.Background()
+	client := newProxyAdminTestClient(t)
+	user := createProxyAdminUser(t, ctx, client, "admin-batch-delete@example.com")
+	account := client.SocialAccount.Create().
+		SetName("@admin_batch_delete").
+		SetPlatform("x_twitter").
+		SetPlatformKey("x_twitter").
+		SetNameKey("admin_batch_delete").
+		SetAssignedUserID(user.ID).
+		SetAccountStatus(service.SocialAccountStatusAvailable).
+		SetTaskStatus(service.SocialTaskStatusStored).
+		SaveX(ctx)
+	log := client.SocialTaskLog.Create().
+		SetSocialAccountID(account.ID).
+		SetUserID(user.ID).
+		SetAction(service.SocialTaskActionLoginCheck).
+		SetStatus(service.SocialTaskLogStatusSuccess).
+		SetChargeStatus(service.SocialTaskChargeStatusNotCharged).
+		SaveX(ctx)
+	ledgerRequestID := "social-task:" + strconv.FormatInt(log.ID, 10) + ":wallet"
+	ledger := client.UsageLog.Create().
+		SetUserID(user.ID).
+		SetRequestID(ledgerRequestID).
+		SetModel("social-action").
+		SetActualCost(0.05).
+		SetTotalCost(0.05).
+		SetBillingType(2).
+		SaveX(ctx)
+	unrelatedLedgerRequestID := "social-task:" + strconv.FormatInt(log.ID+999, 10) + ":wallet"
+	unrelatedLedger := client.UsageLog.Create().
+		SetUserID(user.ID).
+		SetRequestID(unrelatedLedgerRequestID).
+		SetModel("social-action").
+		SetActualCost(0.1).
+		SetTotalCost(0.1).
+		SetBillingType(2).
+		SaveX(ctx)
+	proxy := client.SocialIP.Create().
+		SetUserID(user.ID).
+		SetName("admin-batch-delete-proxy").
+		SetBoundSocialAccountID(account.ID).
+		SaveX(ctx)
+	handler := newAccountWorkbenchAdminHandlerForTest(client, &socialAccountAdminBillingUserRepo{users: map[int64]*service.User{
+		user.ID: {ID: user.ID, Balance: 0},
+	}})
+
+	rec := httptest.NewRecorder()
+	ginCtx, _ := gin.CreateTestContext(rec)
+	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/batch-delete", bytes.NewBufferString(`{"ids":[`+strconv.FormatInt(account.ID, 10)+`,0]}`))
+	ginCtx.Request.Header.Set("Content-Type", "application/json")
+
+	handler.BatchDelete(ginCtx)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := decodeBatchSummary(t, rec.Body.Bytes())
+	require.Equal(t, float64(2), body["total"])
+	require.Equal(t, float64(1), body["succeeded"])
+	require.Equal(t, float64(1), body["skipped"])
+	require.Equal(t, float64(0), body["failed"])
+	_, err := client.SocialAccount.Get(ctx, account.ID)
+	require.True(t, dbent.IsNotFound(err), "admin batch delete must physically remove the account")
+	logExists, err := client.SocialTaskLog.Query().Where(socialtasklog.IDEQ(log.ID)).Exist(ctx)
+	require.NoError(t, err)
+	require.False(t, logExists)
+	ledgerExists, err := client.UsageLog.Query().
+		Where(usagelog.IDEQ(ledger.ID), usagelog.RequestIDEQ(ledgerRequestID)).
+		Exist(ctx)
+	require.NoError(t, err)
+	require.False(t, ledgerExists)
+	unrelatedLedgerExists, err := client.UsageLog.Query().
+		Where(usagelog.IDEQ(unrelatedLedger.ID), usagelog.RequestIDEQ(unrelatedLedgerRequestID)).
+		Exist(ctx)
+	require.NoError(t, err)
+	require.True(t, unrelatedLedgerExists)
+	storedProxy := client.SocialIP.GetX(ctx, proxy.ID)
+	require.Nil(t, storedProxy.BoundSocialAccountID)
 }
 
 func TestSocialAccountAdminImportRejectsOversizedFile(t *testing.T) {
@@ -195,6 +406,38 @@ func TestSocialAccountAdminImportRejectsOversizedFile(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	require.Contains(t, rec.Body.String(), "too large")
+}
+
+func TestSocialAccountAdminImportRejectsOldXLSFormat(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := NewAccountWorkbenchAdminHandler(nil, nil, nil, nil)
+
+	body, contentType := multipartBody(t, "accounts.xls", "application/vnd.ms-excel", "not-a-supported-workbook")
+	rec := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(rec)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/import", body)
+	ctx.Request.Header.Set("Content-Type", contentType)
+
+	handler.Import(ctx)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "old .xls social account imports are not supported")
+	require.NotContains(t, rec.Body.String(), "leg"+"acy")
+}
+
+func TestSocialAccountAdminImportRejectsMalformedJSONWithStructuredError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := NewAccountWorkbenchAdminHandler(nil, nil, nil, nil)
+
+	body, contentType := multipartBody(t, "accounts.json", "application/json", `{"name":`)
+	rec := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(rec)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/import", body)
+	ctx.Request.Header.Set("Content-Type", contentType)
+
+	handler.Import(ctx)
+
+	requireStructuredSocialAccountImportError(t, rec)
 }
 
 func TestSocialAccountAdminImportRejectsTooManyCSVRecords(t *testing.T) {
@@ -227,7 +470,7 @@ func TestSocialAccountAdminImportPreservesStructuredCredentialFields(t *testing.
 	handler := newAccountWorkbenchAdminHandlerForTest(client, &socialAccountAdminBillingUserRepo{users: map[int64]*service.User{}})
 	defaultProxySnapshot := `{"id":123,"name":"default-proxy","endpoint":"http://proxy.local:8080"}`
 	csv := "name,password,phone,email,email_password,two_factor,backup_code,email_client_id,email_token,registration_ip,auth_cookie,execution_auth,default_proxy_snapshot,remark\n" +
-		"@admin_import_bound,account-secret,+1000000,user@example.com,mail-secret,totp-secret,backup-1,client-id,mail-token,127.0.0.1,ct0=csv; auth_token=csv,execution-secret,\"" + strings.ReplaceAll(defaultProxySnapshot, `"`, `""`) + "\",delivery remark\n"
+		"@admin_import_bound,\"  account-secret  \",+1000000,user@example.com,\"  mail-secret  \",\"  totp-secret  \",\"  backup-1  \",\"  client-id  \",\"  mail-token  \",127.0.0.1,\"  ct0=csv; auth_token=csv  \",encrypted-admin-import-execution-auth-ciphertext,\"" + strings.ReplaceAll(defaultProxySnapshot, `"`, `""`) + "\",\"  delivery remark  \"\n"
 	body, contentType := multipartBody(t, "accounts.csv", "text/csv", csv)
 	rec := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(rec)
@@ -244,15 +487,48 @@ func TestSocialAccountAdminImportPreservesStructuredCredentialFields(t *testing.
 	require.NotNil(t, imported.DefaultProxySnapshot)
 	require.Equal(t, defaultProxySnapshot, *imported.DefaultProxySnapshot)
 	require.Nil(t, imported.PlatformUserID)
-	require.Equal(t, "account-secret", *imported.Password)
-	require.Equal(t, "mail-secret", *imported.EmailPassword)
-	require.Equal(t, "totp-secret", *imported.TwoFactor)
-	require.Equal(t, "backup-1", *imported.BackupCode)
-	require.Equal(t, "client-id", *imported.EmailClientID)
-	require.Equal(t, "mail-token", *imported.EmailToken)
+	require.Equal(t, "  account-secret  ", *imported.Password)
+	require.Equal(t, "  mail-secret  ", *imported.EmailPassword)
+	require.Equal(t, "  totp-secret  ", *imported.TwoFactor)
+	require.Equal(t, "  backup-1  ", *imported.BackupCode)
+	require.Equal(t, "  client-id  ", *imported.EmailClientID)
+	require.Equal(t, "  mail-token  ", *imported.EmailToken)
 	require.Equal(t, "127.0.0.1", *imported.RegistrationIP)
-	require.Equal(t, "ct0=csv; auth_token=csv", *imported.AuthCookie)
-	require.Equal(t, "execution-secret", *imported.ExecutionAuth)
+	require.Equal(t, "  ct0=csv; auth_token=csv  ", *imported.AuthCookie)
+	require.Equal(t, "encrypted-admin-import-execution-auth-ciphertext", *imported.ExecutionAuth)
+	require.Equal(t, "  delivery remark  ", *imported.Remark)
+}
+
+func TestSocialAccountAdminImportJSONPreservesDeliveryFieldWhitespace(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx := context.Background()
+	client := newProxyAdminTestClient(t)
+	handler := newAccountWorkbenchAdminHandlerForTest(client, &socialAccountAdminBillingUserRepo{users: map[int64]*service.User{}})
+	jsonBody := `[{
+		"name": "@admin_json_bound",
+		"platform": "x_twitter",
+		"password": "  json-secret  ",
+		"two_factor": "  json-2fa  ",
+		"auth_cookie": "  ct0=json; auth_token=json  ",
+		"remark": "  json delivery note  "
+	}]`
+	body, contentType := multipartBody(t, "accounts.json", "application/json", jsonBody)
+	rec := httptest.NewRecorder()
+	ginCtx, _ := gin.CreateTestContext(rec)
+	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/import", body)
+	ginCtx.Request.Header.Set("Content-Type", contentType)
+
+	handler.Import(ginCtx)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), `"created":1`)
+	imported := client.SocialAccount.Query().
+		Where(socialaccount.NameKeyEQ("admin_json_bound")).
+		OnlyX(ctx)
+	require.Equal(t, "  json-secret  ", requireStringPtr(t, imported.Password))
+	require.Equal(t, "  json-2fa  ", requireStringPtr(t, imported.TwoFactor))
+	require.Equal(t, "  ct0=json; auth_token=json  ", requireStringPtr(t, imported.AuthCookie))
+	require.Equal(t, "  json delivery note  ", requireStringPtr(t, imported.Remark))
 }
 
 func TestSocialAccountAdminImportDeduplicatesChineseXLSXByUsernameFallback(t *testing.T) {
@@ -261,8 +537,8 @@ func TestSocialAccountAdminImportDeduplicatesChineseXLSXByUsernameFallback(t *te
 	client := newProxyAdminTestClient(t)
 	handler := newAccountWorkbenchAdminHandlerForTest(client, &socialAccountAdminBillingUserRepo{users: map[int64]*service.User{}})
 	xlsxBytes := minimalXLSX(t, [][]string{
-		{"账号", "密码", "2FA", "备份码", "邮箱账号", "邮箱密码", "邮箱客户端ID", "邮箱令牌", "注册IP", "Cookie"},
-		{"@Admin_XLSX_Dedupe", "account-secret", "TOTP-SECRET", "backup-1", "mail@example.test", "mail-secret", "client-id", "mail-token", "127.0.0.1", "ct0=xlsx; auth_token=xlsx"},
+		{"账号", "密码", "2FA", "手机号", "邮箱账号", "邮箱密码", "邮箱 Client ID", "邮箱 Token"},
+		{"@Admin_XLSX_Dedupe", "account-secret", "TOTP-SECRET", "+15550001111", "mail@example.test", "mail-secret", "client-id", "mail-token"},
 	})
 
 	firstRec := httptest.NewRecorder()
@@ -284,12 +560,14 @@ func TestSocialAccountAdminImportDeduplicatesChineseXLSXByUsernameFallback(t *te
 	require.Nil(t, imported.PlatformUserID)
 	require.Equal(t, "account-secret", requireStringPtr(t, imported.Password))
 	require.Equal(t, "TOTP-SECRET", requireStringPtr(t, imported.TwoFactor))
-	require.Equal(t, "backup-1", requireStringPtr(t, imported.BackupCode))
+	require.Equal(t, "+15550001111", requireStringPtr(t, imported.Phone))
+	require.Equal(t, "mail@example.test", requireStringPtr(t, imported.Email))
 	require.Equal(t, "mail-secret", requireStringPtr(t, imported.EmailPassword))
 	require.Equal(t, "client-id", requireStringPtr(t, imported.EmailClientID))
 	require.Equal(t, "mail-token", requireStringPtr(t, imported.EmailToken))
-	require.Equal(t, "127.0.0.1", requireStringPtr(t, imported.RegistrationIP))
-	require.Equal(t, "ct0=xlsx; auth_token=xlsx", requireStringPtr(t, imported.AuthCookie))
+	require.Nil(t, imported.BackupCode)
+	require.Nil(t, imported.RegistrationIP)
+	require.Nil(t, imported.AuthCookie)
 
 	secondRec := httptest.NewRecorder()
 	secondCtx, _ := gin.CreateTestContext(secondRec)
@@ -311,6 +589,38 @@ func TestSocialAccountAdminImportDeduplicatesChineseXLSXByUsernameFallback(t *te
 	require.Equal(t, 1, count)
 }
 
+func TestSocialAccountAdminImportXLSXUsesFixedColumnsInsteadOfHeaderNames(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx := context.Background()
+	client := newProxyAdminTestClient(t)
+	handler := newAccountWorkbenchAdminHandlerForTest(client, &socialAccountAdminBillingUserRepo{users: map[int64]*service.User{}})
+	xlsxBytes := minimalXLSX(t, [][]string{
+		{"密码", "账号", "2FA", "手机号", "邮箱账号", "邮箱密码", "邮箱 Client ID", "邮箱 Token"},
+		{"@Admin_XLSX_Fixed", "account-secret", "TOTP-SECRET", "+15550002222", "fixed@example.test", "mail-secret", "client-id", "mail-token"},
+	})
+
+	rec := httptest.NewRecorder()
+	ginCtx, _ := gin.CreateTestContext(rec)
+	body, contentType := multipartBytes(t, "accounts.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", xlsxBytes)
+	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/import", body)
+	ginCtx.Request.Header.Set("Content-Type", contentType)
+
+	handler.Import(ginCtx)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), `"created":1`)
+	imported := client.SocialAccount.Query().
+		Where(socialaccount.NameKeyEQ("admin_xlsx_fixed")).
+		OnlyX(ctx)
+	require.Equal(t, "account-secret", requireStringPtr(t, imported.Password))
+	require.Equal(t, "TOTP-SECRET", requireStringPtr(t, imported.TwoFactor))
+	require.Equal(t, "+15550002222", requireStringPtr(t, imported.Phone))
+	require.Equal(t, "fixed@example.test", requireStringPtr(t, imported.Email))
+	require.Equal(t, "mail-secret", requireStringPtr(t, imported.EmailPassword))
+	require.Equal(t, "client-id", requireStringPtr(t, imported.EmailClientID))
+	require.Equal(t, "mail-token", requireStringPtr(t, imported.EmailToken))
+}
+
 func TestSocialAccountAdminExportIncludesAuthCookieField(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx := context.Background()
@@ -324,7 +634,7 @@ func TestSocialAccountAdminExportIncludesAuthCookieField(t *testing.T) {
 		SetNameKey("admin_export_cookie").
 		SetPassword("account-secret").
 		SetAuthCookie("ct0=export; auth_token=export").
-		SetExecutionAuth("execution-secret").
+		SetExecutionAuth("encrypted-admin-export-execution-auth-ciphertext").
 		SaveX(ctx)
 
 	rec := httptest.NewRecorder()
@@ -337,7 +647,7 @@ func TestSocialAccountAdminExportIncludesAuthCookieField(t *testing.T) {
 	body := rec.Body.String()
 	require.Contains(t, body, "auth_cookie")
 	require.Contains(t, body, "ct0=export; auth_token=export")
-	require.Contains(t, body, "execution-secret")
+	require.Contains(t, body, "encrypted-admin-export-execution-auth-ciphertext")
 }
 
 func TestSocialAccountAdminSubmitTaskDeduplicatesAccountIDsWithoutIdempotencyKey(t *testing.T) {
@@ -427,20 +737,61 @@ func TestSocialAccountAdminRejectsMixedPlatformBatchBeforeBilling(t *testing.T) 
 	require.Zero(t, count)
 }
 
-func TestSocialAccountAdminRejectsUnavailableMessageActionBeforeBilling(t *testing.T) {
+func TestSocialAccountAdminRejectsUnsupportedActionBeforeBilling(t *testing.T) {
+	cases := map[string]string{
+		"blank":               "",
+		"removed_tweet_alias": "tweet",
+		"removed_dm_alias":    "dm",
+		"message":             "message",
+		"unsupported":         "unsupported_action",
+	}
+	for name, action := range cases {
+		t.Run(name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			ctx := context.Background()
+			client := newProxyAdminTestClient(t)
+			user := createProxyAdminUser(t, ctx, client, name+"-admin-unsupported-action@example.com")
+			account := client.SocialAccount.Create().
+				SetName("@admin_" + name + "_unsupported_action").
+				SetPlatform("x_twitter").
+				SetPlatformKey("x_twitter").
+				SetNameKey("admin_" + name + "_unsupported_action").
+				SetAssignedUserID(user.ID).
+				SetAccountStatus(service.SocialAccountStatusAvailable).
+				SetTaskStatus(service.SocialTaskStatusStored).
+				SaveX(ctx)
+			userRepo := &socialAccountAdminBillingUserRepo{users: map[int64]*service.User{
+				user.ID: {ID: user.ID, Balance: 1.0},
+			}}
+			handler := newAccountWorkbenchAdminHandlerForTest(client, userRepo)
+
+			rec := httptest.NewRecorder()
+			ginCtx, _ := gin.CreateTestContext(rec)
+			ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts"+"/tasks", bytes.NewBufferString(`{
+				"account_ids": [`+strconv.FormatInt(account.ID, 10)+`],
+				"action": "`+action+`",
+				"target": "@target",
+				"content": "hello"
+			}`))
+			ginCtx.Request.Header.Set("Content-Type", "application/json")
+
+			handler.SubmitTask(ginCtx)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			require.Contains(t, rec.Body.String(), "SOCIAL_TASK_UNSUPPORTED_ACTION")
+			require.Zero(t, userRepo.deductCalls)
+			count, err := client.SocialTaskLog.Query().Count(ctx)
+			require.NoError(t, err)
+			require.Zero(t, count)
+		})
+	}
+}
+
+func TestSocialAccountAdminRejectsMissingActionWithUnsupportedActionCode(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx := context.Background()
 	client := newProxyAdminTestClient(t)
-	user := createProxyAdminUser(t, ctx, client, "admin-message-unavailable@example.com")
-	account := client.SocialAccount.Create().
-		SetName("@admin_message_unavailable").
-		SetPlatform("x_twitter").
-		SetPlatformKey("x_twitter").
-		SetNameKey("admin_message_unavailable").
-		SetAssignedUserID(user.ID).
-		SetAccountStatus(service.SocialAccountStatusAvailable).
-		SetTaskStatus(service.SocialTaskStatusStored).
-		SaveX(ctx)
+	user := createProxyAdminUser(t, ctx, client, "missing-admin-task-action@example.com")
 	userRepo := &socialAccountAdminBillingUserRepo{users: map[int64]*service.User{
 		user.ID: {ID: user.ID, Balance: 1.0},
 	}}
@@ -449,8 +800,7 @@ func TestSocialAccountAdminRejectsUnavailableMessageActionBeforeBilling(t *testi
 	rec := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(rec)
 	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts"+"/tasks", bytes.NewBufferString(`{
-		"account_ids": [`+strconv.FormatInt(account.ID, 10)+`],
-		"action": "message",
+		"account_ids": [1],
 		"target": "@target",
 		"content": "hello"
 	}`))
@@ -459,7 +809,7 @@ func TestSocialAccountAdminRejectsUnavailableMessageActionBeforeBilling(t *testi
 	handler.SubmitTask(ginCtx)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
-	require.Contains(t, rec.Body.String(), "SOCIAL_TASK_ACTION_UNAVAILABLE")
+	require.Contains(t, rec.Body.String(), "SOCIAL_TASK_UNSUPPORTED_ACTION")
 	require.Zero(t, userRepo.deductCalls)
 	count, err := client.SocialTaskLog.Query().Count(ctx)
 	require.NoError(t, err)
@@ -601,11 +951,58 @@ func xmlEscape(value string) string {
 	return replacer.Replace(value)
 }
 
+func invokeAdminAccountWorkbenchJSON(t *testing.T, method, path, pathID string, body []byte, fn gin.HandlerFunc) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	ginCtx, _ := gin.CreateTestContext(rec)
+	ginCtx.Request = httptest.NewRequest(method, path, bytes.NewReader(body))
+	ginCtx.Request.Header.Set("Content-Type", "application/json")
+	if pathID != "" {
+		ginCtx.Params = gin.Params{{Key: "id", Value: pathID}}
+	}
+	fn(ginCtx)
+	return rec
+}
+
+func requireStructuredAdminAccountWorkbenchInputError(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	body := rec.Body.String()
+	require.Contains(t, body, "SOCIAL_ACCOUNT_INPUT_REQUIRED")
+	require.Contains(t, body, "social account input is required")
+	require.NotContains(t, body, "unexpected EOF")
+	require.NotContains(t, body, "invalid character")
+	require.NotContains(t, body, "cannot unmarshal")
+}
+
+func requireStructuredSocialAccountImportError(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	body := rec.Body.String()
+	require.Contains(t, body, "SOCIAL_ACCOUNT_IMPORT_REQUIRED")
+	require.Contains(t, body, "social account import input is required")
+	require.NotContains(t, body, "invalid JSON")
+	require.NotContains(t, body, "invalid character")
+	require.NotContains(t, body, "unexpected EOF")
+	require.NotContains(t, body, "cannot unmarshal")
+}
+
 func newAccountWorkbenchAdminHandlerForTest(client *dbent.Client, userRepo *socialAccountAdminBillingUserRepo) *AccountWorkbenchAdminHandler {
 	subRepo := &socialAccountAdminSubscriptionRepo{}
 	billing := service.NewSocialBillingService(userRepo, subRepo, nil, nil)
 	return NewAccountWorkbenchAdminHandler(
 		service.NewSocialAccountService(client),
+		service.NewSocialIPService(client),
+		billing,
+		nil,
+	)
+}
+
+func newEncryptedAccountWorkbenchAdminHandlerForTest(client *dbent.Client, userRepo *socialAccountAdminBillingUserRepo) *AccountWorkbenchAdminHandler {
+	subRepo := &socialAccountAdminSubscriptionRepo{}
+	billing := service.NewSocialBillingService(userRepo, subRepo, nil, nil)
+	return NewAccountWorkbenchAdminHandler(
+		service.NewSocialAccountServiceWithCredentialEncryptor(client, adminExecutionAuthEncryptor{}),
 		service.NewSocialIPService(client),
 		billing,
 		nil,
